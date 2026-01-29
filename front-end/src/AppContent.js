@@ -20,6 +20,8 @@ import UserPageOffered from './UserPageOffered';
 import Login from './Login';
 import Signup from './Signup';
 import Navbar from './Navbar';
+import ExchangesList from "./ExchangesList";
+import ExchangeDetail from "./ExchangeDetail";
 
 const AppContent = () => {
 
@@ -46,6 +48,8 @@ const AppContent = () => {
             <Route path=":genre" element={<Genre />} />
           </Route>
         </Route>
+        <Route path="/exchanges" element={<ExchangesList />} />
+        <Route path="/exchanges/:exchangeId" element={<ExchangeDetail />} />
         <Route path="profile">
           <Route index element={<Profile />} />
           <Route path="edit" element={<EditProfile />} />

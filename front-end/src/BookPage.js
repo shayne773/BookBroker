@@ -72,9 +72,16 @@ const BookPage = () => {
         "Authorization": `Bearer ${token}`
       },
       body: JSON.stringify({ content: `Hey, I'm interested in your listing for ${book.title}` })
+    }).then((res) => {
+      if(!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
     })
+      .then((data)=>navigate(`/messages/${book.owner?.id}`))
       .then(res => console.log(res))
-    
+      .catch((err) => {
+        console.log("Failed to open conversation:", err)
+        alert("Could not open conversation. Please try again.");
+      })
   }
   useEffect(() => {
     if (book.isbn && token) {
@@ -120,7 +127,9 @@ const BookPage = () => {
 
       <div className="book-page-actions">
         {isInWishlist ? (
-          <p>Already in Wishlist</p>
+          <div className="wishlist-pill">
+            ✓ In your wishlist
+          </div>
         ) : (
           <button className="book-action-btn wishlist-btn" onClick={addToWishlist}>
             Add to Wishlist

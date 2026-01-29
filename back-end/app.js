@@ -1,166 +1,113 @@
-import express from 'express';
-import cors from 'cors'; 
-import bodyParser from 'body-parser';
-import mongoose from 'mongoose';
-import { body, validationResult } from 'express-validator';
-import dotenv from 'dotenv';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import express from "express";
+import cors from "cors";
+import bodyParser from "body-parser";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { body, validationResult } from "express-validator";
+import exchangesRouter from "./routes/exchanges.js";
+
 dotenv.config();
 
 import {
+  User,
+  WishlistBook,
+  OfferedBook,
+  Conversation,
+  Message,
   searchGoogleBooks,
-  generateUser,
-  generateMessages,
-  generateConversation,
-  injectBookModel,
-  User
-} from './Data.js';
-
-import mongoosePkg from 'mongoose';
-const { Schema } = mongoosePkg;
-
-// Define schemas
-const wishlistBookSchema = new Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Referense a user
-  title: String,
-  author: String,
-  publisher: String,
-  year: String,
-  cover: String,
-  isbn: String,
-  genre: String,
-  desc: String
-});
-
-const offeredBookSchema = new Schema({
-  owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  title: String,
-  author: String,
-  publisher: String,
-  year: String,
-  cover: String,
-  isbn: String,
-  genre: String,
-  desc: String,
-  createdAt: { type: Date, default: Date.now }
-});
-
-const conversationSchema = new Schema({
-  users: [Schema.ObjectId]
-})
-
-const messageSchema = new Schema({
-  user: Schema.ObjectId,
-  conversation: Schema.ObjectId,
-  createdAt: { type: Date},
-  content: String
-})
-
-// Connect to main cluster, two DBs within same cluster
-const wishlistConn = mongoose.createConnection(process.env.MONGODB_URI + '/wishlist', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-});
-const offeredConn = mongoose.createConnection(process.env.MONGODB_URI + '/offered', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-});
-const messageConn = mongoose.createConnection(process.env.MONGODB_URI + '/message', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-});
-const conversationConn = mongoose.createConnection(process.env.MONGODB_URI + '/conversations', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-
-const WishlistBook = wishlistConn.model('WishlistBook', wishlistBookSchema);
-const OfferedBook = offeredConn.model('OfferedBook', offeredBookSchema);
-const Message = messageConn.model('Message', messageSchema)
-const Conversation = conversationConn.model('Conversation', conversationSchema)
-
-
-injectBookModel(WishlistBook);
-
-
-const authMiddleware = (req, res, next) => {
-    const token = req.header('Authorization')?.split(' ')[1]; // Expecting "Bearer <token>"
-    if (!token) return res.status(401).json({ message: "Access denied. No token provided." });
-  
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = decoded; // decoded contains userId
-      next();
-    } catch (err) {
-      res.status(400).json({ message: "Invalid token" });
-    }
-};
+} from "./Data.js";
 
 const app = express();
 
-app.use(cors()); 
+// --------------------
+// Middleware
+// --------------------
+app.use(cors());
+app.options("*", cors()); // allow preflight
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-app.post("/auth/register", async (req, res) => {
-    const { username, email, password } = req.body;
+const authMiddleware = (req, res, next) => {
+  // ✅ always allow preflight through
+  if (req.method === "OPTIONS") return next();
 
-    try {
-      const existingUser = await User.findOne({ email });
-      if (existingUser) return res.status(400).json({ message: "User already exists" });
-  
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const user = new User({ username, email, password: hashedPassword, location: null, ratings: 5});
-      await user.save();
-  
-      res.status(201).json({ message: "User registered successfully" });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-});
+  const header = req.header("Authorization") || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
 
-app.post("/auth/login", async (req, res) => {
-    const { email, password } = req.body;
+  if (!token) {
+    return res.status(401).json({ message: "Access denied. No token provided." });
+  }
 
-    try {
-      const user = await User.findOne({ email });
-      if (!user) return res.status(400).json({ message: "Invalid credentials" });
-  
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
-      
-      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '2h' });
-      
-      res.json({ token, user: { id: user._id, username: user.username } });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-});
-
-app.get("/books", async (req, res) => {
-  const query = req.query.query?.toLowerCase() || "";
   try {
-    const books = await OfferedBook.find();
-    const filtered = books.filter(book => book.title.toLowerCase().includes(query) || book.author.toLowerCase().includes(query));
-    res.json(filtered);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded; // { userId: ... }
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid token" });
+  }
+};
+
+//exchange routes
+app.use("/exchanges", authMiddleware, exchangesRouter);
+
+// --------------------
+// PUBLIC ROUTES
+// --------------------
+
+app.post("/auth/register", async (req, res) => {
+  const { username, email, password } = req.body;
+
+  try {
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(400).json({ message: "User already exists" });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ username, email, password: hashedPassword, location: null, ratings: 5 });
+    await user.save();
+
+    res.status(201).json({ message: "User registered successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+app.post("/auth/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ message: "Invalid credentials" });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "2h" });
+
+    res.json({ token, user: { id: user._id, username: user.username } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/logout", async (req, res) => {
+  return res.status(200).json({ message: "Logged out successfully" });
+})
+
 app.get("/books/:id", async (req, res) => {
   try {
     const book = await OfferedBook.findById(req.params.id);
-    const owner = await User.findById(book.owner)
-    const result = { ...book["_doc"] }
-    // Overwrite owner to usable values
-    result.owner = { id: owner["_id"], username: owner.username }
-    if (!result) return res.status(404).json({ error: 'Book not found' });
+    if (!book) return res.status(404).json({ error: "Book not found" });
+
+    const owner = await User.findById(book.owner);
+    const result = { ...book["_doc"] };
+    result.owner = owner ? { id: owner["_id"], username: owner.username } : null;
+
     res.json(result);
   } catch (err) {
-    res.status(404).json({ error: 'Book not found: ' + err.message });
+    res.status(404).json({ error: "Book not found: " + err.message });
   }
 });
 
@@ -177,15 +124,6 @@ app.get("/genres/:genre", async (req, res) => {
   try {
     const genre = req.params.genre.toLowerCase();
     const books = await OfferedBook.find({ genre: { $regex: new RegExp(genre, "i") } });
-    res.json(books);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/feed", async (req, res) => {
-  try {
-    const books = await OfferedBook.find().sort({ createdAt: -1 }).limit(20);
     res.json(books);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -210,37 +148,165 @@ app.get("/popular", async (req, res) => {
   }
 });
 
+// public user profile lookup (optional; keep public if you want)
 app.get("/users/:id", async (req, res) => {
   try {
-    const user = await User.findById( req.params.id );
+    const user = await User.findById(req.params.id);
     res.json(user);
   } catch (err) {
-    res.status(500).json({ error: "Error fetching user" })
+    res.status(500).json({ error: "Error fetching user" });
   }
 });
 
-app.get("/foryou", async (req, res) => {
-    const userId = req.query.id;
+// --------------------
+// PROTECTED ROUTES
+// --------------------
 
-})
+app.get("/feed", authMiddleware, async (req, res) => {
+  const userId = req.user.userId;
 
-//middleware for authentication, every route after this line will be checked for authentication
-//modify the front end code accordingly (see Login.js for an example)
-app.use(authMiddleware)
+  const books = await OfferedBook.find({
+    owner: { $ne: userId }
+  })
+    .sort({ createdAt: -1 })
+    .limit(20);
 
-app.get("/user", async (req, res) => {
-    const userId = req.query.id;
-    try {
-      const user = await User.findById(userId);
-      res.json(user);
-    } catch (err) {
-      res.status(500).json({ error: err.message })
+  res.json(books);
+});
+
+app.get("/books", authMiddleware, async (req, res) => {
+  const query = req.query.query?.toLowerCase() || "";
+  const userId = req.user.userId;
+
+  try {
+    const books = await OfferedBook.find({
+      owner: { $ne: userId }
+    });
+
+    const filtered = books.filter(
+      (book) =>
+        (book.title || "").toLowerCase().includes(query) ||
+        (book.author || "").toLowerCase().includes(query)
+    );
+
+    res.json(filtered);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /browse?q=optionalSearch
+app.get("/browse", authMiddleware, async (req, res) => {
+  const q = (req.query.q || "").trim();
+  const userId = req.user.userId;
+
+  const LIMIT_SECTION = 20;
+  const LIMIT_ROW = 16;
+  const GENRE_COUNT = 8;
+
+  try {
+    const notMine = { owner: { $ne: new mongoose.Types.ObjectId(userId) } };
+
+    /* ---------------- SEARCH ---------------- */
+    const searchResults = q
+      ? await OfferedBook.find({
+          ...notMine,
+          $or: [
+            { title: { $regex: q, $options: "i" } },
+            { author: { $regex: q, $options: "i" } },
+          ],
+        })
+          .sort({ createdAt: -1 })
+          .limit(40)
+      : [];
+
+    /* ---------------- POPULAR ---------------- */
+    const popular = await OfferedBook.aggregate([
+      { $match: notMine },
+      { $sample: { size: LIMIT_SECTION } },
+    ]);
+
+    /* ---------------- NEW ---------------- */
+    const newlyAdded = await OfferedBook.find(notMine)
+      .sort({ createdAt: -1 })
+      .limit(LIMIT_SECTION);
+
+    /* ---------------- RECOMMENDED ---------------- */
+    const user = await User.findById(userId).select("location");
+    let recommended = [];
+
+    if (user?.location) {
+      recommended = await OfferedBook.aggregate([
+        { $match: notMine },
+        {
+          $lookup: {
+            from: "users",
+            localField: "owner",
+            foreignField: "_id",
+            as: "ownerDetails",
+          },
+        },
+        { $unwind: "$ownerDetails" },
+        {
+          $match: {
+            "ownerDetails.location": user.location,
+          },
+        },
+        { $sort: { createdAt: -1 } },
+        { $limit: LIMIT_SECTION },
+      ]);
     }
+
+    /* ---------------- GENRES ---------------- */
+    const genres = (
+      await OfferedBook.distinct("genre", {
+        ...notMine,
+        genre: { $ne: null },
+      })
+    )
+      .filter(Boolean)
+      .slice(0, GENRE_COUNT);
+
+    const genreRows = {};
+    for (const genre of genres) {
+      genreRows[genre] = await OfferedBook.find({
+        ...notMine,
+        genre,
+      })
+        .sort({ createdAt: -1 })
+        .limit(LIMIT_ROW);
+    }
+
+    /* ---------------- RESPONSE ---------------- */
+    res.json({
+      q,
+      searchResults,
+      recommended,
+      popular,
+      newlyAdded,
+      genres,
+      genreRows,
+    });
+  } catch (err) {
+    console.error("BROWSE ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+app.get("/user", authMiddleware, async (req, res) => {
+  try {
+    const me = await User.findById(req.user.userId).select("_id username email location ratings");
+    if (!me) return res.status(404).json({ message: "User not found" });
+    return res.json(me);
+  } catch (err) {
+    return res.status(500).json({ message: "Failed to fetch current user", error: err.message });
+  }
 });
 
 app.get("/user/wishlist", authMiddleware, async (req, res) => {
   try {
-    const books = await WishlistBook.find( { userId: req.user.userId });
+    const books = await WishlistBook.find({ userId: req.user.userId });
     res.json(books);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -249,7 +315,7 @@ app.get("/user/wishlist", authMiddleware, async (req, res) => {
 
 app.get("/user/offered", authMiddleware, async (req, res) => {
   try {
-    const books = await OfferedBook.find({ owner: req.user.userId  });
+    const books = await OfferedBook.find({ owner: req.user.userId });
     res.json(books);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -266,10 +332,13 @@ app.get("/users/:id/wishlist", authMiddleware, async (req, res) => {
   }
 });
 
-// Get public offered books for a specific user
 app.get("/users/:id/offered", authMiddleware, async (req, res) => {
   try {
-    const books = await OfferedBook.find({ owner: req.params.id }); 
+    const books = await OfferedBook.find({
+      owner: req.params.id,
+      locked: false,              
+    }).sort({ createdAt: -1 });
+
     res.json(books);
   } catch (err) {
     console.error("Error fetching offered books for user:", err);
@@ -277,149 +346,148 @@ app.get("/users/:id/offered", authMiddleware, async (req, res) => {
   }
 });
 
-app.post("/user/add-wishlist-book",
-  body('title').notEmpty(),
-  body('author').notEmpty(),
-  body('isbn').notEmpty(),
+app.post(
+  "/user/add-wishlist-book",
+  authMiddleware,
+  body("title").notEmpty(),
+  body("author").notEmpty(),
+  body("isbn").notEmpty(),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { title, author, publisher, year, cover, isbn, genre, desc } = req.body;
-    try {
-      // Add book associated with userId   
-      const book = new WishlistBook({ userId: req.user.userId, title, author, publisher, year, cover, isbn, genre, desc });
-      await book.save();
-      res.status(201).json({ message: "successfully added wishlist book" });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-});
 
-app.post("/user/add-offered-book",
-  body('title').notEmpty(),
-  body('author').notEmpty(),
-  body('isbn').notEmpty(),
-  body('owner').notEmpty(),
+    try {
+      const book = new WishlistBook({
+        userId: req.user.userId,
+        title,
+        author,
+        publisher,
+        year,
+        cover,
+        isbn,
+        genre,
+        desc,
+      });
+
+      await book.save();
+
+      // IMPORTANT: return so nothing else runs
+      return res.status(201).json({ message: "successfully added wishlist book" });
+    } catch (err) {
+      console.error("ADD WISHLIST ERROR:", err);
+      console.error("STACK:", err?.stack);
+      return res.status(500).json({
+        message: "Internal server error while adding wishlist book",
+        error: err?.message,
+      });
+    }
+  }
+);
+
+app.post(
+  "/user/add-offered-book",
+  authMiddleware,
+  body("title").notEmpty(),
+  body("author").notEmpty(),
+  body("isbn").notEmpty(),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { title, author, publisher, year, cover, isbn, genre, desc, owner } = req.body;
-    try {
-      const book = new OfferedBook({ title, author, publisher, year, cover, isbn, genre, desc, owner });
-      await book.save();
-      res.status(201).json({ message: "successfully added offered book" });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-});
+    const { title, author, publisher, year, cover, isbn, genre, desc } = req.body;
 
-// Check if a certain book is in the user's wishlist by ISBN
-// Use authMiddleware to ensure user exists(?) idk im following the comment on line 233
+    try {
+      const book = new OfferedBook({
+        owner: req.user.userId, // ✅ from token
+        title,
+        author,
+        publisher,
+        year,
+        cover,
+        isbn,
+        genre,
+        desc,
+      });
+
+      await book.save();
+      return res.status(201).json({ message: "successfully added offered book" });
+    } catch (err) {
+      console.error("ADD OFFERED ERROR:", err);
+      return res.status(500).json({
+        message: "Internal server error while adding offered book",
+        error: err?.message,
+      });
+    }
+  }
+);
+
 app.get("/user/wishlist/:isbn", authMiddleware, async (req, res) => {
   const { isbn } = req.params;
   try {
-    // Search for the book in the user's wishlist
     const book = await WishlistBook.findOne({ userId: req.user.userId, isbn });
-    if (book) {
-      res.json({ exists: true });
-    } else {
-      res.json({ exists: false });
-    }
+    res.json({ exists: !!book });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 app.get("/user/get-recommended-books", authMiddleware, async (req, res) => {
-    const userId = req.user.userId;
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ error: "User not found" });
-    try {
-        const userLocation = user.location; // Save user's location
-
-        // Get the genres of the books the user has offfered
-        // const userOfferedBooks = await OfferedBook.find({ owner: userId });
-        // const userGenres = userOfferedBooks.map(book => book.genre);
-        
-        // aggregate call joins OfferedBook and User collection
-        // Matches books by the owner field in OfferedBook the the _id field in User
-        const books = await OfferedBook.aggregate([  
-            {
-              $lookup: {
-                from: "users", // Lookup from the User collection
-                localField: "owner", // find field of owner
-                foreignField: "_id",
-                as: "ownerDetails" // name the lookup as ownerDetails
-              }
-            },
-            {
-              $unwind: "$ownerDetails" // unwind ownerDetails so we can access the fields
-            },
-            {
-              $match: {
-                "ownerDetails.location": userLocation, // find books by user's location
-                // "genre": { $in: userGenres }, // match books that share genres with the user's offered books
-                "owner": { $ne: new mongoose.Types.ObjectId(userId) } // exclude books offered by the current user
-              }
-            },
-            {
-              $sort: { createdAt: -1 }
-            }
-          ]);
-        res.json(books);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.post("/user/search-google-books", async (req, res) => {
-  const query = req.body.query;
-  if (!query) return res.status(400).json({ error: 'Missing query parameter' });
+  const userId = req.user.userId;
+  const user = await User.findById(userId);
+  if (!user) return res.status(404).json({ error: "User not found" });
 
   try {
-    const results = await searchGoogleBooks(query);
-    res.json(results);
+    const userLocation = user.location;
+
+    const books = await OfferedBook.aggregate([
+      {
+        $lookup: {
+          from: "users",
+          localField: "owner",
+          foreignField: "_id",
+          as: "ownerDetails",
+        },
+      },
+      { $unwind: "$ownerDetails" },
+      {
+        $match: {
+          "ownerDetails.location": userLocation,
+          owner: { $ne: new mongoose.Types.ObjectId(userId) },
+        },
+      },
+      { $sort: { createdAt: -1 } },
+    ]);
+
+    res.json(books);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 app.post("/user/edit", authMiddleware, async (req, res) => {
-try {
+  try {
     const userId = req.user.userId;
     const { username, email, location } = req.body.user;
 
     const update = {};
-    if (username.trim() != null && username.trim() != "") update.username = username.trim();
-    if (email.trim() != null && email.trim()!="") update.email = email.trim();
-    if (location.trim() != null && location.trim() != "") update.location = location.trim();
+    if (username?.trim()) update.username = username.trim();
+    if (email?.trim()) update.email = email.trim();
+    if (location?.trim()) update.location = location.trim();
 
-    const updatedUser = await User.findByIdAndUpdate(
-    userId,
-    { $set: update },
-    { new: true }
-    );
-
+    const updatedUser = await User.findByIdAndUpdate(userId, { $set: update }, { new: true });
     res.json({ message: "User updated", user: updatedUser });
-} catch (err) {
+  } catch (err) {
     console.error("Error updating user:", err);
     res.status(500).json({ message: "Internal server error" });
-}
+  }
 });
 
 app.delete("/user/wishlist/:id", authMiddleware, async (req, res) => {
   try {
-    const book = await WishlistBook.findOneAndDelete({
-      _id: req.params.id,
-      userId: req.user.userId
-    });
-
-    if (!book) {
-      return res.status(404).json({ message: "Book not found or not authorized" });
-    }
-
+    const book = await WishlistBook.findOneAndDelete({ _id: req.params.id, userId: req.user.userId });
+    if (!book) return res.status(404).json({ message: "Book not found or not authorized" });
     res.json({ message: "Book successfully deleted" });
   } catch (err) {
     console.error("Error deleting wishlist book:", err);
@@ -431,13 +499,10 @@ app.delete("/user/offered/:id", authMiddleware, async (req, res) => {
   try {
     const book = await OfferedBook.findOneAndDelete({
       _id: req.params.id,
-      owner: mongoose.Types.ObjectId.createFromHexString(req.user.userId)
+      owner: mongoose.Types.ObjectId.createFromHexString(req.user.userId),
     });
 
-    if (!book) {
-      return res.status(404).json({ message: "Book not found or not authorized" });
-    }
-
+    if (!book) return res.status(404).json({ message: "Book not found or not authorized" });
     res.json({ message: "Book successfully deleted" });
   } catch (err) {
     console.error("Error deleting offered book:", err);
@@ -446,96 +511,123 @@ app.delete("/user/offered/:id", authMiddleware, async (req, res) => {
 });
 
 
-app.post("/logout", (req, res) => {
-  res.status(200).json({ message: "Logout: test msg" });
-});
-
-app.get("/messages", async (req, res) => {
+app.get("/messages", authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.userId
-    
+    const userId = req.user.userId;
+
     const conversations = await Conversation.find({
-      users: {
-        $in: [userId]
-      }
-    })
+      users: { $in: [userId] },
+    });
 
-    const formattedConversations = await Promise.all(conversations.map(async convo => {
-      const otherUser = userId == convo.users[0] ? convo.users[1] : convo.users[0]
-      
-      const otherUserResult = await User.findOne({"_id": otherUser})
+    const formattedConversations = await Promise.all(
+      conversations.map(async (convo) => {
+        const otherUserId = String(convo.users[0]) === String(userId)
+          ? convo.users[1]
+          : convo.users[0];
 
-      const otherUserInfo = {
-        id: otherUserResult.id,
-        location: otherUserResult.location,
-        ratings: otherUserResult.ratings,
-        username: otherUserResult.username
-      }
+        const otherUserResult = await User.findById(otherUserId).select(
+          "_id username location ratings"
+        );
 
-      return {
-        id: convo["_id"],
-        otherUser: otherUserInfo,
-      }
-    }))
+        // ✅ get last message in this conversation
+        const lastMsg = await Message.findOne({ conversation: convo._id })
+          .sort({ createdAt: -1 })
+          .select("content createdAt");
 
-    res.json(formattedConversations)
+        const otherUserInfo = otherUserResult
+          ? {
+              id: otherUserResult._id,
+              location: otherUserResult.location,
+              ratings: otherUserResult.ratings,
+              username: otherUserResult.username,
+            }
+          : {
+              id: otherUserId,
+              location: null,
+              ratings: 0,
+              username: "Unknown",
+            };
 
+        return {
+          id: convo._id,
+          otherUser: otherUserInfo,
+          lastMessage: lastMsg?.content || "",
+          lastAt: lastMsg?.createdAt || null,
+        };
+      })
+    );
+
+    // ✅ sort by lastAt (most recent first). Conversations with no messages go bottom.
+    formattedConversations.sort((a, b) => {
+      const ta = a.lastAt ? new Date(a.lastAt).getTime() : 0;
+      const tb = b.lastAt ? new Date(b.lastAt).getTime() : 0;
+      return tb - ta;
+    });
+
+    res.json(formattedConversations);
   } catch (err) {
     console.error("Error fetching conversations: ", err);
-    res.status(500).json({ message: "Internal server error while fetching conversations" })
+    res.status(500).json({
+      message: "Internal server error while fetching conversations",
+      error: err?.message,
+    });
   }
 });
 
-app.get("/messages/:user", async (req, res) => {
-
+app.get("/messages/:user", authMiddleware, async (req, res) => {
   try {
+    const userId = req.user.userId;
+    const otherUserId = req.params.user;
 
-    const conversation = await Conversation.findOne({
-      users: {
-        $in: [[req.params.user, req.user.userId], [req.user.userId, req.params.user]]
-      }
-    })
-
-    const requester = await User.findById(req.user.userId, {"_id": 1, "username": 1, "location": 1, "rating": 1})
-    const nonRequester = await User.findById(req.params.user, {"_id": 1, "username": 1, "location": 1, "rating": 1})
-
-    if (!conversation) {
-      res.status(404).json({ message: "Conversation not found" })
+    if (!mongoose.isValidObjectId(otherUserId)) {
+      return res.status(400).json({ message: "Invalid user id" });
     }
 
-    const messages = await Message.find({ conversation: conversation["_id"] })
+    const conversation = await Conversation.findOne({
+      users: { $all: [userId, otherUserId] },
+    });
 
-    const formattedMessages = messages.map(msg => {
-      // Just gets the user that isn't the current user in the conversation
-      const otherUser = conversation.users[conversation.users.indexOf(msg.user) ^ 1]
-      let sender
-      let receiver
-      if (msg.user == req.user.userId) {
-        sender = requester
-        receiver = nonRequester
-      } else {
-        sender = nonRequester
-        receiver = requester
-      }
+    if (!conversation) {
+      return res.status(404).json({ message: "Conversation not found" });
+    }
 
-      return { 
-        id: msg["_id"],
-        sender: sender,
-        receiver: receiver,
+    const [requester, nonRequester] = await Promise.all([
+      User.findById(userId).select("_id username location ratings"),
+      User.findById(otherUserId).select("_id username location ratings"),
+    ]);
+
+    if (!requester || !nonRequester) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const messages = await Message.find({ conversation: conversation._id })
+      .sort({ createdAt: 1 }) // oldest -> newest for chat UI
+      .lean();
+
+    const formatted = messages.map((msg) => {
+      const sender = String(msg.user) === String(userId) ? requester : nonRequester;
+      const receiver = String(msg.user) === String(userId) ? nonRequester : requester;
+
+      return {
+        id: msg._id,
+        sender,
+        receiver,
         content: msg.content,
-        timestamp: msg.createdAt
-      }
-    }) 
+        timestamp: msg.createdAt,
+      };
+    });
 
-    res.json(formattedMessages)
-  }
-  catch (err) {
-    console.error("Error fetching messages: " + err)
-    res.status(500).json({ message: "Internal server error while fetching messages" })
+    return res.json(formatted);
+  } catch (err) {
+    console.error("Error fetching messages:", err);
+    return res.status(500).json({
+      message: "Internal server error while fetching messages",
+      error: err?.message,
+    });
   }
 });
 
-app.post("/messages/:user", async (req, res) => {
+app.post("/messages/:user", authMiddleware, async (req, res) => {
   const { content } = req.body
 
   if (content === "") {

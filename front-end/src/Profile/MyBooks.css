@@ -1,196 +1,166 @@
-/* General Styles */
-body {
-    font-family: 'Arial', sans-serif;
-    background-color: #eadbd6;
-    margin: 0;
-    padding: 0;
-}
 
-/* Profile Container */
+/* Page */
 .profile {
-    margin: auto;
-    padding: 15px;
-    background-color: #eadbd6;
+  min-height: 100vh;
+  padding: 16px;
+  padding-bottom: 80px; /* space for fixed bottom navbar */
+  box-sizing: border-box;
+
+  background: #0b0f17;
+  color: rgba(233, 238, 247, 0.95);
+
+  display: grid;
+  gap: 14px;
 }
 
-/* Titles */
-.title {
-    text-align: center;
-    font-size: 30px;
-    color: #ffffff;
-}
-
-
-/* Profile Info */
-.infoContainer {
-    display: flex;
-    flex-direction:column;
-    gap: 15px;
-    padding: 20px;
-    background: #ffffff;
-    border-radius: 10px;
-    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
-    margin-bottom: 20px;
-}
-
-.profilePhoto {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    border: 2px solid #ddd;
-}
-
-
-.photoAndButton {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-  }
-
-.editProfileBtn {
-    background-color: #ffffff;
-    border: 2px solid #38261e;
-    color: #38261e;
-    padding: 6px 16px;
-    border-radius: 9999px; /* This creates the pill shape */
-    font-size: 14px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.2s ease-in-out;
-}
-
-.editProfileBtn:hover {
-    background-color: #38261e;
-    color: #ffffff;
-}
-
-.infoList {
-    list-style: none;
-    padding: 0;
-}
-
-.infoList li {
-    margin: 5px 0;
-}
-
-.infoRow {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.usernameText {
-    font-size: 24px;
-    font-weight: bold;
-    margin-top: 5px;
-    margin-bottom: 5px;
-}
-
-.sectionTitle {
-    display: flex;
-    justify-content: center;
-    margin: 10px;
-}
-
-/* Wishlist & Offerings Containers */
-.wishlistContainer, .offeringsContainer {
-    background: #ffffff;
-    border-radius: 10px;
-    padding: 15px;
-    box-shadow: 2px 5px 5px rgba(0, 0, 0, 0.1);
-}
-
-.mybooksContainer {
-    background: #ffffff;
-    border-radius: 10px;
-    padding: 15px;
-    box-shadow: 2px 5px 5px rgba(0, 0, 0, 0.1);
-    margin-bottom: 60px;
-}
-
-
-.offeringsContainer {
-    margin-bottom: 60px;
-}
-
-
-.sectionHeader {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-}
-
-.sectionTitle {
-    font-size: 20px;
-    font-weight: bold;
-    margin: 0;
-    text-align: center;
-    flex: 1;
-}
-
-.iconButton {
-    background: none;
-    border: none;
-    color: #000000;
-    font-size: 1.2rem;
-    cursor: pointer;
-    padding: 4px;
-    display: flex;
-    align-items: center;
-    transition: transform 0.2s;
-}
-
+/* Make header usable with back button positioning */
 .wishlistHeader {
-    position: relative;
-    justify-content: center;
-    height: 60px;
+  position: relative;
+  justify-content: center;
+  height: 60px;
 }
-  
 
+/* Keep your back button position but match new palette */
 .backButton {
-    position: absolute;
-    left: 15px;
-    background: none;
-    border: none;
-    color: #ff9700;
-    font-size: 1.6rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
+  position: absolute;
+  left: 15px;
+
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+
+  display: grid;
+  place-items: center;
+
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(18, 24, 39, 0.55);
+  color: rgba(233, 238, 247, 0.95);
+
+  cursor: pointer;
+  text-decoration: none;
+
+  backdrop-filter: blur(10px);
+  transition: transform 120ms ease, filter 120ms ease;
 }
 
-
-/* Wishlist & Offerings Lists */
-.wishlist, .offerings {
-    list-style: none;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin: auto;
+.backButton:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
 }
 
-/* List Items */
-.wishlistItem, .offeringItem {
-    background: #655e5838;
-    padding: 10px;
-    border-radius: 8px;
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    transition: transform 0.2s ease-in-out;
+.backButton:active {
+  transform: translateY(0px);
+  filter: brightness(0.98);
 }
 
-.wishlistItem:hover, .offeringItem:hover {
-    transform: scale(1.01);
-    background: #996b50;
+/* Container card */
+.mybooksContainer {
+  width: min(1100px, 100%);
+  margin: 0 auto;
+
+  padding: 14px;
+  border-radius: 18px;
+
+  background: rgba(18, 24, 39, 0.70);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 16px 55px rgba(0, 0, 0, 0.45);
+}
+
+/* List */
+.wishlist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  margin-top: 20px;
+
+  display: grid;
+  gap: 10px;
+}
+
+/* Row item */
+.wishlistItem {
+  display: grid;
+  grid-template-columns: 20px 1fr 40px;
+  align-items: center;
+  gap: 10px;
+
+  padding: 12px;
+  border-radius: 14px;
+
+  background: rgba(18, 24, 39, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+
+  transition: transform 120ms ease, filter 120ms ease, background 120ms ease;
+}
+
+.wishlistItem:hover {
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
 }
 
 .bookIcon {
-    margin-right: 10px;
+  opacity: 0.9;
+  color: rgba(233, 238, 247, 0.85);
+}
+
+.wishlistItem strong {
+  font-size: 14px;
+  font-weight: 800;
+  color: rgba(233, 238, 247, 0.92);
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Delete button */
+.deleteButton {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+
+  display: grid;
+  place-items: center;
+
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.deleteButton:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.deleteButton:active {
+  transform: translateY(0px);
+  filter: brightness(0.98);
+}
+
+/* Fade in */
+.fade-start {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.fade-in {
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+  }
 }
 
 /* Title */
@@ -213,34 +183,49 @@ body {
     text-align: center;
 }
 
-.truncate {
-    max-width: 300px; /* Try a fixed size to test, adjust as needed */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: inline-block;
-    vertical-align: top;
+/* Titlebox needs relative positioning so back button can be placed inside */
+.mybooksTitlebox {
+  position: relative;
+  justify-content: center;
+  height: 60px;
+}
+
+/* Back button inside the brown titlebar */
+.mybooksTitlebox .backButton {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+
+  display: grid;
+  place-items: center;
+
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.20);
+  color: #ff9700;
+
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease, background 120ms ease;
+}
+
+.mybooksTitlebox .backButton:hover {
+  background: rgba(0, 0, 0, 0.30);
+  filter: brightness(1.06);
+  transform: translateY(-50%) translateY(-1px);
+}
+
+.mybooksTitlebox .backButton:active {
+  transform: translateY(-50%);
+  filter: brightness(0.98);
+}
+
+/* iconButton base (in case not defined elsewhere) */
+.iconButton {
+  border: none;
 }
 
 
-.fade-start {
-    opacity: 0;
-    visibility: hidden;
-  }
-  
-.fade-in {
-    animation: fadeInUp 0.6s ease-out forwards;
-}
-
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-        visibility: visible;
-    }
-}
-  

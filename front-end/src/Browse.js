@@ -1,39 +1,115 @@
-import './Browse.css'
-import { useNavigate } from "react-router-dom";
-import { FaAngleLeft } from 'react-icons/fa';
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import "./Browse.css";
 
 const Browse = () => {
-    const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-    const routes = {
-        "Popular Now": "/browse/popular",
-        "Newly Added": "/browse/newly-added",
-        "By Category": "/browse/by-category",
-        "Search": "/browse/search",
-      };
+  const server = process.env.REACT_APP_SERVER_ADDRESS;
+  const token = localStorage.getItem("token");
 
-    return (
-        <main className="Browse">
-            <div className="titlebox">
-                <button className="iconButton backButton" onClick={() => navigate("/home")}>
-                    <FaAngleLeft />
-                </button>
+  useEffect(() => {
+    setLoading(true);
 
-                <h1 className="title">Browse</h1>
-            </div>
-            
+    const t = setTimeout(() => {
+      fetch(`${server}/browse?q=${encodeURIComponent(query)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+        .then((r) => r.json())
+        .then((payload) => {
+          setData(payload);
+          setLoading(false);
+        })
+        .catch(() => {
+          setData(null);
+          setLoading(false);
+        });
+    }, 250); // debounce
 
-            <div className="category-list">
-                {["Popular Now", "Newly Added", "By Category", "Search"].map((item, index) => (
-                    <button key={index} onClick={() => navigate(routes[item])} className="category-btn">
-                    {item}
-                    </button>
-                ))}
-            </div>
+    return () => clearTimeout(t);
+  }, [query, server, token]);
 
-        
-        </main>
-    )
-}
+  const showSearch = query.trim().length > 0;
 
-export default Browse
+  return (
+    <main className="BrowseOnePage">
+      <div className="browse-header">
+        <div className="titlebox">
+            <h1 className="title">Browse</h1>
+        </div>
+        <input
+          className="browse-search"
+          placeholder="Search title or author..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
+      {loading && <div className="browse-loading">Loading…</div>}
+
+      {!loading && data && (
+        <>
+          {showSearch && (
+            <Section title={`Search results (${data.searchResults.length})`}>
+              <BookRow books={data.searchResults} />
+            </Section>
+          )}
+
+          {!showSearch && (
+            <>
+              <Section title="Recommended for you">
+                <BookRow books={data.recommended} />
+              </Section>
+
+              <Section title="Popular now">
+                <BookRow books={data.popular} />
+              </Section>
+
+              <Section title="Newly added">
+                <BookRow books={data.newlyAdded} />
+              </Section>
+
+              {Object.entries(data.genreRows).map(([genre, books]) => (
+                <Section key={genre} title={genre}>
+                  <BookRow books={books} />
+                </Section>
+              ))}
+            </>
+          )}
+        </>
+      )}
+    </main>
+  );
+};
+
+const Section = ({ title, children }) => (
+  <section className="browse-section">
+    <h3 className="browse-section-title">{title}</h3>
+    {children}
+  </section>
+);
+
+const BookRow = ({ books }) => {
+  if (!books?.length) return <div className="browse-empty">No books</div>;
+
+  return (
+    <div className="book-row">
+      {books.map((b) => (
+        <Link key={b._id} to={`/books/${b._id}`} className="book-card">
+          <div
+            className="book-cover"
+            style={{
+              backgroundImage: `url(${b.cover || "/default-book.png"})`,
+            }}
+          />
+        </Link>
+      ))}
+    </div>
+  );
+};
+
+export default Browse;

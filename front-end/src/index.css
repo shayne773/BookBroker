@@ -2,8 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 body {
   margin: 0;
+  overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
@@ -18,6 +25,5 @@ code {
 
 :root {
   --brown: #38261e;
-  --orange: #ff9700;
-  --background: #eadbd6;
+  --bottom-nav-h: 72px;
 }

@@ -1,86 +1,77 @@
-import './MyTrades.css'
+import './MyTrades.css';
 import { useEffect, useState } from 'react';
-import { FaBookOpen, FaAngleLeft, FaTrash} from 'react-icons/fa';
-import { generateBooks } from '../MockData';
-import { Link } from 'react-router-dom';
+import { FaBookOpen, FaTrash, FaAngleLeft } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 
-const MyBooks = () => {
-
+const MyTrades = () => {
   const [offeringsBooks, setOfferingsBooks] = useState([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('token');
     fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/offered`, {
-        headers: {
-            "Authorization": `Bearer ${token}`
-        }
+      headers: { Authorization: `Bearer ${token}` }
     })
-    .then(res => res.json())
-    .then(data => {
-        setOfferingsBooks(data);
-    })
-    .catch(err => {
+      .then(res => res.json())
+      .then(data => setOfferingsBooks(data))
+      .catch(err => {
         console.log("Failed to fetch offerings:", err);
-        setOfferingsBooks({});
-    })
+        setOfferingsBooks([]);
+      });
   }, []);
 
   const handleDelete = (bookId) => {
-    console.log(bookId)
     const token = localStorage.getItem("token");
     fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/offered/${bookId}`, {
-        method: "DELETE",
-        headers: {
-            "Authorization": `Bearer ${token}`
-        }
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` }
     })
-    .then(res => {
-        if(res.ok){
-            setOfferingsBooks(prevBooks => prevBooks.filter(book => book._id !== bookId))
+      .then(res => {
+        if (res.ok) {
+          setOfferingsBooks(prev => prev.filter(book => book._id !== bookId));
+        } else {
+          console.error("Failed to delete book from offerings");
         }
-        else{
-            console.error("Failed to delete book from wishlist");
-        }
-    })
-    .catch(err => {
-        console.error("Error deleting book:", err);
-    });
-  }
+      })
+      .catch(err => console.error("Error deleting book:", err));
+  };
 
   return (
     <div>
-        <div className="titlebox offeringsHeader">
-            <Link to="/profile" className="iconButton backButton">
-                <FaAngleLeft />
-            </Link>
-            <h1 className="title">Offerings</h1>
-        </div>
-        <main className="profile">
+      <main className="profile">
         <div className="mytradesContainer fade-in">
-            <ul className="offerings">
+          <div className="titlebox mytradesTitlebox">
+            <button
+              className="iconButton backButton"
+              onClick={() => navigate(-1)}
+              aria-label="Back"
+              type="button"
+            >
+              <FaAngleLeft />
+            </button>
+
+            <h1 className="title">Offerings</h1>
+          </div>
+
+          <ul className="offerings">
             {offeringsBooks.length > 0 ? (
-                offeringsBooks.map((book, index) => (
-                <li key={index} className="offeringItem">
-                    <FaBookOpen className="bookIcon" />
-                    <strong>{book.title}</strong>
-                    <button 
-                      className="deleteButton"
-                      onClick={() => handleDelete(book._id)} 
-                      style={{ marginLeft: "10px", background: "none", border: "none", cursor: "pointer" }}
-                    >
-                      <FaTrash />
-                    </button>
+              offeringsBooks.map((book) => (
+                <li key={book._id} className="offeringItem">
+                  <FaBookOpen className="bookIcon" />
+                  <strong>{book.title}</strong>
+                  <button className="deleteButton" onClick={() => handleDelete(book._id)}>
+                    <FaTrash />
+                  </button>
                 </li>
-                ))
+              ))
             ) : (
-                <li>Loading Offerings...</li>
+              <li>Loading Offerings...</li>
             )}
-            </ul>
+          </ul>
         </div>
-        </main>
+      </main>
     </div>
-    
   );
 };
 
-export default MyBooks;
+export default MyTrades;

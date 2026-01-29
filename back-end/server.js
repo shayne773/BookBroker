@@ -1,14 +1,32 @@
 #!/usr/bin/env node
-import server from './app.js' // load up the web server
-const port = 5000 // the port to listen to for incoming requests
-// call express's listen function to start listening to the port
-const listener = server.listen(port, function () {
-  console.log(`Server running on port: ${port}`)
-})
-// a function to stop listening to the port
-const close = () => {
-  listener.close()
+import dotenv from "dotenv";
+dotenv.config();
+
+import mongoose from "mongoose";
+import app from "./app.js";
+
+const port = process.env.PORT || 5000;
+
+async function start() {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      dbName: "bookbroker",
+    });
+
+    console.log("MongoDB connected (dbName=bookbroker)");
+
+    const listener = app.listen(port, () => {
+      console.log(`Server running on port: ${port}`);
+    });
+
+    // optional clean shutdown
+    process.on("SIGINT", () => {
+      listener.close(() => process.exit(0));
+    });
+  } catch (err) {
+    console.error("Startup failed:", err);
+    process.exit(1);
+  }
 }
 
-// export the close function
-export { close }
+start();

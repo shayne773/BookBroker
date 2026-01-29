@@ -1,59 +1,60 @@
+import './Profile/MyBooks.css';
 import { useEffect, useState } from 'react';
 import { FaBookOpen, FaAngleLeft } from 'react-icons/fa';
-import { Link, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 const UserPageWishlist = () => {
-    const [wishlistBooks, setWishlistBooks] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const { id } = useParams();
-    const token = localStorage.getItem('token');
+  const { id } = useParams(); // user id
+  const navigate = useNavigate();
+  const [wishlistBooks, setWishlistBooks] = useState([]);
 
-    useEffect(() => {
-        fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/wishlist`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        })
-            .then(res => res.json())
-            .then(data => {
-                setWishlistBooks(data);
-                setLoading(false);
-            })
-            .catch(err => {
-                console.log("Failed to fetch wishlist:", err);
-                setWishlistBooks([]);
-                setLoading(false);
-            });
-    }, [id]);
+  const token = localStorage.getItem('token');
 
-    return (
-        <div>
-            <div className="titlebox wishlistHeader">
-                <Link to={`/users/${id}`} className="iconButton backButton">
+  useEffect(() => {
+    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/wishlist`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => setWishlistBooks(data))
+      .catch(err => {
+        console.error('Failed to fetch user wishlist:', err);
+        setWishlistBooks([]);
+      });
+  }, [id, token]);
+
+  return (
+    <div>
+      <main className="profile">
+
+        <div className="mybooksContainer fade-in">
+            <div className="titlebox mybooksTitlebox">
+                <button
+                className="iconButton backButton"
+                onClick={() => navigate(-1)}
+                aria-label="Back"
+                type="button"
+                >
                     <FaAngleLeft />
-                </Link>
+                </button>
                 <h1 className="title">Wishlist</h1>
-            </div>
-            <main className="profile">
-                <div className="mybooksContainer fade-in">
-                    <ul className="wishlist">
-                        {loading ? (
-                            <li>Loading Wishlist...</li>
-                        ) : wishlistBooks.length > 0 ? (
-                            wishlistBooks.map((book, index) => (
-                                <li key={index} className="wishlistItem">
-                                    <FaBookOpen className="bookIcon" />
-                                    <strong>{book.title}</strong>
-                                </li>
-                            ))
-                        ) : (
-                            <li>No items in wishlist.</li>
-                        )}
-                    </ul>
-                </div>
-            </main>
+            </div>    
+          <ul className="wishlist">
+            {wishlistBooks.length > 0 ? (
+              wishlistBooks.map(book => (
+                <li key={book._id || book.isbn} className="wishlistItem">
+                  <FaBookOpen className="bookIcon" />
+                  <strong>{book.title}</strong>
+                </li>
+              ))
+            ) : (
+              <li>No items in wishlist</li>
+            )}
+          </ul>
         </div>
-    );
+
+      </main>
+    </div>
+  );
 };
 
 export default UserPageWishlist;

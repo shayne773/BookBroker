@@ -1,5 +1,63 @@
-.form-location {
-    border: 1px solid;
-    margin-bottom: 20px;
-    padding: 3px;
+/* Two-column row for password + confirm (collapses on mobile) */
+.twoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 520px) {
+  .twoCol {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Style the select to match inputs */
+.field select {
+  width: 100%;
+  border-radius: 12px;
+  padding: 12px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(3, 7, 18, 0.55);
+  color: #e9eef7;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  /* custom dropdown arrow */
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(233, 238, 247, 0.65) 50%),
+    linear-gradient(135deg, rgba(233, 238, 247, 0.65) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 3px),
+    calc(100% - 12px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+.field select:focus {
+  border-color: rgba(96, 165, 250, 0.7);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.18);
+}
+
+.field select option {
+  background: #0b1020;
+  color: #e9eef7;
+}
+
+/* Smooth reveal for the "Other city" input */
+.slideDown {
+  animation: slideDown 160ms ease-out both;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

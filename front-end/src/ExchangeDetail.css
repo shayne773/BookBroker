@@ -1,0 +1,381 @@
+.ExchangeDetailPage{
+  min-height: 100vh;
+  padding: 14px 14px 92px;
+  background: #0b0f17;
+  color: #e9eef7;
+}
+
+.exd-toast{
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(50, 200, 140, 0.18);
+  border: 1px solid rgba(50, 200, 140, 0.35);
+  padding: 10px 12px;
+  border-radius: 14px;
+  z-index: 99;
+  backdrop-filter: blur(10px);
+  max-width: 92vw;
+  text-align: center;
+}
+
+.exd-header{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.exd-header-text{
+  flex: 1;
+  min-width: 0;
+}
+
+.exd-title{
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.exd-subtitle{
+  opacity: 0.75;
+  font-size: 0.92rem;
+}
+
+.exd-strong{ font-weight: 800; }
+
+.exd-mini-link{
+  text-decoration: none;
+  color: #e9eef7;
+  border: 1px solid rgba(255,255,255,0.14);
+  padding: 8px 10px;
+  border-radius: 12px;
+  opacity: 0.9;
+}
+
+.exd-loading, .exd-error{
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.06);
+}
+
+.exd-card{
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 18px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.exd-card-title{
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.exd-timeline{
+  display:flex;
+  gap: 10px;
+  overflow-x:auto;
+  padding-bottom: 6px;
+}
+
+.exd-step{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  opacity: 0.55;
+  flex: 0 0 auto;
+}
+
+.exd-step.on{
+  opacity: 0.98;
+  border-color: rgba(120, 180, 255, 0.35);
+}
+
+.exd-step .dot{
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.35);
+}
+
+.exd-step.on .dot{
+  background: rgba(120, 180, 255, 0.9);
+}
+
+.exd-step .label{
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.exd-status-row{
+  display:flex;
+  justify-content: space-between;
+  align-items:center;
+  margin-top: 10px;
+  gap: 10px;
+}
+
+.muted{ opacity: 0.7; }
+
+.pill{
+  font-size: 0.78rem;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+}
+
+.pill.done{
+  border-color: rgba(120, 180, 255, 0.35);
+}
+
+.pill.muted{
+  opacity: 0.6;
+}
+
+.exd-message{
+  margin-top: 10px;
+  opacity: 0.9;
+  font-style: italic;
+}
+
+.exd-twoCols{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 720px){
+  .exd-twoCols{ grid-template-columns: 1fr 1fr; }
+}
+
+.exd-col-head{
+  display:flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.exd-strip{
+  display:flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.exd-book{
+  text-decoration:none;
+  color: inherit;
+  width: 110px;
+  flex: 0 0 auto;
+}
+
+.exd-cover{
+  width: 110px;
+  height: 155px;
+  border-radius: 14px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.exd-bookTitle{
+  margin-top: 6px;
+  font-size: 0.85rem;
+  opacity: 0.92;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.exd-actions{
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.btn{
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.06);
+  color: #e9eef7;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn:hover{ background: rgba(255,255,255,0.08); }
+.btn:disabled{ opacity: 0.55; cursor: not-allowed; }
+
+.btn.primary{
+  border-color: rgba(120, 180, 255, 0.35);
+  background: rgba(120, 180, 255, 0.14);
+}
+
+.btn.danger{
+  border-color: rgba(255, 90, 90, 0.35);
+  background: rgba(255, 90, 90, 0.12);
+}
+
+.btn.ghost{
+  opacity: 0.8;
+}
+
+.exd-complete-grid{
+  display:grid;
+  gap: 10px;
+}
+
+.exd-complete-row{
+  display:flex;
+  justify-content: space-between;
+  align-items:center;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.08);
+}
+
+.exd-rated{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  flex-wrap: wrap;
+}
+
+.exd-rate-row{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  flex-wrap: wrap;
+}
+
+.stars{
+  display:flex;
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.star{
+  border: none;
+  background: transparent;
+  font-size: 1.35rem;
+  cursor:pointer;
+  opacity: 0.35;
+  color: #e9eef7;
+}
+
+.star.on{
+  opacity: 1;
+}
+
+.exd-modalOverlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 99;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  padding: 12px;
+}
+
+.exd-modalSheet{
+  width: min(980px, 96vw);
+  max-height: 86vh;
+  overflow: auto;
+  background: #0b0f17;
+  color: #e9eef7;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 20px;
+  padding: 14px;
+}
+
+.exd-modalTitle{
+  font-weight: 900;
+  font-size: 1.05rem;
+  margin-bottom: 10px;
+}
+
+.exd-modalCols{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 820px){
+  .exd-modalCols{ grid-template-columns: 1fr 1fr; }
+}
+
+.exd-modalColTitle{
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.exd-grid{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (min-width: 820px){
+  .exd-grid{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.exd-pick{
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  border-radius: 14px;
+  padding: 8px;
+  cursor:pointer;
+  text-align:left;
+  color: inherit;
+}
+
+.exd-pick.picked{
+  border-color: rgba(120, 180, 255, 0.38);
+  background: rgba(120, 180, 255, 0.12);
+}
+
+.exd-pickCover{
+  width: 100%;
+  aspect-ratio: 3/4;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.exd-pickTitle{
+  margin-top: 6px;
+  font-size: 0.82rem;
+  opacity: 0.9;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.exd-textarea{
+  width: 100%;
+  margin-top: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: #e9eef7;
+  padding: 10px;
+  min-height: 84px;
+  outline: none;
+}
+
+.exd-modalActions{
+  margin-top: 10px;
+  display:flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

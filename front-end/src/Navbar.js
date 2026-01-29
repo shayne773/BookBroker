@@ -11,7 +11,7 @@ const Navbar = () => {
       <NavLink to="/browse" className="nav-item">
         <FaSearch className="nav-icon w-8 h-8 my-2" />
       </NavLink>
-      <NavLink to="/feed" className="nav-item">
+      <NavLink to="/exchanges" className="nav-item">
         <FaBook className="nav-icon w-8 h-8 my-2" />
       </NavLink>
       <NavLink to="/messages" className="nav-item">

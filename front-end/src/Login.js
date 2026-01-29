@@ -40,25 +40,33 @@ export default function Login() {
         console.log('Form submitted successfully!');
     };
 
-    return <div className="login">
-        <form className="login-form" onSubmit={handleSubmit}>
-            <div className="form-email">
-                <label htmlFor="email">Email:</label>
-                <input type="text" id="email" name="email" required />
+    return (
+        <div className="loginPage">
+            <div className="loginCard">
+                <div className="appTitle">BookBroker</div>
+                <div className="appSubtitle">Sign in to continue</div>
+
+                <form className="loginForm" onSubmit={handleSubmit}>
+                    <label className="field">
+                    <span>Email</span>
+                    <input type="email" id="email" name="email" placeholder="you@example.com" required />
+                    </label>
+
+                    <label className="field">
+                    <span>Password</span>
+                    <input type="password" id="password" name="password" placeholder="••••••••" required />
+                    </label>
+
+                    {error && <div className="errorBox">{error}</div>}
+
+                    <button className="primaryBtn" type="submit">Log in</button>
+
+                    <div className="footerRow">
+                    <span>New here?</span>
+                    <a className="link" href="/signup">Create an account</a>
+                    </div>
+                </form>
             </div>
-
-            <div className="form-pass">
-                <label htmlFor="password">Password:</label>
-                <input type="password" id="password" name="password" required />
-            </div>
-
-            {error && <p className="error-message">{error}</p>}
-
-            <div className="form-footer">
-                <button className="form-button" type="submit"> Login </button>
-
-                <a href="/signup"> New User? Sign Up Here! </a>
-            </div>
-        </form>
-    </div>
+        </div>
+    )
 }

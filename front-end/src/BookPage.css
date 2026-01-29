@@ -1,126 +1,260 @@
+/* Page */
 .BookPage {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 1rem;
+  min-height: 100vh;
+  padding: 16px;
+  padding-bottom: 80px;
+  box-sizing: border-box;
+
+  background: #0b0f17;
+  color: rgba(233, 238, 247, 0.95);
+
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Header */
+.bookpage-header {
+  height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+/* If you already have iconButton/backButton styles elsewhere, this will still look fine.
+   If not, these help it match the rest of the UI. */
+.iconButton {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(18, 24, 39, 0.65);
+  color: rgba(233, 238, 247, 0.95);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  backdrop-filter: blur(10px);
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.iconButton:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.iconButton:active {
+  transform: translateY(0px);
+  filter: brightness(0.98);
+}
+
+/* Top “card” */
+.book-title-section {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 14px;
+  align-items: start;
+
+  padding: 14px;
+  border-radius: 18px;
+
+  background: rgba(18, 24, 39, 0.70);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 16px 55px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+}
+
+.book-title-section img {
+  width: 160px;
+  height: 220px;
+  border-radius: 14px;
+  object-fit: cover;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.book-info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.book-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 850;
+  letter-spacing: 0.2px;
+  line-height: 1.15;
+}
+
+.book-author {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: rgba(233, 238, 247, 0.75);
+}
+
+.book-owner {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: rgba(233, 238, 247, 0.75);
+}
+
+.book-owner a {
+  margin-left: 8px;
+  color: rgba(96, 165, 250, 0.95);
+  text-decoration: none;
+  font-weight: 750;
+}
+
+.book-owner a:hover {
+  text-decoration: underline;
+}
+
+/* Actions row */
+.book-page-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+
+  padding: 12px;
+  border-radius: 18px;
+
+  background: rgba(18, 24, 39, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(10px);
+}
+
+/* Shared button style */
+.book-action-btn {
+  width: 100%;
+  padding: 12px 14px;
+
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+
+  background: rgba(11, 16, 32, 0.55);
+  color: rgba(233, 238, 247, 0.95);
+  backdrop-filter: blur(10px);
+
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.book-action-btn:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.book-action-btn:active {
+  transform: translateY(0px);
+  filter: brightness(0.98);
+}
+
+/* Primary / secondary accents */
+.book-page-actions > .wishlist-btn {
+  /* subtle “primary-ish” look */
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0.95), rgba(167, 139, 250, 0.95));
+  border: none;
+  color: #0b1020;
+  box-shadow: 0 12px 30px rgba(96, 165, 250, 0.18);
+}
+
+.book-page-actions > .wishlist-btn:hover {
+  filter: brightness(1.03);
+}
+
+.contact-btn {
+  background: rgba(11, 16, 32, 0.55);
+}
+
+/* Wishlist pill */
+.wishlist-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 12px 14px;
+  border-radius: 999px;
+
+  font-weight: 800;
+  font-size: 13px;
+
+  background: rgba(34, 197, 94, 0.14);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+/* Content sections as “cards” */
+.book-description-section,
+.isbn-section,
+.genre-section {
+  padding: 14px;
+  border-radius: 18px;
+
+  background: rgba(18, 24, 39, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(10px);
+}
+
+.about-this-book,
+.isbn-header,
+.genre-header {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: 850;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: rgba(233, 238, 247, 0.85);
+}
+
+.book-description-section p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(233, 238, 247, 0.82);
+}
+
+.book-isbn,
+.book-genre {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(233, 238, 247, 0.90);
+}
+
+/* Slide-in animation (keep yours, just slightly smoother) */
+@keyframes slideInFade {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
   }
-  
-  /* Header */
-  .bookpage-header {
-    height: 3.5rem;
-    display: flex;
-    align-items: center;
-    position: relative;
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
-  
-  /* Title & Image Row */
+}
+
+.page-slide-in {
+  animation: slideInFade 0.32s ease-out;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 520px) {
   .book-title-section {
-    margin-top: 1rem;
-    display: flex;
-    flex-direction: row;
-    gap: 1.5rem;
-    margin-inline: 1rem;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
+    grid-template-columns: 1fr;
   }
-  
+
   .book-title-section img {
-    width: 30%;
-    min-width: 120px;
-    max-width: 180px;
-    border-radius: 8px;
-    object-fit: cover;
-  }
-  
-  /* Book Info beside the image */
-  .book-info-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .book-title {
-    font-size: 1.75rem;
-  }
-  
-  .book-author,
-  .book-owner {
-    font-size: 0.9rem;
-    margin-top: 0.2rem;
-  }
-  
-  /* Reusable section spacing */
-  .book-description-section,
-  .isbn-section,
-  .genre-section {
-    margin: 0.4rem;
+    width: 100%;
+    height: auto;
+    max-height: 340px;
   }
 
-  .genre-section {
-    margin-bottom: 10rem;
-  }
-  
-  .about-this-book,
-  .isbn-header,
-  .genre-header {
-    font-size: 1.2rem;
-    font-weight: bold;
-  }
-  
-  /* Action buttons */
   .book-page-actions {
-    display: flex;
-    gap: 0.75rem;
-    justify-content: space-between;
-    border-top: 1px solid #4e4141;
-    border-bottom: 1px solid #4e4141;
-    padding: 0.75rem 1rem;
-    margin-bottom: 0.4rem;
+    grid-template-columns: 1fr;
   }
-  
-  .book-action-btn {
-    flex: 1;
-    padding: 0.6rem 0.8rem;
-    font-size: 1rem;
-    border: none;
-    border-radius: 6px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background-color 0.2s ease-in-out;
-  }
-  
-  /* Buttons styling */
-  .book-page-actions > .wishlist-btn {
-    background-color: #6b6357;
-    color: white;
-  }
-  
-  .book-page-actions > .wishlist-btn:hover {
-    background-color: #433d36;
-  }
-  
-  .contact-btn {
-    background-color: #38261e;
-    color: white;
-  }
-  
-  .contact-btn:hover {
-    background-color: #513529;
-  }
-
-
-  @keyframes slideInFade {
-    from {
-      opacity: 0;
-      transform: translateX(100px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-  
-  .page-slide-in {
-    animation: slideInFade 0.4s ease-out;
-  }
-  
+}

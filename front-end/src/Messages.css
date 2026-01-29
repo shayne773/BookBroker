@@ -1,4 +1,137 @@
-.messages-container {
-    width: 90%;
-    margin-left: 5%;
+.MessagesPage{
+  min-height: 100vh;
+  padding: 14px;
+  background: #0b0f17;
+  color: #e9eef7;
+}
+
+.MessagesHeader{
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(11, 15, 23, 0.92);
+  backdrop-filter: blur(10px);
+  padding-bottom: 10px;
+}
+
+.MessagesSearchRow{
+  margin-top: 10px;
+}
+
+.MessagesSearch{
+  width: 100%;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: #e9eef7;
+  padding: 0 12px;
+  outline: none;
+}
+
+.MessagesSearch::placeholder{
+  color: rgba(233,238,247,0.55);
+}
+
+.MessagesList{
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.MessagesCard{
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.MessagesLink{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.MessagesAvatar{
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background: rgba(255,255,255,0.10);
+}
+
+.MessagesInfo{
+  flex: 1;
+  min-width: 0;
+}
+
+.MessagesTopRow{
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.MessagesName{
+  font-weight: 700;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.MessagesMeta{
+  font-size: 12px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.MessagesPreview{
+  margin-top: 4px;
+  font-size: 13px;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.MessagesChevron{
+  font-size: 22px;
+  opacity: 0.6;
+}
+
+.MessagesState{
+  margin-top: 24px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+}
+
+.MessagesStateTitle{
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.MessagesStateSub{
+  margin: 0 0 12px;
+  opacity: 0.8;
+}
+
+.MessagesBtn{
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.10);
+  color: #e9eef7;
+  cursor: pointer;
 }
