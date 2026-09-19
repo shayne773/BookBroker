@@ -2,29 +2,28 @@ import './MyTrades.css';
 import { useEffect, useState } from 'react';
 import { FaBookOpen, FaTrash, FaAngleLeft } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
+import { authFetch, isSessionExpiredError } from '../auth';
 
 const MyTrades = () => {
   const [offeringsBooks, setOfferingsBooks] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/offered`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/offered`)
       .then(res => res.json())
       .then(data => setOfferingsBooks(data))
       .catch(err => {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(err)) return;
+
         console.log("Failed to fetch offerings:", err);
         setOfferingsBooks([]);
       });
   }, []);
 
   const handleDelete = (bookId) => {
-    const token = localStorage.getItem("token");
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/offered/${bookId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` }
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/offered/${bookId}`, {
+      method: "DELETE"
     })
       .then(res => {
         if (res.ok) {
@@ -33,7 +32,10 @@ const MyTrades = () => {
           console.error("Failed to delete book from offerings");
         }
       })
-      .catch(err => console.error("Error deleting book:", err));
+      .catch(err => {
+        if (isSessionExpiredError(err)) return;
+        console.error("Error deleting book:", err);
+      });
   };
 
   return (

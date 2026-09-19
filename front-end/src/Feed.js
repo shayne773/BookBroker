@@ -1,21 +1,26 @@
 import './Feed.css';
 import { useState, useEffect } from "react";
+import { authFetch, isSessionExpiredError } from './auth';
 
 const Feed = () => {
   const [booksData, setBooksData] = useState([]);
-  const token = localStorage.getItem('token');
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/get-recommended-books`, {
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/get-recommended-books`, {
         method: 'GET',
         headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` 
+            'Content-Type': 'application/json'
         }
     }).then(res => res.json())
     .then(data => {
         setBooksData(data);
-        console.log(data);
+    })
+    .catch(err => {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(err)) return;
+
+        console.error('Failed to fetch recommended books:', err);
+        setBooksData([]);
     })
   }, []);
 

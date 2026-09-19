@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { FaAngleLeft } from "react-icons/fa";
 import "./MessagesDetail.css";
+import { authFetch, isSessionExpiredError } from "./auth";
 
 const MessagesDetail = () => {
   const { user: otherUserId } = useParams();
   const navigate = useNavigate();
 
-  const token = localStorage.getItem("token");
   const myUserId = localStorage.getItem("userId");
 
   const [otherUser, setOtherUser] = useState(null);
@@ -30,13 +30,7 @@ const MessagesDetail = () => {
 
   const server = process.env.REACT_APP_SERVER_ADDRESS;
 
-  const authHeaders = useMemo(
-    () => ({
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    }),
-    [token]
-  );
+  const jsonHeaders = useMemo(() => ({ "Content-Type": "application/json" }), []);
 
   const scrollToBottom = useCallback(() => {
     const el = listRef.current;
@@ -45,17 +39,13 @@ const MessagesDetail = () => {
   }, []);
 
   const loadOtherUser = useCallback(async () => {
-    const res = await fetch(`${server}/users/${otherUserId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await authFetch(`${server}/users/${otherUserId}`);
     if (!res.ok) throw new Error(`Failed to load user: ${res.status}`);
     return res.json();
-  }, [server, otherUserId, token]);
+  }, [server, otherUserId]);
 
   const loadMessages = useCallback(async () => {
-    const res = await fetch(`${server}/messages/${otherUserId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await authFetch(`${server}/messages/${otherUserId}`);
     if (!res.ok) throw new Error(`Failed to load messages: ${res.status}`);
     const data = await res.json();
 
@@ -64,7 +54,7 @@ const MessagesDetail = () => {
       (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
     );
     setMessages(sorted);
-  }, [server, otherUserId, token]);
+  }, [server, otherUserId]);
 
   // Initial load
   useEffect(() => {
@@ -109,9 +99,9 @@ const MessagesDetail = () => {
     if (!content) return;
 
     try {
-      const res = await fetch(`${server}/messages/${otherUserId}`, {
+      const res = await authFetch(`${server}/messages/${otherUserId}`, {
         method: "POST",
-        headers: authHeaders,
+        headers: jsonHeaders,
         body: JSON.stringify({ content }),
       });
 
@@ -124,6 +114,9 @@ const MessagesDetail = () => {
       await loadMessages();
       scrollToBottom();
     } catch (err) {
+      // RequireAuth is already redirecting to the login page.
+      if (isSessionExpiredError(err)) return;
+
       console.error("Failed to send message:", err);
       alert("Failed to send message.");
     }
@@ -144,16 +137,12 @@ const MessagesDetail = () => {
       setTradeLoading(true);
 
       // my offered
-      const resMine = await fetch(`${server}/user/offered`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const resMine = await authFetch(`${server}/user/offered`);
       const mine = resMine.ok ? await resMine.json() : [];
       setMyOffered(Array.isArray(mine) ? mine : []);
 
       // their offered
-      const resTheirs = await fetch(`${server}/users/${otherUserId}/offered`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const resTheirs = await authFetch(`${server}/users/${otherUserId}/offered`);
       const theirs = resTheirs.ok ? await resTheirs.json() : [];
       setTheirOffered(Array.isArray(theirs) ? theirs : []);
 
@@ -162,6 +151,8 @@ const MessagesDetail = () => {
         `Want to trade? I can offer one of my books for one of yours.`
       );
     } catch (err) {
+      if (isSessionExpiredError(err)) return;
+
       console.error(err);
       setTradeError("Failed to load offered books.");
     } finally {
@@ -190,9 +181,9 @@ const MessagesDetail = () => {
     try {
       setTradeLoading(true);
 
-      const res = await fetch(`${server}/exchanges`, {
+      const res = await authFetch(`${server}/exchanges`, {
         method: "POST",
-        headers: authHeaders,
+        headers: jsonHeaders,
         body: JSON.stringify({
           responderId: otherUserId,
           requesterBooks: [myPick._id],     
@@ -213,6 +204,8 @@ const MessagesDetail = () => {
       closeTradeModal();
       navigate(`/exchanges/${exchangeId}`);
     } catch (err) {
+      if (isSessionExpiredError(err)) return;
+
       console.error(err);
       setTradeError("Failed to create exchange. Try again.");
     } finally {

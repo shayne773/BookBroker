@@ -2,6 +2,7 @@
 import "./Search.css";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { authFetch, isSessionExpiredError } from "../auth";
 
 const fetchBooksFromGoogle = async (query) => {
   const response = await fetch(
@@ -23,7 +24,6 @@ const fetchBooksFromGoogle = async (query) => {
 export default function Search() {
   const navigate = useNavigate();
 
-  const token = localStorage.getItem("token");
   const userId = localStorage.getItem("userId");
 
   const [mode, setMode] = useState("market"); // "market" | "google"
@@ -168,11 +168,10 @@ export default function Search() {
       setLoading(true);
       setError("");
 
-      const res = await fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-wishlist-book`, {
+      const res = await authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-wishlist-book`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(selectedGoogleBook),
       });
@@ -189,6 +188,9 @@ export default function Search() {
       alert("Added to wishlist!");
       clearAll();
     } catch (e) {
+      // RequireAuth is already redirecting to the login page.
+      if (isSessionExpiredError(e)) return;
+
       console.error(e);
       setError(e.message || "Failed to add to wishlist.");
     } finally {
@@ -205,11 +207,10 @@ export default function Search() {
 
       const payload = { ...selectedGoogleBook, owner: userId };
 
-      const res = await fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-offered-book`, {
+      const res = await authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-offered-book`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
@@ -220,6 +221,8 @@ export default function Search() {
       alert("Added to offerings!");
       clearAll();
     } catch (e) {
+      if (isSessionExpiredError(e)) return;
+
       console.error(e);
       setError(e.message || "Failed to add to offerings.");
     } finally {

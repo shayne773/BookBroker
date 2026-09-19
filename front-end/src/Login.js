@@ -1,14 +1,22 @@
 import './Login.css';
-import { useState } from "react";  
+import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { saveSession } from "./auth";
 
 export default function Login() {
     const [error, setError] = useState('');
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    // Where RequireAuth wanted to go before it sent us here.
+    const from = location.state?.from;
+    const redirectTo = from ? `${from.pathname}${from.search || ''}` : '/home';
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setError('');
 
-        const password = e.target.password.value;
-        const email = e.target.email.value;
+        const { email, password } = e.target.elements;
 
         try{
             const response = await fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/auth/login`, {
@@ -16,7 +24,7 @@ export default function Login() {
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({ email, password })
+                body: JSON.stringify({ email: email.value, password: password.value })
             })
             
             const data = await response.json();
@@ -25,19 +33,17 @@ export default function Login() {
                 throw new Error(data.message || 'Login failed');
             }
 
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('userId', data.user.id);
-            localStorage.setItem('username', data.user.username);
+            saveSession({
+                token: data.token,
+                userId: data.user.id,
+                username: data.user.username
+            });
 
-            window.location.href = "/home";
+            navigate(redirectTo, { replace: true });
         }
         catch (err){
-            console.log(err)
             setError(err.message)
         }
-
-        setError('');
-        console.log('Form submitted successfully!');
     };
 
     return (

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import './Home.css';
 import { Link } from 'react-router-dom';
+import { authFetch, isSessionExpiredError } from './auth';
 
 const Home = () => {
     const [books, setBooks] = useState([]);
@@ -9,22 +10,20 @@ const Home = () => {
     const [showToast, setShowToast] = useState(false);
 
 
-    const token = localStorage.getItem('token');
     const userId = localStorage.getItem('userId');
 
 
     useEffect(() => {
         // Fetch real offered books from backend
-        fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/feed`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            }
-        })
+        authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/feed`)
             .then(res => res.json())
             .then(data => {
                 setBooks(data);
             })
             .catch(err => {
+                // RequireAuth is already redirecting to the login page.
+                if (isSessionExpiredError(err)) return;
+
                 console.error("Failed to fetch books:", err);
                 setBooks([]);
             });
@@ -33,22 +32,20 @@ const Home = () => {
 
     useEffect(() => {
         // Fetch real user data
-        if (userId && token) {
-            fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user?id=${userId}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            })
+        if (userId) {
+            authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user?id=${userId}`)
             .then(res => res.json())
             .then(data => {
                 setUser(data);
             })
             .catch(err => {
+                if (isSessionExpiredError(err)) return;
+
                 console.error('Failed to fetch user:', err);
                 setUser(null);
             });
         }
-    }, [userId, token]);
+    }, [userId]);
 
     useEffect(() => {
         // Intersection Observer for fade-in
@@ -70,16 +67,10 @@ const Home = () => {
     }, [books]);
 
     const handleAddBook = (book) => {
-        if (!token) {
-            alert("Please log in to add books to your wishlist!");
-            return;
-        }
-
-        fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-wishlist-book`, {
+        authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-wishlist-book`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify(book)
         })
@@ -95,6 +86,8 @@ const Home = () => {
             setTimeout(() => setShowToast(false), 2000);
         })
         .catch(err => {
+            if (isSessionExpiredError(err)) return;
+
             console.error("Error adding book to wishlist:", err);
         });
     };

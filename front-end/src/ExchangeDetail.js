@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import "./ExchangeDetail.css";
+import { authFetch, isSessionExpiredError } from "./auth";
 import { FaAngleLeft } from "react-icons/fa";
 
 const STATUSES = ["PENDING", "COUNTERED", "ACCEPTED", "COMPLETED"];
@@ -18,7 +19,6 @@ export default function ExchangeDetail() {
   const { exchangeId } = useParams();
   const navigate = useNavigate();
 
-  const token = localStorage.getItem("token");
   const userId = localStorage.getItem("userId");
   const server = process.env.REACT_APP_SERVER_ADDRESS;
 
@@ -54,13 +54,14 @@ export default function ExchangeDetail() {
       setLoading(true);
       setErr("");
       try {
-        const res = await fetch(`${server}/exchanges/${exchangeId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await authFetch(`${server}/exchanges/${exchangeId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (alive) setEx(data);
       } catch (e) {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(e)) return;
+
         console.error(e);
         if (alive) setErr("Failed to load exchange.");
       } finally {
@@ -69,7 +70,7 @@ export default function ExchangeDetail() {
     }
     run();
     return () => (alive = false);
-  }, [server, token, exchangeId]);
+  }, [server, exchangeId]);
 
   function popToast(msg) {
     setToast(msg);
@@ -77,11 +78,10 @@ export default function ExchangeDetail() {
   }
 
   async function post(path, body) {
-    const res = await fetch(`${server}${path}`, {
+    const res = await authFetch(`${server}${path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: body ? JSON.stringify(body) : "{}",
     });
@@ -91,9 +91,7 @@ export default function ExchangeDetail() {
   }
 
   async function refresh() {
-    const res = await fetch(`${server}/exchanges/${exchangeId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await authFetch(`${server}/exchanges/${exchangeId}`);
     const data = await res.json();
     setEx(data);
   }
@@ -216,8 +214,8 @@ export default function ExchangeDetail() {
     async function loadLists() {
       try {
         const [mineRes, theirsRes] = await Promise.all([
-          fetch(`${server}/users/${meId}/offered`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${server}/users/${otherId}/offered`, { headers: { Authorization: `Bearer ${token}` } }),
+          authFetch(`${server}/users/${meId}/offered`),
+          authFetch(`${server}/users/${otherId}/offered`),
         ]);
         const mine = await mineRes.json();
         const theirs = await theirsRes.json();
@@ -230,7 +228,7 @@ export default function ExchangeDetail() {
       }
     }
     loadLists();
-  }, [showCounter, ex, server, token, userId, otherUser]);
+  }, [showCounter, ex, server, userId, otherUser]);
 
   if (loading) {
     return (

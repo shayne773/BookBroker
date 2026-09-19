@@ -1,6 +1,7 @@
 import './Profile.css';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { authFetch, isSessionExpiredError } from './auth';
 import {
   FaMapMarkerAlt,
   FaEnvelope,
@@ -13,7 +14,6 @@ import {
 const UserPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
 
   const [user, setUser] = useState({});
   const [wishlistBooks, setWishlistBooks] = useState([]);
@@ -32,25 +32,31 @@ const UserPage = () => {
   }, []);
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}`)
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}`)
       .then(res => res.json())
       .then(data => setUser(Array.isArray(data) ? data[0] : data))
-      .catch(() => setUser({}));
+      .catch(err => {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(err)) return;
+        setUser({});
+      });
 
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/wishlist`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/wishlist`)
       .then(res => res.json())
       .then(setWishlistBooks)
-      .catch(() => setWishlistBooks([]));
+      .catch(err => {
+        if (isSessionExpiredError(err)) return;
+        setWishlistBooks([]);
+      });
 
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/offered`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/offered`)
       .then(res => res.json())
       .then(setOfferedBooks)
-      .catch(() => setOfferedBooks([]));
-  }, [id, token]);
+      .catch(err => {
+        if (isSessionExpiredError(err)) return;
+        setOfferedBooks([]);
+      });
+  }, [id]);
 
   return (
     <div>

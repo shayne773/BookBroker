@@ -2,6 +2,7 @@ import './BookPage.css';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { FaAngleLeft } from 'react-icons/fa';
+import { authFetch, isSessionExpiredError } from './auth';
 
 const BookPage = () => {
   const { id } = useParams();
@@ -9,15 +10,9 @@ const BookPage = () => {
 
   const [isInWishlist, setIsInWishlist] = useState(false);
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
   const userId = localStorage.getItem("userId");
 
   const addToWishlist = () => {
-    if (!token) {
-      alert("You must be logged in to add a book to your wishlist.");
-      return;
-    }
-
     const bookData = {
       title: book.title,
       author: book.author,
@@ -29,11 +24,10 @@ const BookPage = () => {
       desc: book.desc
     };
 
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-wishlist-book`, {
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-wishlist-book`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(bookData)
     })
@@ -47,6 +41,9 @@ const BookPage = () => {
         }
       })
       .catch(err => {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(err)) return;
+
         console.error('Error:', err);
         alert('An error occurred. Please try again.');
       });
@@ -65,11 +62,10 @@ const BookPage = () => {
   }, [id]);
 
   async function openConversationWithOwner() {
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/messages/${book.owner?.id}`, {
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/messages/${book.owner?.id}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
       },
       body: JSON.stringify({ content: `Hey, I'm interested in your listing for ${book.title}` })
     }).then((res) => {
@@ -84,19 +80,15 @@ const BookPage = () => {
       })
   }
   useEffect(() => {
-    if (book.isbn && token) {
-      fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/wishlist/${book.isbn}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+    if (book.isbn) {
+      authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/wishlist/${book.isbn}`)
         .then(res => res.json())
         .then(data => setIsInWishlist(data.exists))
         .catch(err => {
           console.error('Error checking wishlist status:', err);
         });
     }
-  }, [book.isbn, token]);
+  }, [book.isbn]);
 
   return (
     <main className="BookPage page-slide-in">

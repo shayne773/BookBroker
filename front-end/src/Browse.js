@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import "./Browse.css";
+import { authFetch, isSessionExpiredError } from "./auth";
 
 const Browse = () => {
   const [query, setQuery] = useState("");
@@ -8,30 +9,28 @@ const Browse = () => {
   const [loading, setLoading] = useState(true);
 
   const server = process.env.REACT_APP_SERVER_ADDRESS;
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
     setLoading(true);
 
     const t = setTimeout(() => {
-      fetch(`${server}/browse?q=${encodeURIComponent(query)}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
+      authFetch(`${server}/browse?q=${encodeURIComponent(query)}`)
         .then((r) => r.json())
         .then((payload) => {
           setData(payload);
           setLoading(false);
         })
-        .catch(() => {
+        .catch((err) => {
+          // RequireAuth is already redirecting to the login page.
+          if (isSessionExpiredError(err)) return;
+
           setData(null);
           setLoading(false);
         });
     }, 250); // debounce
 
     return () => clearTimeout(t);
-  }, [query, server, token]);
+  }, [query, server]);
 
   const showSearch = query.trim().length > 0;
 

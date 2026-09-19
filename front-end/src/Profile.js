@@ -1,7 +1,8 @@
 import './Profile.css';
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Popup from 'reactjs-popup';
+import { authFetch, clearSession, isSessionExpiredError } from './auth';
 import { FaMapMarkerAlt, FaEnvelope, FaStar, FaBookOpen, FaPlus, FaAngleRight } from 'react-icons/fa';
 
 const fetchBooksFromGoogle = async (query) => {
@@ -30,7 +31,7 @@ const fetchBooksFromGoogle = async (query) => {
 };
 
 const Profile = () => {
-  const token = localStorage.getItem('token');
+  const navigate = useNavigate();
   const userId = localStorage.getItem('userId');
 
   const [user, setUser] = useState({});
@@ -70,12 +71,14 @@ const Profile = () => {
   const [customLocation, setCustomLocation] = useState('');
 
   const fetchUserData = () => {
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user?id=${userId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user?id=${userId}`)
       .then(res => res.json())
       .then(data => setUser(data))
-      .catch(err => console.log('Failed to fetch user:', err));
+      .catch(err => {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(err)) return;
+        console.log('Failed to fetch user:', err);
+      });
   };
 
   useEffect(() => {
@@ -90,19 +93,21 @@ const Profile = () => {
   }, []);
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/wishlist`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/wishlist`)
       .then(res => res.json())
       .then(data => setWishlistBooks(data))
-      .catch(err => console.log("Failed to fetch wishlist:", err));
+      .catch(err => {
+        if (isSessionExpiredError(err)) return;
+        console.log("Failed to fetch wishlist:", err);
+      });
 
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/offered`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/offered`)
       .then(res => res.json())
       .then(data => setOfferedBooks(data))
-      .catch(err => console.log("Failed to fetch offerings", err));
+      .catch(err => {
+        if (isSessionExpiredError(err)) return;
+        console.log("Failed to fetch offerings", err);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -178,9 +183,9 @@ const Profile = () => {
     e.preventDefault();
     if (!selectedBook) return;
 
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-wishlist-book`, {
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-wishlist-book`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(selectedBook)
     })
       .then(res => res.json())
@@ -195,7 +200,10 @@ const Profile = () => {
         setSearchResults([]);
         setIsTypingWishlist(false);
       })
-      .catch(console.error);
+      .catch(err => {
+        if (isSessionExpiredError(err)) return;
+        console.error(err);
+      });
   };
 
   const handleAddOffering = (e) => {
@@ -204,9 +212,9 @@ const Profile = () => {
 
     const payload = { ...selectedBookOffer, owner: userId };
 
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-offered-book`, {
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-offered-book`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
       .then(res => res.json())
@@ -221,7 +229,10 @@ const Profile = () => {
         setSearchResultsOffer([]);
         setIsTypingOffer(false);
       })
-      .catch(console.error);
+      .catch(err => {
+        if (isSessionExpiredError(err)) return;
+        console.error(err);
+      });
   };
 
   const handleProfileEdit = (e, close) => {
@@ -232,9 +243,9 @@ const Profile = () => {
 
     const data = { user: { username, email, location: finalLocation } };
 
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/edit`, {
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/edit`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     })
       .then(res => res.json())
@@ -242,7 +253,10 @@ const Profile = () => {
         fetchUserData();
         close();
       })
-      .catch(console.error);
+      .catch(err => {
+        if (isSessionExpiredError(err)) return;
+        console.error(err);
+      });
   };
 
   const handleLogout = () => {
@@ -250,14 +264,12 @@ const Profile = () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     })
-      .then(res => res.json())
-      .then(() => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('username');
-        localStorage.removeItem('userId');
-        window.location.href = '/login';
-      })
-      .catch(err => console.error("Logout error:", err));
+      .catch(err => console.error("Logout error:", err))
+      .finally(() => {
+        // The local session goes either way; the server call is best effort.
+        clearSession();
+        navigate('/login', { replace: true });
+      });
   };
 
   // Close + reset wishlist modal

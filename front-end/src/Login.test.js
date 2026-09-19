@@ -1,0 +1,94 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import Login from './Login';
+
+const renderLogin = (entry = { pathname: '/login' }) =>
+  render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/home" element={<div>Home page</div>} />
+        <Route path="/messages" element={<div>Messages page</div>} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+const fillAndSubmit = async () => {
+  await userEvent.type(screen.getByLabelText('Email'), 'reader@example.com');
+  await userEvent.type(screen.getByLabelText('Password'), 'hunter2');
+  await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
+};
+
+beforeEach(() => {
+  localStorage.clear();
+  global.fetch = jest.fn();
+});
+
+afterEach(() => {
+  delete global.fetch;
+});
+
+test('shows the server error when the password is wrong', async () => {
+  global.fetch.mockResolvedValue({
+    ok: false,
+    status: 401,
+    json: async () => ({ message: 'Invalid credentials' })
+  });
+
+  renderLogin();
+  await fillAndSubmit();
+
+  expect(await screen.findByText('Invalid credentials')).toBeInTheDocument();
+});
+
+test('stores the session and goes to home after a successful login', async () => {
+  global.fetch.mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ token: 't0ken', user: { id: 'u1', username: 'reader' } })
+  });
+
+  renderLogin();
+  await fillAndSubmit();
+
+  expect(await screen.findByText('Home page')).toBeInTheDocument();
+  expect(localStorage.getItem('token')).toBe('t0ken');
+  expect(localStorage.getItem('userId')).toBe('u1');
+  expect(localStorage.getItem('username')).toBe('reader');
+});
+
+test('returns to the page the visitor was sent away from', async () => {
+  global.fetch.mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ token: 't0ken', user: { id: 'u1', username: 'reader' } })
+  });
+
+  renderLogin({ pathname: '/login', state: { from: { pathname: '/messages', search: '' } } });
+  await fillAndSubmit();
+
+  expect(await screen.findByText('Messages page')).toBeInTheDocument();
+});
+
+test('clears a previous error when the next attempt succeeds', async () => {
+  global.fetch.mockResolvedValueOnce({
+    ok: false,
+    status: 401,
+    json: async () => ({ message: 'Invalid credentials' })
+  });
+
+  renderLogin();
+  await fillAndSubmit();
+  expect(await screen.findByText('Invalid credentials')).toBeInTheDocument();
+
+  global.fetch.mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    json: async () => ({ token: 't0ken', user: { id: 'u1', username: 'reader' } })
+  });
+
+  await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
+
+  await waitFor(() => expect(screen.queryByText('Invalid credentials')).not.toBeInTheDocument());
+});

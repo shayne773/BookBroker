@@ -20,6 +20,7 @@ import UserPageOffered from './UserPageOffered';
 import Login from './Login';
 import Signup from './Signup';
 import Navbar from './Navbar';
+import RequireAuth from './RequireAuth';
 import ExchangesList from "./ExchangesList";
 import ExchangeDetail from "./ExchangeDetail";
 
@@ -34,34 +35,38 @@ const AppContent = () => {
     <>
       <Routes>
         <Route index element={<Navigate to="login" replace />} />
-        <Route path="home" element={<Home />} />
-        <Route path="feed" element={<Feed />} />
         <Route path="login" element={<Login />} />
         <Route path="signup" element={<Signup />} />
-        <Route path="browse">
-          <Route index element={<Browse />} />
-          <Route path="newly-added" element={<NewlyAdded />} />
-          <Route path="popular" element={<PopularNow />} />
-          <Route path="search" element={<Search />} />
-          <Route path="by-category">
-            <Route index element={<ByCategory />} />
-            <Route path=":genre" element={<Genre />} />
+
+        {/* Everything below needs a signed-in user. */}
+        <Route element={<RequireAuth />}>
+          <Route path="home" element={<Home />} />
+          <Route path="feed" element={<Feed />} />
+          <Route path="browse">
+            <Route index element={<Browse />} />
+            <Route path="newly-added" element={<NewlyAdded />} />
+            <Route path="popular" element={<PopularNow />} />
+            <Route path="search" element={<Search />} />
+            <Route path="by-category">
+              <Route index element={<ByCategory />} />
+              <Route path=":genre" element={<Genre />} />
+            </Route>
           </Route>
+          <Route path="/exchanges" element={<ExchangesList />} />
+          <Route path="/exchanges/:exchangeId" element={<ExchangeDetail />} />
+          <Route path="profile">
+            <Route index element={<Profile />} />
+            <Route path="edit" element={<EditProfile />} />
+            <Route path="my-books" element={<MyBooks />} />
+            <Route path="my-trades" element={<MyTrades />} />
+          </Route>
+          <Route path="messages" element={<Messages />} />
+          <Route path="messages/:user" element={<MessagesDetail />} />
+          <Route path="books/:id" element={<BookPage />} />
+          <Route path="users/:id" element={<UserPage />} />
+          <Route path="users/:id/wishlist" element={<UserPageWishlist />} />
+          <Route path="users/:id/offered" element={<UserPageOffered />} />
         </Route>
-        <Route path="/exchanges" element={<ExchangesList />} />
-        <Route path="/exchanges/:exchangeId" element={<ExchangeDetail />} />
-        <Route path="profile">
-          <Route index element={<Profile />} />
-          <Route path="edit" element={<EditProfile />} />
-          <Route path="my-books" element={<MyBooks />} />
-          <Route path="my-trades" element={<MyTrades />} />
-        </Route>
-        <Route path="messages" element={<Messages />} />
-        <Route path="messages/:user" element={<MessagesDetail />} />
-        <Route path="books/:id" element={<BookPage />} />
-        <Route path="users/:id" element={<UserPage />} />
-        <Route path="users/:id/wishlist" element={<UserPageWishlist />} />
-        <Route path="users/:id/offered" element={<UserPageOffered />} />
       </Routes>
 
       {!shouldHideNavbar && <Navbar />}

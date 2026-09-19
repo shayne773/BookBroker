@@ -1,45 +1,30 @@
 import "./Messages.css";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { authFetch, isSessionExpiredError } from "./auth";
 
 const Messages = () => {
-  const navigate = useNavigate();
-
-  const token = localStorage.getItem("token");
   const [convos, setConvos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!token) {
-      setLoading(false);
-      setConvos([]);
-      return;
-    }
-
     const run = async () => {
       try {
         setLoading(true);
         setError("");
 
-        const res = await fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/messages`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (res.status === 401) {
-          // token expired / invalid
-          localStorage.removeItem("token");
-          localStorage.removeItem("userId");
-          navigate("/login");
-          return;
-        }
+        const res = await authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/messages`);
 
         const data = await res.json();
 
         // data is expected to be: [{ id, otherUser: { id, username, location, ratings } }, ...]
         setConvos(Array.isArray(data) ? data : []);
       } catch (err) {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(err)) return;
+
         console.error("Failed to fetch conversations:", err);
         setError("Failed to load conversations.");
         setConvos([]);
@@ -49,7 +34,7 @@ const Messages = () => {
     };
 
     run();
-  }, [token, navigate]);
+  }, []);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -74,24 +59,14 @@ const Messages = () => {
         </div>
       </div>
 
-      {!token && (
-        <div className="MessagesState">
-          <p className="MessagesStateTitle">You’re not logged in.</p>
-          <p className="MessagesStateSub">Log in to see your conversations.</p>
-          <button className="MessagesBtn" onClick={() => navigate("/login")}>
-            Go to Login
-          </button>
-        </div>
-      )}
-
-      {token && loading && (
+      {loading && (
         <div className="MessagesState">
           <p className="MessagesStateTitle">Loading…</p>
           <p className="MessagesStateSub">Fetching your conversations.</p>
         </div>
       )}
 
-      {token && !loading && error && (
+      {!loading && error && (
         <div className="MessagesState">
           <p className="MessagesStateTitle">{error}</p>
           <button className="MessagesBtn" onClick={() => window.location.reload()}>
@@ -100,14 +75,14 @@ const Messages = () => {
         </div>
       )}
 
-      {token && !loading && !error && filtered.length === 0 && (
+      {!loading && !error && filtered.length === 0 && (
         <div className="MessagesState">
           <p className="MessagesStateTitle">No conversations found.</p>
           <p className="MessagesStateSub">Start a chat by messaging someone from a book page.</p>
         </div>
       )}
 
-      {token && !loading && !error && filtered.length > 0 && (
+      {!loading && !error && filtered.length > 0 && (
         <ul className="MessagesList">
           {filtered.map((c) => {
             const u = c.otherUser || {};
