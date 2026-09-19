@@ -108,7 +108,7 @@ export default function Search() {
     setError("");
 
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `${process.env.REACT_APP_SERVER_ADDRESS}/books?query=${encodeURIComponent(query)}`
       );
 
@@ -125,6 +125,9 @@ export default function Search() {
       setBooksData(Array.isArray(data) ? data : []);
       setHasSearched(true);
     } catch (err) {
+      // RequireAuth is already redirecting to the login page.
+      if (isSessionExpiredError(err)) return;
+
       console.error(err);
       setBooksData([]);
       setHasSearched(true);

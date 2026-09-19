@@ -29,7 +29,7 @@ export default function Login() {
             
             const data = await response.json().catch(() => ({}));
 
-            if (!response.ok || !data.token) {
+            if (!response.ok) {
                 setError(data.message || 'Login failed. Please try again.');
                 return;
             }
