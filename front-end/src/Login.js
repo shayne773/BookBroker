@@ -27,10 +27,11 @@ export default function Login() {
                 body: JSON.stringify({ email: email.value, password: password.value })
             })
             
-            const data = await response.json();
+            const data = await response.json().catch(() => ({}));
 
-            if (!response.ok) {
-                throw new Error(data.message || 'Login failed');
+            if (!response.ok || !data.token) {
+                setError(data.message || 'Login failed. Please try again.');
+                return;
             }
 
             saveSession({
@@ -42,7 +43,8 @@ export default function Login() {
             navigate(redirectTo, { replace: true });
         }
         catch (err){
-            setError(err.message)
+            console.error('Error during login:', err);
+            setError('An error occurred. Please try again.');
         }
     };
 

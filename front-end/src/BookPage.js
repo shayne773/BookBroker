@@ -75,6 +75,9 @@ const BookPage = () => {
       .then((data)=>navigate(`/messages/${book.owner?.id}`))
       .then(res => console.log(res))
       .catch((err) => {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(err)) return;
+
         console.log("Failed to open conversation:", err)
         alert("Could not open conversation. Please try again.");
       })

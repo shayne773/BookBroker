@@ -10,10 +10,6 @@ export const SESSION_EXPIRED_EVENT = 'bookbroker:session-expired';
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 
-export const getUserId = () => localStorage.getItem(USER_ID_KEY);
-
-export const isLoggedIn = () => Boolean(getToken());
-
 // Stores the session exactly as it was stored before; token lifetime is unchanged.
 export const saveSession = ({ token, userId, username }) => {
   localStorage.setItem(TOKEN_KEY, token);
