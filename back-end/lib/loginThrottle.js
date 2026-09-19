@@ -6,12 +6,11 @@
 // needs to move to a shared backend (Redis / Mongo), because each process would
 // otherwise keep its own counters.
 //
-// Two independent buckets are tracked per attempt:
-//   * account - keyed on the submitted email, which caps guesses against one
-//     account. Failures are recorded whether or not the account exists, so the
-//     429 response is identical either way and leaks no account existence.
-//   * ip - keyed on the client address, which caps spraying across many
-//     accounts from one source.
+// Failures are counted per account, keyed on the submitted email, which caps
+// guesses against one account. They are recorded whether or not the account
+// exists, so the 429 response is identical either way and leaks no account
+// existence. Rate limiting by client address belongs to the edge (load
+// balancer / WAF), which is the only place that reliably sees the real caller.
 
 const MINUTE = 60 * 1000;
 
@@ -19,10 +18,9 @@ export const DEFAULT_OPTIONS = {
   windowMs: 15 * MINUTE,
   lockoutMs: 15 * MINUTE,
   accountMaxAttempts: 5,
-  ipMaxAttempts: 30,
-  // Bound on tracked keys so a spray across many addresses cannot grow the Map
-  // without limit. Expired entries are dropped first; if that is not enough the
-  // oldest entries go.
+  // Bound on tracked accounts so a spray across many addresses cannot grow the
+  // Map without limit. Expired entries are dropped first; if that is not enough
+  // the oldest entries go.
   maxEntries: 10000,
 };
 
@@ -39,7 +37,6 @@ export function optionsFromEnv(env = process.env) {
       env.LOGIN_THROTTLE_ACCOUNT_MAX,
       DEFAULT_OPTIONS.accountMaxAttempts
     ),
-    ipMaxAttempts: positiveInt(env.LOGIN_THROTTLE_IP_MAX, DEFAULT_OPTIONS.ipMaxAttempts),
   };
 }
 
@@ -50,58 +47,48 @@ export class LoginThrottle {
   }
 
   /** @returns {{ limited: boolean, retryAfterSeconds: number }} */
-  check(keys, now = Date.now()) {
-    let lockedUntil = 0;
-    for (const key of this.#keysOf(keys)) {
-      const entry = this.#get(key, now);
-      if (entry && entry.lockedUntil > now) {
-        lockedUntil = Math.max(lockedUntil, entry.lockedUntil);
-      }
+  check(account, now = Date.now()) {
+    const entry = this.#get(account, now);
+    if (!entry || entry.lockedUntil <= now) {
+      return { limited: false, retryAfterSeconds: 0 };
     }
 
-    if (lockedUntil === 0) return { limited: false, retryAfterSeconds: 0 };
     return {
       limited: true,
-      retryAfterSeconds: Math.max(1, Math.ceil((lockedUntil - now) / 1000)),
+      retryAfterSeconds: Math.max(1, Math.ceil((entry.lockedUntil - now) / 1000)),
     };
   }
 
-  recordFailure(keys, now = Date.now()) {
+  recordFailure(account, now = Date.now()) {
     this.#prune(now);
 
-    for (const key of this.#keysOf(keys)) {
-      const max =
-        key.startsWith("account:") ? this.options.accountMaxAttempts : this.options.ipMaxAttempts;
+    const key = this.#keyOf(account);
+    if (!key) return;
 
-      let entry = this.#get(key, now);
-      if (!entry) {
-        entry = { failures: 0, windowStart: now, lockedUntil: 0 };
-        this.entries.set(key, entry);
-      }
+    let entry = this.#get(account, now);
+    if (!entry) {
+      entry = { failures: 0, windowStart: now, lockedUntil: 0 };
+      this.entries.set(key, entry);
+    }
 
-      // A new window starts once the previous one has elapsed.
-      if (now - entry.windowStart >= this.options.windowMs) {
-        entry.failures = 0;
-        entry.windowStart = now;
-      }
+    // A new window starts once the previous one has elapsed.
+    if (now - entry.windowStart >= this.options.windowMs) {
+      entry.failures = 0;
+      entry.windowStart = now;
+    }
 
-      entry.failures += 1;
-      if (entry.failures >= max) {
-        entry.lockedUntil = now + this.options.lockoutMs;
-        entry.failures = 0;
-        entry.windowStart = now;
-      }
+    entry.failures += 1;
+    if (entry.failures >= this.options.accountMaxAttempts) {
+      entry.lockedUntil = now + this.options.lockoutMs;
+      entry.failures = 0;
+      entry.windowStart = now;
     }
   }
 
-  /**
-   * Clear the account bucket after a successful sign-in. The IP bucket is
-   * deliberately left alone so an attacker cannot reset it by authenticating to
-   * an account they already control.
-   */
-  recordSuccess(keys, now = Date.now()) {
-    const account = this.#accountKey(keys);
-    if (account) this.entries.delete(account);
+  /** Clear the account's counters after a successful sign-in. */
+  recordSuccess(account, now = Date.now()) {
+    const key = this.#keyOf(account);
+    if (key) this.entries.delete(key);
     this.#prune(now);
   }
 
@@ -109,19 +96,14 @@ export class LoginThrottle {
     this.entries.clear();
   }
 
-  #accountKey({ account } = {}) {
-    return account ? `account:${String(account)}` : null;
+  #keyOf(account) {
+    return account ? String(account) : null;
   }
 
-  #keysOf({ account, ip } = {}) {
-    const keys = [];
-    const accountKey = this.#accountKey({ account });
-    if (accountKey) keys.push(accountKey);
-    if (ip) keys.push(`ip:${String(ip)}`);
-    return keys;
-  }
+  #get(account, now) {
+    const key = this.#keyOf(account);
+    if (!key) return null;
 
-  #get(key, now) {
     const entry = this.entries.get(key);
     if (!entry) return null;
     if (this.#isExpired(entry, now)) {

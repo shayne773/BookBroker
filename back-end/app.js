@@ -34,17 +34,6 @@ import {
 
 const app = express();
 
-// Login throttling keys on the client address, so behind a load balancer (the
-// API is deployed on AWS) Express has to be told how many proxies to trust -
-// otherwise every request looks like it came from the balancer and shares a
-// single bucket. Set TRUST_PROXY to the number of proxies in front of the API
-// (e.g. "1") or to any value Express accepts, such as "loopback". Unset means
-// no proxy, which is right for a directly exposed process.
-if (process.env.TRUST_PROXY) {
-  const hops = Number.parseInt(process.env.TRUST_PROXY, 10);
-  app.set("trust proxy", Number.isInteger(hops) ? hops : process.env.TRUST_PROXY);
-}
-
 const loginThrottle = new LoginThrottle(loginThrottleOptionsFromEnv());
 
 // A bcrypt comparison is run even when no account matches, so that the time
@@ -52,6 +41,16 @@ const loginThrottle = new LoginThrottle(loginThrottleOptionsFromEnv());
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync("unused-placeholder-password", 10);
 
 const INVALID_CREDENTIALS_MESSAGE = "Invalid credentials";
+
+// New emails are stored normalized, but accounts created before that still hold
+// whatever casing the user typed. A strength-2 collation compares case- and
+// accent-insensitively inside Mongo, so those accounts stay reachable without
+// rewriting them and without building a regex out of an address.
+const CASE_INSENSITIVE = { locale: "en", strength: 2 };
+
+function findUserByEmail(email) {
+  return User.findOne({ email }).collation(CASE_INSENSITIVE);
+}
 
 // --------------------
 // Middleware
@@ -99,7 +98,7 @@ app.post("/auth/register", registerValidators, async (req, res, next) => {
   const { username, email, password, location } = matchedData(req);
 
   try {
-    const existingUser = await User.findOne({ email });
+    const existingUser = await findUserByEmail(email);
     if (existingUser) return res.status(400).json({ message: "User already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -130,16 +129,15 @@ app.post("/auth/login", loginValidators, async (req, res, next) => {
   }
 
   const { email, password } = matchedData(req);
-  const throttleKeys = { account: email, ip: req.ip };
 
-  const limit = loginThrottle.check(throttleKeys);
+  const limit = loginThrottle.check(email);
   if (limit.limited) {
     res.set("Retry-After", String(limit.retryAfterSeconds));
     return res.status(429).json({ message: LOGIN_THROTTLED_MESSAGE });
   }
 
   try {
-    const user = await User.findOne({ email });
+    const user = (await User.findOne({ email })) ?? (await findUserByEmail(email));
 
     let isMatch = false;
     if (user?.password) {
@@ -152,11 +150,11 @@ app.post("/auth/login", loginValidators, async (req, res, next) => {
     if (!isMatch) {
       // Failures are recorded for unknown emails too, so lockout behaviour is
       // identical whether or not the account exists.
-      loginThrottle.recordFailure(throttleKeys);
+      loginThrottle.recordFailure(email);
       return res.status(400).json({ message: INVALID_CREDENTIALS_MESSAGE });
     }
 
-    loginThrottle.recordSuccess(throttleKeys);
+    loginThrottle.recordSuccess(email);
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "2h" });
 
@@ -201,12 +199,9 @@ app.get("/genres", async (req, res, next) => {
 
 app.get("/genres/:genre", async (req, res, next) => {
   try {
-    // The genre list is produced by distinct("genre"), so this is an exact,
-    // case-insensitive match. Escaping and anchoring the input keeps raw user
-    // text from being interpreted as a regex pattern.
-    const books = await OfferedBook.find({
-      genre: safeRegex(req.params.genre, { anchored: true }),
-    });
+    // Escaped before it reaches the regex engine: raw user text here would
+    // otherwise be interpreted as a regex pattern.
+    const books = await OfferedBook.find({ genre: safeRegex(req.params.genre) });
     res.json(books);
   } catch (err) {
     next(err);
@@ -817,10 +812,6 @@ app.post("/messages/:user", authMiddleware, async (req, res) => {
 // --------------------
 // Error handling
 // --------------------
-
-app.use((req, res) => {
-  res.status(404).json({ message: "Not found" });
-});
 
 // Final error handler. Everything that reaches here is logged in full on the
 // server and answered with a generic message: `err.message` and stack traces

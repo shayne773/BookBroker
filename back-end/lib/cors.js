@@ -5,9 +5,11 @@
 //
 //   CORS_ALLOWED_ORIGINS=https://bookbroker.example.com,https://www.bookbroker.example.com
 //
-// When it is unset we fall back to the local development front end only, so a
-// deployment that forgets to configure it fails closed instead of accepting
-// every origin on the internet. No deployment hostname is hardcoded here.
+// Outside production, an unset variable falls back to the local development
+// front end only, so a misconfigured process fails closed instead of accepting
+// every origin on the internet. In production the variable is required: the API
+// refuses to start without it rather than serving an origin that is not the
+// deployed front end. No deployment hostname is hardcoded here.
 
 export const DEFAULT_DEV_ORIGINS = ["http://localhost:3000"];
 
@@ -23,9 +25,9 @@ export function resolveAllowedOrigins(env = process.env) {
   if (configured.length > 0) return configured;
 
   if (env.NODE_ENV === "production") {
-    console.warn(
-      "CORS_ALLOWED_ORIGINS is not set; falling back to the localhost development origins. " +
-        "Set it to the deployed front-end origin(s) before serving real traffic."
+    throw new Error(
+      "CORS_ALLOWED_ORIGINS must be set in production. " +
+        "Set it to the deployed front-end origin(s) before starting the API."
     );
   }
   return [...DEFAULT_DEV_ORIGINS];

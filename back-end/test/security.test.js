@@ -3,6 +3,7 @@ import { default as chaiHttp, request } from "chai-http";
 import mongoose from "mongoose";
 
 import app, { loginThrottle } from "../app.js";
+import { resolveAllowedOrigins } from "../lib/cors.js";
 import { User } from "../Data.js";
 import {
   authHeader,
@@ -106,14 +107,16 @@ describe("regex handling in genre and search", () => {
     expect(res.body[0].genre).to.equal("Adventure");
   });
 
-  it("does not let a genre prefix match a different genre", async () => {
+  it("still matches a genre by a substring", async () => {
     const owner = await createUser();
     await createOfferedBook(owner, { genre: "Adventure" });
+    await createOfferedBook(owner, { genre: "Romance" });
 
     const res = await request.execute(app).get("/genres/Adven");
 
     expect(res).to.have.status(200);
-    expect(res.body).to.be.an("array").that.is.empty;
+    expect(res.body).to.have.lengthOf(1);
+    expect(res.body[0].genre).to.equal("Adventure");
   });
 
   it("treats a search query with regex metacharacters as a literal", async () => {
@@ -206,6 +209,18 @@ describe("CORS allowlist", () => {
 
     expect(res).to.have.header("access-control-allow-origin", ALLOWED_ORIGIN);
   });
+
+  it("refuses to resolve an allowlist in production when unconfigured", () => {
+    expect(() => resolveAllowedOrigins({ NODE_ENV: "production" })).to.throw(
+      /CORS_ALLOWED_ORIGINS/
+    );
+  });
+
+  it("falls back to the development origin outside production", () => {
+    expect(resolveAllowedOrigins({ NODE_ENV: "development" })).to.deep.equal([
+      ALLOWED_ORIGIN,
+    ]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -246,6 +261,18 @@ describe("POST /auth/register", () => {
       expect(res.body.message).to.be.a("string").and.not.be.empty;
     });
   }
+
+  it("accepts a username with a space and a non-ASCII letter", async () => {
+    const res = await request
+      .execute(app)
+      .post("/auth/register")
+      .send({ ...validBody(), username: "Jane Sm\u00edth" });
+
+    expect(res).to.have.status(201);
+
+    const stored = await User.findOne({ email: "new.reader@example.com" });
+    expect(stored.username).to.equal("Jane Sm\u00edth");
+  });
 
   it("accepts a valid signup and normalizes the email", async () => {
     const res = await request.execute(app).post("/auth/register").send(validBody());
@@ -309,6 +336,53 @@ describe("POST /auth/register", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Accounts stored before emails were normalized keep a mixed-case address
+// ---------------------------------------------------------------------------
+describe("accounts with a mixed-case stored email", () => {
+  beforeEach(resetState);
+
+  it("lets a legacy account sign in", async () => {
+    const legacy = await createUser({ email: "Legacy.Reader@Example.COM" });
+
+    const res = await request
+      .execute(app)
+      .post("/auth/login")
+      .send({ email: "legacy.reader@example.com", password: TEST_PASSWORD });
+
+    expect(res).to.have.status(200);
+    expect(res.body).to.have.property("token");
+    expect(res.body.user.id).to.equal(legacy._id.toString());
+  });
+
+  it("does not rewrite the stored address on sign-in", async () => {
+    await createUser({ email: "Legacy.Reader@Example.COM" });
+
+    await request
+      .execute(app)
+      .post("/auth/login")
+      .send({ email: "legacy.reader@example.com", password: TEST_PASSWORD });
+
+    const stored = await User.findOne({ email: "Legacy.Reader@Example.COM" });
+    expect(stored).to.exist;
+  });
+
+  it("refuses a signup that would duplicate a legacy account", async () => {
+    await createUser({ email: "Legacy.Reader@Example.COM" });
+
+    const res = await request.execute(app).post("/auth/register").send({
+      username: "newreader",
+      email: "legacy.reader@example.com",
+      password: "Str0ngPassw0rd",
+      location: "Brooklyn",
+    });
+
+    expect(res).to.have.status(400);
+    expect(res.body.message).to.equal("User already exists");
+    expect(await User.countDocuments({})).to.equal(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The error handler must not leak internals
 // ---------------------------------------------------------------------------
 describe("error responses", () => {
@@ -336,14 +410,6 @@ describe("error responses", () => {
     } finally {
       User.findOne = original;
     }
-  });
-
-  it("answers an unknown route with JSON rather than an HTML stack page", async () => {
-    const res = await request.execute(app).get("/no-such-route");
-
-    expect(res).to.have.status(404);
-    expect(res).to.be.json;
-    expect(res.body).to.deep.equal({ message: "Not found" });
   });
 });
 

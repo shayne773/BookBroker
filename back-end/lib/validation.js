@@ -16,13 +16,14 @@ export function escapeRegex(value) {
 }
 
 /**
- * Build a safe case-insensitive RegExp from user input.
+ * Build a safe case-insensitive substring RegExp from user input.
  * @param {string} value raw user input
- * @param {{ anchored?: boolean }} [options] anchored matches the whole string
  */
-export function safeRegex(value, { anchored = false } = {}) {
-  const escaped = escapeRegex(String(value ?? "").slice(0, MAX_REGEX_INPUT_LENGTH));
-  return new RegExp(anchored ? `^${escaped}$` : escaped, "i");
+export function safeRegex(value) {
+  return new RegExp(
+    escapeRegex(String(value ?? "").slice(0, MAX_REGEX_INPUT_LENGTH)),
+    "i"
+  );
 }
 
 /**
@@ -56,10 +57,7 @@ export const registerValidators = [
     .isLength({ min: USERNAME_MIN_LENGTH, max: USERNAME_MAX_LENGTH })
     .withMessage(
       `Username must be between ${USERNAME_MIN_LENGTH} and ${USERNAME_MAX_LENGTH} characters.`
-    )
-    .bail()
-    .matches(/^[A-Za-z0-9._-]+$/)
-    .withMessage("Username may only contain letters, numbers, and the characters . _ -"),
+    ),
 
   body("email")
     .exists({ values: "falsy" })
