@@ -72,7 +72,7 @@ router.post("/", async (req, res) => {
     res.status(201).json(ex);
   } catch (err) {
     console.error("CREATE EXCHANGE error:", err);
-    res.status(500).json({ message: "Failed to create exchange", error: err.message });
+    res.status(500).json({ message: "Failed to create exchange" });
   }
 });
 
@@ -101,7 +101,7 @@ router.get("/", async (req, res) => {
     res.json(exchanges);
   } catch (err) {
     console.error("LIST EXCHANGES error:", err);
-    res.status(500).json({ message: "Failed to fetch exchanges", error: err.message });
+    res.status(500).json({ message: "Failed to fetch exchanges" });
   }
 });
 
@@ -125,7 +125,9 @@ router.get("/:id", async (req, res) => {
     res.json(full);
   } catch (err) {
     console.error("GET EXCHANGE error:", err);
-    res.status(err.status || 500).json({ message: err.message });
+    res.status(err.status || 500).json({
+      message: err.status ? err.message : "Internal server error",
+    });
   }
 });
 
@@ -171,7 +173,9 @@ router.post("/:id/counter", async (req, res) => {
     res.json(ex);
   } catch (err) {
     console.error("COUNTER error:", err);
-    res.status(err.status || 500).json({ message: err.message });
+    res.status(err.status || 500).json({
+      message: err.status ? err.message : "Internal server error",
+    });
   }
 });
 
@@ -224,7 +228,9 @@ router.post("/:id/accept", async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     if (!err.status) console.error("ACCEPT error:", err);
-    res.status(err.status || 500).json({ message: err.message });
+    res.status(err.status || 500).json({
+      message: err.status ? err.message : "Internal server error",
+    });
   } finally {
     session.endSession();
   }
@@ -249,7 +255,10 @@ router.post("/:id/decline", async (req, res) => {
     await ex.save();
     res.json({ message: "Exchange declined" });
   } catch (err) {
-    res.status(err.status || 500).json({ message: err.message });
+    console.error("DECLINE error:", err);
+    res.status(err.status || 500).json({
+      message: err.status ? err.message : "Internal server error",
+    });
   }
 });
 
@@ -296,7 +305,10 @@ router.post("/:id/cancel", async (req, res) => {
     res.json({ message: "Exchange cancelled" });
   } catch (err) {
     await session.abortTransaction();
-    res.status(err.status || 500).json({ message: err.message });
+    if (!err.status) console.error("CANCEL error:", err);
+    res.status(err.status || 500).json({
+      message: err.status ? err.message : "Internal server error",
+    });
   } finally {
     session.endSession();
   }
@@ -348,7 +360,9 @@ router.post("/:id/confirm-complete", async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     if (!err.status) console.error("CONFIRM COMPLETE error:", err);
-    res.status(err.status || 500).json({ message: err.message });
+    res.status(err.status || 500).json({
+      message: err.status ? err.message : "Internal server error",
+    });
   } finally {
     session.endSession();
   }
@@ -412,7 +426,10 @@ router.post("/:id/rate", async (req, res) => {
     res.json({ message: "Rating saved" });
   } catch (err) {
     await session.abortTransaction();
-    res.status(err.status || 500).json({ message: err.message });
+    console.error("RATE error:", err);
+    res.status(err.status || 500).json({
+      message: err.status ? err.message : "Internal server error",
+    });
   } finally {
     session.endSession();
   }

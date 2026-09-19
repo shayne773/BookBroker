@@ -7,6 +7,9 @@ import { MongoMemoryReplSet } from "mongodb-memory-server";
 
 // app.js reads the secret at request time; set it before any token is signed.
 process.env.JWT_SECRET = "bookbroker-test-secret";
+// The CORS allowlist is read when app.js is imported, which happens after this file.
+process.env.CORS_ALLOWED_ORIGINS =
+  process.env.CORS_ALLOWED_ORIGINS || "http://localhost:3000,https://app.example.test";
 
 let replSet;
 

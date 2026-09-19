@@ -5,8 +5,21 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { body, validationResult } from "express-validator";
+import { body, matchedData, validationResult } from "express-validator";
 import exchangesRouter from "./routes/exchanges.js";
+import { buildCorsOptions } from "./lib/cors.js";
+import {
+  LOGIN_THROTTLED_MESSAGE,
+  LoginThrottle,
+  optionsFromEnv as loginThrottleOptionsFromEnv,
+} from "./lib/loginThrottle.js";
+import {
+  loginValidators,
+  MAX_REGEX_INPUT_LENGTH,
+  registerValidators,
+  safeRegex,
+  validationProblem,
+} from "./lib/validation.js";
 
 dotenv.config();
 
@@ -21,11 +34,31 @@ import {
 
 const app = express();
 
+// Login throttling keys on the client address, so behind a load balancer (the
+// API is deployed on AWS) Express has to be told how many proxies to trust -
+// otherwise every request looks like it came from the balancer and shares a
+// single bucket. Set TRUST_PROXY to the number of proxies in front of the API
+// (e.g. "1") or to any value Express accepts, such as "loopback". Unset means
+// no proxy, which is right for a directly exposed process.
+if (process.env.TRUST_PROXY) {
+  const hops = Number.parseInt(process.env.TRUST_PROXY, 10);
+  app.set("trust proxy", Number.isInteger(hops) ? hops : process.env.TRUST_PROXY);
+}
+
+const loginThrottle = new LoginThrottle(loginThrottleOptionsFromEnv());
+
+// A bcrypt comparison is run even when no account matches, so that the time
+// taken by a failed sign-in does not reveal whether the email is registered.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("unused-placeholder-password", 10);
+
+const INVALID_CREDENTIALS_MESSAGE = "Invalid credentials";
+
 // --------------------
 // Middleware
 // --------------------
-app.use(cors());
-app.options("*", cors()); // allow preflight
+const corsOptions = buildCorsOptions();
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // allow preflight
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -57,38 +90,79 @@ app.use("/exchanges", authMiddleware, exchangesRouter);
 // PUBLIC ROUTES
 // --------------------
 
-app.post("/auth/register", async (req, res) => {
-  const { username, email, password } = req.body;
+app.post("/auth/register", registerValidators, async (req, res, next) => {
+  const problem = validationProblem(req);
+  if (problem) return res.status(400).json(problem);
+
+  // matchedData returns only the validated + sanitized fields: the email is
+  // already normalized and the strings are trimmed.
+  const { username, email, password, location } = matchedData(req);
 
   try {
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ message: "User already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ username, email, password: hashedPassword, location: null, ratings: 5 });
+    const user = new User({
+      username,
+      email,
+      password: hashedPassword,
+      location,
+      ratings: 5,
+    });
     await user.save();
 
     res.status(201).json({ message: "User registered successfully" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // The unique index on email catches a signup that lost the race above.
+    if (err?.code === 11000) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+    next(err);
   }
 });
 
-app.post("/auth/login", async (req, res) => {
-  const { email, password } = req.body;
+app.post("/auth/login", loginValidators, async (req, res, next) => {
+  // A malformed body is answered exactly like a wrong password, so the caller
+  // learns nothing from the shape of the response.
+  if (validationProblem(req)) {
+    return res.status(400).json({ message: INVALID_CREDENTIALS_MESSAGE });
+  }
+
+  const { email, password } = matchedData(req);
+  const throttleKeys = { account: email, ip: req.ip };
+
+  const limit = loginThrottle.check(throttleKeys);
+  if (limit.limited) {
+    res.set("Retry-After", String(limit.retryAfterSeconds));
+    return res.status(429).json({ message: LOGIN_THROTTLED_MESSAGE });
+  }
 
   try {
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: "Invalid credentials" });
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+    let isMatch = false;
+    if (user?.password) {
+      isMatch = await bcrypt.compare(password, user.password);
+    } else {
+      // Unknown account: burn the same work so the timing matches.
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+    }
+
+    if (!isMatch) {
+      // Failures are recorded for unknown emails too, so lockout behaviour is
+      // identical whether or not the account exists.
+      loginThrottle.recordFailure(throttleKeys);
+      return res.status(400).json({ message: INVALID_CREDENTIALS_MESSAGE });
+    }
+
+    loginThrottle.recordSuccess(throttleKeys);
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "2h" });
 
     res.json({ token, user: { id: user._id, username: user.username } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -96,10 +170,10 @@ app.post("/logout", async (req, res) => {
   return res.status(200).json({ message: "Logged out successfully" });
 })
 
-app.get("/books/:id", async (req, res) => {
+app.get("/books/:id", async (req, res, next) => {
   try {
     const book = await OfferedBook.findById(req.params.id);
-    if (!book) return res.status(404).json({ error: "Book not found" });
+    if (!book) return res.status(404).json({ message: "Book not found" });
 
     const owner = await User.findById(book.owner);
     const result = { ...book["_doc"] };
@@ -107,35 +181,44 @@ app.get("/books/:id", async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    res.status(404).json({ error: "Book not found: " + err.message });
+    // A malformed id is simply "no such book" as far as the caller is
+    // concerned; anything else is a real failure for the error handler.
+    if (err?.name === "CastError") {
+      return res.status(404).json({ message: "Book not found" });
+    }
+    next(err);
   }
 });
 
-app.get("/genres", async (req, res) => {
+app.get("/genres", async (req, res, next) => {
   try {
     const genres = await OfferedBook.distinct("genre");
     res.json(genres);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.get("/genres/:genre", async (req, res) => {
+app.get("/genres/:genre", async (req, res, next) => {
   try {
-    const genre = req.params.genre.toLowerCase();
-    const books = await OfferedBook.find({ genre: { $regex: new RegExp(genre, "i") } });
+    // The genre list is produced by distinct("genre"), so this is an exact,
+    // case-insensitive match. Escaping and anchoring the input keeps raw user
+    // text from being interpreted as a regex pattern.
+    const books = await OfferedBook.find({
+      genre: safeRegex(req.params.genre, { anchored: true }),
+    });
     res.json(books);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.get("/new", async (req, res) => {
+app.get("/new", async (req, res, next) => {
   try {
     const books = await OfferedBook.find().sort({ createdAt: -1 }).limit(20);
     res.json(books);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -195,22 +278,12 @@ function mostWanted(match, limit) {
   ]);
 }
 
-app.get("/popular", async (req, res) => {
+app.get("/popular", async (req, res, next) => {
   try {
     const books = await mostWanted({ locked: false }, 20);
     res.json(books);
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// public user profile lookup (optional; keep public if you want)
-app.get("/users/:id", async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ error: "Error fetching user" });
+    next(err);
   }
 });
 
@@ -218,21 +291,25 @@ app.get("/users/:id", async (req, res) => {
 // PROTECTED ROUTES
 // --------------------
 
-app.get("/feed", authMiddleware, async (req, res) => {
-  const userId = req.user.userId;
+app.get("/feed", authMiddleware, async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
 
-  const books = await OfferedBook.find({
-    owner: { $ne: userId },
-    locked: false,
-  })
-    .sort({ createdAt: -1 })
-    .limit(20);
+    const books = await OfferedBook.find({
+      owner: { $ne: userId },
+      locked: false,
+    })
+      .sort({ createdAt: -1 })
+      .limit(20);
 
-  res.json(books);
+    res.json(books);
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.get("/books", authMiddleware, async (req, res) => {
-  const query = req.query.query?.toLowerCase() || "";
+app.get("/books", authMiddleware, async (req, res, next) => {
+  const query = String(req.query.query ?? "").toLowerCase();
   const userId = req.user.userId;
 
   try {
@@ -249,13 +326,13 @@ app.get("/books", authMiddleware, async (req, res) => {
 
     res.json(filtered);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /browse?q=optionalSearch
-app.get("/browse", authMiddleware, async (req, res) => {
-  const q = (req.query.q || "").trim();
+app.get("/browse", authMiddleware, async (req, res, next) => {
+  const q = String(req.query.q ?? "").trim().slice(0, MAX_REGEX_INPUT_LENGTH);
   const userId = req.user.userId;
 
   const LIMIT_SECTION = 20;
@@ -267,13 +344,13 @@ app.get("/browse", authMiddleware, async (req, res) => {
     const onMarket = { owner: { $ne: new mongoose.Types.ObjectId(userId) }, locked: false };
 
     /* ---------------- SEARCH ---------------- */
-    const searchResults = q
+    // Escaped before it reaches the regex engine: raw input here would allow
+    // regex injection and a pattern that backtracks catastrophically.
+    const searchPattern = q ? safeRegex(q) : null;
+    const searchResults = searchPattern
       ? await OfferedBook.find({
           ...onMarket,
-          $or: [
-            { title: { $regex: q, $options: "i" } },
-            { author: { $regex: q, $options: "i" } },
-          ],
+          $or: [{ title: searchPattern }, { author: searchPattern }],
         })
           .sort({ createdAt: -1 })
           .limit(40)
@@ -345,36 +422,53 @@ app.get("/browse", authMiddleware, async (req, res) => {
     });
   } catch (err) {
     console.error("BROWSE ERROR:", err);
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 
-app.get("/user", authMiddleware, async (req, res) => {
+app.get("/user", authMiddleware, async (req, res, next) => {
   try {
     const me = await User.findById(req.user.userId).select("_id username email location ratings");
     if (!me) return res.status(404).json({ message: "User not found" });
     return res.json(me);
   } catch (err) {
-    return res.status(500).json({ message: "Failed to fetch current user", error: err.message });
+    return next(err);
   }
 });
 
-app.get("/user/wishlist", authMiddleware, async (req, res) => {
+// Public profile of another user. Requires a token, and returns only the
+// fields the app renders - never the password hash or the email address.
+app.get("/users/:id", authMiddleware, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
+
+    const user = await User.findById(req.params.id).select("_id username location ratings");
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    res.json(user);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/user/wishlist", authMiddleware, async (req, res, next) => {
   try {
     const books = await WishlistBook.find({ userId: req.user.userId });
     res.json(books);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.get("/user/offered", authMiddleware, async (req, res) => {
+app.get("/user/offered", authMiddleware, async (req, res, next) => {
   try {
     const books = await OfferedBook.find({ owner: req.user.userId });
     res.json(books);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -436,7 +530,6 @@ app.post(
       console.error("STACK:", err?.stack);
       return res.status(500).json({
         message: "Internal server error while adding wishlist book",
-        error: err?.message,
       });
     }
   }
@@ -473,28 +566,28 @@ app.post(
       console.error("ADD OFFERED ERROR:", err);
       return res.status(500).json({
         message: "Internal server error while adding offered book",
-        error: err?.message,
       });
     }
   }
 );
 
-app.get("/user/wishlist/:isbn", authMiddleware, async (req, res) => {
+app.get("/user/wishlist/:isbn", authMiddleware, async (req, res, next) => {
   const { isbn } = req.params;
   try {
     const book = await WishlistBook.findOne({ userId: req.user.userId, isbn });
     res.json({ exists: !!book });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.get("/user/get-recommended-books", authMiddleware, async (req, res) => {
+app.get("/user/get-recommended-books", authMiddleware, async (req, res, next) => {
   const userId = req.user.userId;
-  const user = await User.findById(userId);
-  if (!user) return res.status(404).json({ error: "User not found" });
 
   try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
     const userLocation = user.location;
 
     const books = await OfferedBook.aggregate([
@@ -518,7 +611,7 @@ app.get("/user/get-recommended-books", authMiddleware, async (req, res) => {
 
     res.json(books);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -625,7 +718,6 @@ app.get("/messages", authMiddleware, async (req, res) => {
     console.error("Error fetching conversations: ", err);
     res.status(500).json({
       message: "Internal server error while fetching conversations",
-      error: err?.message,
     });
   }
 });
@@ -678,7 +770,6 @@ app.get("/messages/:user", authMiddleware, async (req, res) => {
     console.error("Error fetching messages:", err);
     return res.status(500).json({
       message: "Internal server error while fetching messages",
-      error: err?.message,
     });
   }
 });
@@ -723,4 +814,32 @@ app.post("/messages/:user", authMiddleware, async (req, res) => {
   }
 })
 
+// --------------------
+// Error handling
+// --------------------
+
+app.use((req, res) => {
+  res.status(404).json({ message: "Not found" });
+});
+
+// Final error handler. Everything that reaches here is logged in full on the
+// server and answered with a generic message: `err.message` and stack traces
+// routinely carry query fragments, schema details and connection information,
+// none of which belong in a client response.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
+
+  if (res.headersSent) return next(err);
+
+  const status =
+    Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+
+  res.status(status).json({
+    // Only a deliberate 4xx carries its own message; a 500 never does.
+    message: status === 500 ? "Internal server error" : err.message || "Request failed",
+  });
+});
+
+export { loginThrottle };
 export default app;

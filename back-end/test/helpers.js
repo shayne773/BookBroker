@@ -1,7 +1,10 @@
 import { use } from "chai";
 import { default as chaiHttp, request } from "chai-http";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import app from "../app.js";
-import { OfferedBook } from "../Data.js";
+import { OfferedBook, User } from "../Data.js";
 
 use(chaiHttp);
 
@@ -17,6 +20,9 @@ export function api(token) {
   };
 }
 
+// Satisfies the register route's password rules.
+export const TEST_PASSWORD = "Str0ngPassw0rd";
+
 let userCount = 0;
 
 // Registers and signs in a user through the real auth routes.
@@ -26,7 +32,8 @@ export async function signUp(overrides = {}) {
   const credentials = {
     username: `reader${userCount}`,
     email: `reader${userCount}@example.com`,
-    password: "correct horse battery staple",
+    password: TEST_PASSWORD,
+    location: "Brooklyn",
     ...overrides,
   };
 
@@ -56,5 +63,51 @@ export async function offerBook(owner, fields = {}) {
     isbn: "9780261102217",
     genre: "Adventure",
     ...fields,
+  });
+}
+
+// The fixtures below write straight to the database, for tests that need a
+// user or book in a state the public routes would not produce.
+
+export async function clearDatabase() {
+  const { collections } = mongoose.connection;
+  await Promise.all(Object.values(collections).map((c) => c.deleteMany({})));
+}
+
+export async function createUser(overrides = {}) {
+  const { password = TEST_PASSWORD, ...rest } = overrides;
+  const suffix = new mongoose.Types.ObjectId().toString();
+
+  return User.create({
+    username: `user_${suffix.slice(-6)}`,
+    email: `user_${suffix}@example.com`,
+    password: await bcrypt.hash(password, 10),
+    location: "Brooklyn",
+    ratings: 5,
+    ...rest,
+  });
+}
+
+export function tokenFor(user) {
+  return jwt.sign({ userId: user._id.toString() }, process.env.JWT_SECRET, {
+    expiresIn: "1h",
+  });
+}
+
+export function authHeader(user) {
+  return { Authorization: `Bearer ${tokenFor(user)}` };
+}
+
+export async function createOfferedBook(owner, overrides = {}) {
+  return OfferedBook.create({
+    owner: owner._id,
+    title: "The Hobbit",
+    author: "J.R.R. Tolkien",
+    publisher: "Allen & Unwin",
+    year: "1937",
+    isbn: "9780261103344",
+    genre: "Adventure",
+    desc: "There and back again.",
+    ...overrides,
   });
 }
