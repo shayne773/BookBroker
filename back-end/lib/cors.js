@@ -44,10 +44,9 @@ export function buildCorsOptions(env = process.env) {
       // does not protect those, so rejecting them only breaks tooling.
       if (!origin) return callback(null, true);
 
-      const normalized = origin.replace(/\/+$/, "");
       // Disallowed origins get a response with no CORS headers, which the
       // browser blocks. Returning an error here would surface as a 500 instead.
-      return callback(null, allowedOrigins.includes(normalized));
+      return callback(null, allowedOrigins.includes(origin));
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
