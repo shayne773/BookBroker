@@ -109,11 +109,15 @@ export class LoginThrottle {
     }
 
     // Map preserves insertion order, so the head is the least recently created.
+    // An account still serving a lockout is never evicted, because dropping its
+    // entry would clear the lockout. Those entries expire on their own.
     let overflow = this.entries.size - this.options.maxEntries;
     if (overflow <= 0) return;
-    for (const key of this.entries.keys()) {
-      if (overflow-- <= 0) break;
+    for (const [key, entry] of this.entries) {
+      if (overflow <= 0) break;
+      if (entry.lockedUntil > now) continue;
       this.entries.delete(key);
+      overflow -= 1;
     }
   }
 }

@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 
 import app, { loginThrottle } from "../app.js";
 import { resolveAllowedOrigins } from "../lib/cors.js";
+import { DEFAULT_OPTIONS, LoginThrottle } from "../lib/loginThrottle.js";
 import { User } from "../Data.js";
 import {
   authHeader,
@@ -511,5 +512,94 @@ describe("POST /auth/login rate limiting", () => {
 
     expect(res).to.have.status(400);
     expect(res.body).to.deep.equal({ message: "Invalid credentials" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Owner documents joined for filtering must not reach the client
+// ---------------------------------------------------------------------------
+describe("owner lookups in the recommendation pipelines", () => {
+  beforeEach(resetState);
+
+  // Both routes $lookup the owner purely to filter on their city. The joined
+  // document must not survive into the response.
+  const recommendationCases = [
+    {
+      label: "GET /browse",
+      path: "/browse",
+      pick: (body) => body.recommended,
+    },
+    {
+      label: "GET /user/get-recommended-books",
+      path: "/user/get-recommended-books",
+      pick: (body) => body,
+    },
+  ];
+
+  for (const { label, path, pick } of recommendationCases) {
+    it(`${label} does not return the owner's password hash or email`, async () => {
+      const viewer = await createUser({ location: "Brooklyn" });
+      const owner = await createUser({ location: "Brooklyn" });
+      await createOfferedBook(owner);
+
+      const res = await request.execute(app).get(path).set(authHeader(viewer));
+
+      expect(res).to.have.status(200);
+
+      const books = pick(res.body);
+      expect(books, "the neighbour's book is recommended").to.have.lengthOf(1);
+      expect(books[0]).to.not.have.property("ownerDetails");
+      expect(JSON.stringify(res.body)).to.not.include(owner.password);
+      expect(JSON.stringify(res.body)).to.not.include(owner.email);
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /user/edit - the write path returns public fields only
+// ---------------------------------------------------------------------------
+describe("POST /user/edit", () => {
+  beforeEach(resetState);
+
+  it("does not echo the caller's password hash", async () => {
+    const user = await createUser();
+
+    const res = await request
+      .execute(app)
+      .post("/user/edit")
+      .set(authHeader(user))
+      .send({ user: { username: "renamed" } });
+
+    expect(res).to.have.status(200);
+    expect(res.body.user.username).to.equal("renamed");
+    expect(res.body.user).to.not.have.property("password");
+    expect(JSON.stringify(res.body)).to.not.include(user.password);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LoginThrottle - a lockout survives eviction pressure
+// ---------------------------------------------------------------------------
+describe("LoginThrottle entry eviction", () => {
+  it("keeps a locked account locked when a spray overflows the entry cap", () => {
+    const throttle = new LoginThrottle();
+    const now = Date.now();
+    const victim = "victim@example.com";
+
+    for (let i = 0; i < DEFAULT_OPTIONS.accountMaxAttempts; i += 1) {
+      throttle.recordFailure(victim, now);
+    }
+    expect(throttle.check(victim, now).limited, "locked out to begin with").to.equal(true);
+
+    // One failure for each unseen address. Pruning runs before each insert, so
+    // the cap has to be passed by one for an eviction to actually happen. The
+    // victim's entry is the oldest, so insertion-order eviction takes it first.
+    for (let i = 0; i <= DEFAULT_OPTIONS.maxEntries; i += 1) {
+      throttle.recordFailure(`spray-${i}@example.com`, now);
+    }
+
+    expect(throttle.check(victim, now).limited, "still locked out after the spray").to.equal(
+      true
+    );
   });
 });

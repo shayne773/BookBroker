@@ -371,6 +371,8 @@ app.get("/browse", authMiddleware, async (req, res, next) => {
             "ownerDetails.location": user.location,
           },
         },
+        // The joined owner document is only a filter; it never reaches the client.
+        { $project: { ownerDetails: 0 } },
         { $sort: { createdAt: -1 } },
         { $limit: LIMIT_SECTION },
       ]);
@@ -592,6 +594,8 @@ app.get("/user/get-recommended-books", authMiddleware, async (req, res, next) =>
           owner: { $ne: new mongoose.Types.ObjectId(userId) },
         },
       },
+      // The joined owner document is only a filter; it never reaches the client.
+      { $project: { ownerDetails: 0 } },
       { $sort: { createdAt: -1 } },
     ]);
 
@@ -611,7 +615,11 @@ app.post("/user/edit", authMiddleware, async (req, res) => {
     if (email?.trim()) update.email = email.trim();
     if (location?.trim()) update.location = location.trim();
 
-    const updatedUser = await User.findByIdAndUpdate(userId, { $set: update }, { new: true });
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: update },
+      { new: true }
+    ).select("_id username email location ratings");
     res.json({ message: "User updated", user: updatedUser });
   } catch (err) {
     console.error("Error updating user:", err);
