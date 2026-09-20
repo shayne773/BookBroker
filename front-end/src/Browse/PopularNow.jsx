@@ -6,7 +6,7 @@ const PopularNow = () => {
     const [books, setBooks] = useState([]);
 
     useEffect(() => {
-        fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/popular`)
+        fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/popular`)
             .then(res => res.json())
             .then(data => setBooks(data))
             .catch(err => {

@@ -20,7 +20,7 @@ export default function ExchangeDetail() {
   const navigate = useNavigate();
 
   const userId = localStorage.getItem("userId");
-  const server = process.env.REACT_APP_SERVER_ADDRESS;
+  const server = import.meta.env.VITE_SERVER_ADDRESS;
 
   const [ex, setEx] = useState(null);
   const [err, setErr] = useState("");

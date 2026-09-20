@@ -32,7 +32,7 @@ const UserPage = () => {
   }, []);
 
   useEffect(() => {
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}`)
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}`)
       .then(res => res.json())
       .then(data => setUser(Array.isArray(data) ? data[0] : data))
       .catch(err => {
@@ -41,7 +41,7 @@ const UserPage = () => {
         setUser({});
       });
 
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/wishlist`)
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}/wishlist`)
       .then(res => res.json())
       .then(setWishlistBooks)
       .catch(err => {
@@ -49,7 +49,7 @@ const UserPage = () => {
         setWishlistBooks([]);
       });
 
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/offered`)
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}/offered`)
       .then(res => res.json())
       .then(setOfferedBooks)
       .catch(err => {

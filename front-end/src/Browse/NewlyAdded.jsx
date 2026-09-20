@@ -6,7 +6,7 @@ const NewlyAdded = () => {
     const [books, setBooks] = useState([]);
 
     useEffect(() => {
-        fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/new`)
+        fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/new`)
             .then(res => res.json())
             .then(data => setBooks(data))
             .catch(err => {

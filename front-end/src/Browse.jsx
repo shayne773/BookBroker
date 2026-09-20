@@ -8,7 +8,7 @@ const Browse = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const server = process.env.REACT_APP_SERVER_ADDRESS;
+  const server = import.meta.env.VITE_SERVER_ADDRESS;
 
   useEffect(() => {
     setLoading(true);

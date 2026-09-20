@@ -28,7 +28,7 @@ const MessagesDetail = () => {
 
   const listRef = useRef(null);
 
-  const server = process.env.REACT_APP_SERVER_ADDRESS;
+  const server = import.meta.env.VITE_SERVER_ADDRESS;
 
   const jsonHeaders = useMemo(() => ({ "Content-Type": "application/json" }), []);
 

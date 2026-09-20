@@ -9,7 +9,7 @@ const MyBooks = () => {
   const navigate = useNavigate(); // ✅ add this
 
   useEffect(() => {
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/wishlist`)
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/wishlist`)
       .then(res => res.json())
       .then(data => setWishlistBooks(data))
       .catch(err => {
@@ -22,7 +22,7 @@ const MyBooks = () => {
   }, []);
 
   const handleDelete = (bookId) => {
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/wishlist/${bookId}`, {
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/wishlist/${bookId}`, {
       method: "DELETE"
     })
       .then(res => {

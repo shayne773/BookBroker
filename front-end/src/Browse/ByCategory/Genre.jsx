@@ -10,7 +10,7 @@ const Genre = () => {
   const [books, setBooks] = useState([]);
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/genres/${encodeURIComponent(genre)}`)
+    fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/genres/${encodeURIComponent(genre)}`)
       .then(res => res.json())
       .then(data => setBooks(data))
       .catch(err => {

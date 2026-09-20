@@ -10,7 +10,7 @@ const UserPageOffered = () => {
   const [offeredBooks, setOfferedBooks] = useState([]);
 
   useEffect(() => {
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/offered`)
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}/offered`)
       .then(res => res.json())
       .then(data => setOfferedBooks(data))
       .catch(err => {

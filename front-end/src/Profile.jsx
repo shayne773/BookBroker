@@ -71,7 +71,7 @@ const Profile = () => {
   const [customLocation, setCustomLocation] = useState('');
 
   const fetchUserData = () => {
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user?id=${userId}`)
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user?id=${userId}`)
       .then(res => res.json())
       .then(data => setUser(data))
       .catch(err => {
@@ -93,7 +93,7 @@ const Profile = () => {
   }, []);
 
   useEffect(() => {
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/wishlist`)
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/wishlist`)
       .then(res => res.json())
       .then(data => setWishlistBooks(data))
       .catch(err => {
@@ -101,7 +101,7 @@ const Profile = () => {
         console.log("Failed to fetch wishlist:", err);
       });
 
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/offered`)
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/offered`)
       .then(res => res.json())
       .then(data => setOfferedBooks(data))
       .catch(err => {
@@ -183,7 +183,7 @@ const Profile = () => {
     e.preventDefault();
     if (!selectedBook) return;
 
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-wishlist-book`, {
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-wishlist-book`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(selectedBook)
@@ -212,7 +212,7 @@ const Profile = () => {
 
     const payload = { ...selectedBookOffer, owner: userId };
 
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-offered-book`, {
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-offered-book`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -243,7 +243,7 @@ const Profile = () => {
 
     const data = { user: { username, email, location: finalLocation } };
 
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/edit`, {
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/edit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -260,7 +260,7 @@ const Profile = () => {
   };
 
   const handleLogout = () => {
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/logout`, {
+    fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/logout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     })

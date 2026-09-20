@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -22,7 +23,7 @@ const fillAndSubmit = async () => {
 
 beforeEach(() => {
   localStorage.clear();
-  global.fetch = jest.fn();
+  global.fetch = vi.fn();
 });
 
 afterEach(() => {

@@ -14,9 +14,9 @@ BookBroker is our final project for our Agile Software Development course at NYU
 - [Stephen](https://github.com/StephenS2021)
 
 ## Project Setup
-Create a file at front-end/.env and add the following line to the file:
+Create a file at front-end/.env.local and add the following line to the file:
 ```
-REACT_APP_SERVER_ADDRESS="http://localhost:5000"
+VITE_SERVER_ADDRESS="http://localhost:5000"
 ```
 
 Create a file at back-end/.env and add the following line to the file:
@@ -30,8 +30,10 @@ Navigate to the frontend directory and run the react app
 ```
 cd front-end
 npm install
-npm start
+npm run dev
 ```
+`VITE_SERVER_ADDRESS` is compiled into the bundle at build time, so each environment
+needs its own build with its own value; see `front-end/README.md`.
 
 ### Backend
 Navigate to the backend directory and start the app:

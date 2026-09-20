@@ -9,7 +9,7 @@ const MyTrades = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/offered`)
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/offered`)
       .then(res => res.json())
       .then(data => setOfferingsBooks(data))
       .catch(err => {
@@ -22,7 +22,7 @@ const MyTrades = () => {
   }, []);
 
   const handleDelete = (bookId) => {
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/offered/${bookId}`, {
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/offered/${bookId}`, {
       method: "DELETE"
     })
       .then(res => {

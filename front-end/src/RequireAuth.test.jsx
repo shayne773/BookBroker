@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import RequireAuth from './RequireAuth';
@@ -22,7 +23,7 @@ const renderAt = (path, Protected = () => <div>Protected page</div>) =>
 
 beforeEach(() => {
   localStorage.clear();
-  global.fetch = jest.fn();
+  global.fetch = vi.fn();
 });
 
 afterEach(() => {

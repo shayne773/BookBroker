@@ -10,7 +10,7 @@ const UserPageWishlist = () => {
   const [wishlistBooks, setWishlistBooks] = useState([]);
 
   useEffect(() => {
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/wishlist`)
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}/wishlist`)
       .then(res => res.json())
       .then(data => setWishlistBooks(data))
       .catch(err => {

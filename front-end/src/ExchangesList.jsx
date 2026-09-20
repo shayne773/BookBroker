@@ -36,7 +36,7 @@ export default function ExchangesList() {
   const [loading, setLoading] = useState(true);
 
   const userId = localStorage.getItem("userId");
-  const server = process.env.REACT_APP_SERVER_ADDRESS;
+  const server = import.meta.env.VITE_SERVER_ADDRESS;
 
   useEffect(() => {
     let alive = true;

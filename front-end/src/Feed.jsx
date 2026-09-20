@@ -6,7 +6,7 @@ const Feed = () => {
   const [booksData, setBooksData] = useState([]);
 
   useEffect(() => {
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/get-recommended-books`, {
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/get-recommended-books`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json'
