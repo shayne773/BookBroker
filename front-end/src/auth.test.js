@@ -27,12 +27,9 @@ test('a 401 clears the session, announces it, and throws SessionExpiredError', a
   const onExpired = jest.fn();
   window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
 
-  try {
-    await authFetch('/messages');
-    throw new Error('expected authFetch to throw');
-  } catch (err) {
-    expect(isSessionExpiredError(err)).toBe(true);
-  }
+  const err = await authFetch('/messages').catch((e) => e);
+
+  expect(isSessionExpiredError(err)).toBe(true);
 
   expect(onExpired).toHaveBeenCalled();
   expect(localStorage.getItem('token')).toBeNull();
