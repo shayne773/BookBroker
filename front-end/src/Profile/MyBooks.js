@@ -2,35 +2,37 @@ import './MyBooks.css';
 import { useEffect, useState } from 'react';
 import { FaBookOpen, FaTrash, FaAngleLeft } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
+import { authFetch, isSessionExpiredError } from '../auth';
 
 const MyBooks = () => {
   const [wishlistBooks, setWishlistBooks] = useState([]);
   const navigate = useNavigate(); // ✅ add this
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/wishlist`, {
-      headers: { "Authorization": `Bearer ${token}` }
-    })
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/wishlist`)
       .then(res => res.json())
       .then(data => setWishlistBooks(data))
       .catch(err => {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(err)) return;
+
         console.log("Failed to fetch wishlist:", err);
         setWishlistBooks([]);
       });
   }, []);
 
   const handleDelete = (bookId) => {
-    const token = localStorage.getItem("token");
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/wishlist/${bookId}`, {
-      method: "DELETE",
-      headers: { "Authorization": `Bearer ${token}` }
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/wishlist/${bookId}`, {
+      method: "DELETE"
     })
       .then(res => {
         if (res.ok) setWishlistBooks(prev => prev.filter(b => b._id !== bookId));
         else console.error("Failed to delete book from wishlist");
       })
-      .catch(err => console.error("Error deleting book:", err));
+      .catch(err => {
+        if (isSessionExpiredError(err)) return;
+        console.error("Error deleting book:", err);
+      });
   };
 
   return (

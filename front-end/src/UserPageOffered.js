@@ -2,25 +2,25 @@ import './Profile/MyTrades.css';
 import { useEffect, useState } from 'react';
 import { FaBookOpen, FaAngleLeft } from 'react-icons/fa';
 import { useNavigate, useParams } from 'react-router-dom';
+import { authFetch, isSessionExpiredError } from './auth';
 
 const UserPageOffered = () => {
   const { id } = useParams(); // user id
   const navigate = useNavigate();
   const [offeredBooks, setOfferedBooks] = useState([]);
 
-  const token = localStorage.getItem('token');
-
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/offered`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/offered`)
       .then(res => res.json())
       .then(data => setOfferedBooks(data))
       .catch(err => {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(err)) return;
+
         console.error('Failed to fetch user offerings:', err);
         setOfferedBooks([]);
       });
-  }, [id, token]);
+  }, [id]);
 
   return (
     <div>

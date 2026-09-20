@@ -2,25 +2,25 @@ import './Profile/MyBooks.css';
 import { useEffect, useState } from 'react';
 import { FaBookOpen, FaAngleLeft } from 'react-icons/fa';
 import { useNavigate, useParams } from 'react-router-dom';
+import { authFetch, isSessionExpiredError } from './auth';
 
 const UserPageWishlist = () => {
   const { id } = useParams(); // user id
   const navigate = useNavigate();
   const [wishlistBooks, setWishlistBooks] = useState([]);
 
-  const token = localStorage.getItem('token');
-
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/wishlist`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/users/${id}/wishlist`)
       .then(res => res.json())
       .then(data => setWishlistBooks(data))
       .catch(err => {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(err)) return;
+
         console.error('Failed to fetch user wishlist:', err);
         setWishlistBooks([]);
       });
-  }, [id, token]);
+  }, [id]);
 
   return (
     <div>

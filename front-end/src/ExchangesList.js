@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import "./ExchangesList.css";
+import { authFetch, isSessionExpiredError } from "./auth";
 
 function formatWhen(d) {
   if (!d) return "";
@@ -34,7 +35,6 @@ export default function ExchangesList() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const token = localStorage.getItem("token");
   const userId = localStorage.getItem("userId");
   const server = process.env.REACT_APP_SERVER_ADDRESS;
 
@@ -44,13 +44,14 @@ export default function ExchangesList() {
       setLoading(true);
       setErr("");
       try {
-        const res = await fetch(`${server}/exchanges`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await authFetch(`${server}/exchanges`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (alive) setItems(Array.isArray(data) ? data : []);
       } catch (e) {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(e)) return;
+
         if (alive) {
           setItems([]);
           setErr("Failed to load exchanges.");
@@ -62,7 +63,7 @@ export default function ExchangesList() {
     }
     run();
     return () => (alive = false);
-  }, [server, token]);
+  }, [server]);
 
   const { active, completed } = useMemo(() => {
     const activeStatuses = new Set(["PENDING", "COUNTERED", "ACCEPTED", "DRAFT"]);
