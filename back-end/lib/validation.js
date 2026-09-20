@@ -7,10 +7,6 @@ import { body, validationResult } from "express-validator";
 // the engine a pattern that backtracks catastrophically.
 const REGEX_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g;
 
-// Upper bound on any user string we turn into a regex. Even fully escaped, a
-// very long literal makes the scan needlessly expensive.
-export const MAX_REGEX_INPUT_LENGTH = 100;
-
 export function escapeRegex(value) {
   return String(value ?? "").replace(REGEX_SPECIAL_CHARS, "\\$&");
 }
@@ -20,10 +16,7 @@ export function escapeRegex(value) {
  * @param {string} value raw user input
  */
 export function safeRegex(value) {
-  return new RegExp(
-    escapeRegex(String(value ?? "").slice(0, MAX_REGEX_INPUT_LENGTH)),
-    "i"
-  );
+  return new RegExp(escapeRegex(value), "i");
 }
 
 /**

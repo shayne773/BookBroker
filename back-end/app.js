@@ -8,14 +8,9 @@ import jwt from "jsonwebtoken";
 import { body, matchedData, validationResult } from "express-validator";
 import exchangesRouter from "./routes/exchanges.js";
 import { buildCorsOptions } from "./lib/cors.js";
-import {
-  LOGIN_THROTTLED_MESSAGE,
-  LoginThrottle,
-  optionsFromEnv as loginThrottleOptionsFromEnv,
-} from "./lib/loginThrottle.js";
+import { LOGIN_THROTTLED_MESSAGE, LoginThrottle } from "./lib/loginThrottle.js";
 import {
   loginValidators,
-  MAX_REGEX_INPUT_LENGTH,
   registerValidators,
   safeRegex,
   validationProblem,
@@ -34,11 +29,7 @@ import {
 
 const app = express();
 
-const loginThrottle = new LoginThrottle(loginThrottleOptionsFromEnv());
-
-// A bcrypt comparison is run even when no account matches, so that the time
-// taken by a failed sign-in does not reveal whether the email is registered.
-const DUMMY_PASSWORD_HASH = bcrypt.hashSync("unused-placeholder-password", 10);
+const loginThrottle = new LoginThrottle();
 
 const INVALID_CREDENTIALS_MESSAGE = "Invalid credentials";
 
@@ -48,6 +39,10 @@ const INVALID_CREDENTIALS_MESSAGE = "Invalid credentials";
 // rewriting them and without building a regex out of an address.
 const CASE_INSENSITIVE = { locale: "en", strength: 2 };
 
+// The unique index on `email` uses the simple collation, so this lookup cannot
+// use it and scans the collection. Deliberate for now: every alternative is a
+// live-database operation (a collation index, or a normalized field plus a
+// backfill) and is tracked separately.
 function findUserByEmail(email) {
   return User.findOne({ email }).collation(CASE_INSENSITIVE);
 }
@@ -139,13 +134,9 @@ app.post("/auth/login", loginValidators, async (req, res, next) => {
   try {
     const user = (await User.findOne({ email })) ?? (await findUserByEmail(email));
 
-    let isMatch = false;
-    if (user?.password) {
-      isMatch = await bcrypt.compare(password, user.password);
-    } else {
-      // Unknown account: burn the same work so the timing matches.
-      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
-    }
+    const isMatch = user?.password
+      ? await bcrypt.compare(password, user.password)
+      : false;
 
     if (!isMatch) {
       // Failures are recorded for unknown emails too, so lockout behaviour is
@@ -327,7 +318,7 @@ app.get("/books", authMiddleware, async (req, res, next) => {
 
 // GET /browse?q=optionalSearch
 app.get("/browse", authMiddleware, async (req, res, next) => {
-  const q = String(req.query.q ?? "").trim().slice(0, MAX_REGEX_INPUT_LENGTH);
+  const q = String(req.query.q ?? "").trim();
   const userId = req.user.userId;
 
   const LIMIT_SECTION = 20;

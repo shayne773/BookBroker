@@ -24,25 +24,9 @@ export const DEFAULT_OPTIONS = {
   maxEntries: 10000,
 };
 
-function positiveInt(raw, fallback) {
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-export function optionsFromEnv(env = process.env) {
-  return {
-    windowMs: positiveInt(env.LOGIN_THROTTLE_WINDOW_MS, DEFAULT_OPTIONS.windowMs),
-    lockoutMs: positiveInt(env.LOGIN_THROTTLE_LOCKOUT_MS, DEFAULT_OPTIONS.lockoutMs),
-    accountMaxAttempts: positiveInt(
-      env.LOGIN_THROTTLE_ACCOUNT_MAX,
-      DEFAULT_OPTIONS.accountMaxAttempts
-    ),
-  };
-}
-
 export class LoginThrottle {
-  constructor(options = {}) {
-    this.options = { ...DEFAULT_OPTIONS, ...options };
+  constructor() {
+    this.options = DEFAULT_OPTIONS;
     this.entries = new Map();
   }
 
