@@ -13,6 +13,7 @@ import {
   loginValidators,
   registerValidators,
   safeRegex,
+  userEditValidators,
   validationProblem,
 } from "./lib/validation.js";
 
@@ -605,15 +606,28 @@ app.get("/user/get-recommended-books", authMiddleware, async (req, res, next) =>
   }
 });
 
-app.post("/user/edit", authMiddleware, async (req, res) => {
+app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
+  const problem = validationProblem(req);
+  if (problem) return res.status(400).json({ message: problem.message });
+
   try {
     const userId = req.user.userId;
-    const { username, email, location } = req.body.user;
+    const { username, location } = req.body.user;
+    const email = matchedData(req).user?.email;
 
     const update = {};
     if (username?.trim()) update.username = username.trim();
-    if (email?.trim()) update.email = email.trim();
     if (location?.trim()) update.location = location.trim();
+
+    if (email) {
+      // The lookup is case-insensitive, so this also refuses an address that
+      // only differs in casing from an account stored before normalization.
+      const owner = await findUserByEmail(email);
+      if (owner && owner._id.toString() !== userId) {
+        return res.status(409).json({ message: "Email already in use" });
+      }
+      update.email = email;
+    }
 
     const updatedUser = await User.findByIdAndUpdate(
       userId,

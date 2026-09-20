@@ -38,6 +38,21 @@ export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 30;
 export const LOCATION_MAX_LENGTH = 100;
 
+const emailChain = (field) =>
+  body(field)
+    .exists({ values: "falsy" })
+    .withMessage("Email is required.")
+    .bail()
+    .isString()
+    .withMessage("Email is required.")
+    .bail()
+    .customSanitizer(normalizeEmail)
+    .isEmail()
+    .withMessage("Please enter a valid email address.")
+    .bail()
+    .isLength({ max: 254 })
+    .withMessage("Please enter a valid email address.");
+
 export const registerValidators = [
   body("username")
     .exists({ values: "falsy" })
@@ -52,19 +67,7 @@ export const registerValidators = [
       `Username must be between ${USERNAME_MIN_LENGTH} and ${USERNAME_MAX_LENGTH} characters.`
     ),
 
-  body("email")
-    .exists({ values: "falsy" })
-    .withMessage("Email is required.")
-    .bail()
-    .isString()
-    .withMessage("Email is required.")
-    .bail()
-    .customSanitizer(normalizeEmail)
-    .isEmail()
-    .withMessage("Please enter a valid email address.")
-    .bail()
-    .isLength({ max: 254 })
-    .withMessage("Please enter a valid email address."),
+  emailChain("email"),
 
   body("password")
     .exists({ values: "falsy" })
@@ -97,6 +100,12 @@ export const registerValidators = [
     .trim()
     .isLength({ min: 1, max: LOCATION_MAX_LENGTH })
     .withMessage(`City must be between 1 and ${LOCATION_MAX_LENGTH} characters.`),
+];
+
+// The profile form submits the whole user object and leaves fields it is not
+// changing blank, so the address is validated only when one is actually sent.
+export const userEditValidators = [
+  emailChain("user.email").optional({ values: "falsy" }),
 ];
 
 export const loginValidators = [

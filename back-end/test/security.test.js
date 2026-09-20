@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 
 import app, { loginThrottle } from "../app.js";
 import { resolveAllowedOrigins } from "../lib/cors.js";
-import { DEFAULT_OPTIONS, LoginThrottle } from "../lib/loginThrottle.js";
+import { DEFAULT_OPTIONS, LoginThrottle, SLOT_COUNT } from "../lib/loginThrottle.js";
 import { User } from "../Data.js";
 import {
   authHeader,
@@ -578,10 +578,110 @@ describe("POST /user/edit", () => {
 });
 
 // ---------------------------------------------------------------------------
-// LoginThrottle - a lockout survives eviction pressure
+// POST /user/edit - an address change cannot strand another account
 // ---------------------------------------------------------------------------
-describe("LoginThrottle entry eviction", () => {
-  it("keeps a locked account locked when a spray overflows the entry cap", () => {
+describe("POST /user/edit email changes", () => {
+  beforeEach(resetState);
+
+  it("refuses an address a legacy mixed-case account already holds", async () => {
+    const legacy = await createUser({ email: "Bob@X.com" });
+    const attacker = await createUser();
+
+    const res = await request
+      .execute(app)
+      .post("/user/edit")
+      .set(authHeader(attacker))
+      .send({ user: { email: "bob@x.com" } });
+
+    expect(res.status, "the edit is rejected").to.be.within(400, 499);
+
+    const stillMine = await User.findById(attacker._id).select("email");
+    expect(stillMine.email).to.equal(attacker.email);
+
+    // The legacy owner can still sign in with the address they registered.
+    const signIn = await request
+      .execute(app)
+      .post("/auth/login")
+      .send({ email: "Bob@X.com", password: TEST_PASSWORD });
+
+    expect(signIn).to.have.status(200);
+    expect(signIn.body).to.have.property("token");
+    expect(legacy._id.toString()).to.equal(
+      JSON.parse(
+        Buffer.from(signIn.body.token.split(".")[1], "base64").toString()
+      ).userId
+    );
+  });
+
+  it("rejects an address that is not a valid email", async () => {
+    const user = await createUser();
+
+    const res = await request
+      .execute(app)
+      .post("/user/edit")
+      .set(authHeader(user))
+      .send({ user: { email: "not-an-address" } });
+
+    expect(res).to.have.status(400);
+
+    const unchanged = await User.findById(user._id).select("email");
+    expect(unchanged.email).to.equal(user.email);
+  });
+
+  it("stores a changed address normalized", async () => {
+    const user = await createUser();
+
+    const res = await request
+      .execute(app)
+      .post("/user/edit")
+      .set(authHeader(user))
+      .send({ user: { email: "  Renamed@Example.COM " } });
+
+    expect(res).to.have.status(200);
+
+    const updated = await User.findById(user._id).select("email");
+    expect(updated.email).to.equal("renamed@example.com");
+  });
+
+  it("still allows an edit that leaves the address alone", async () => {
+    const user = await createUser();
+
+    const res = await request
+      .execute(app)
+      .post("/user/edit")
+      .set(authHeader(user))
+      .send({ user: { username: "renamed", location: "Queens" } });
+
+    expect(res).to.have.status(200);
+
+    const updated = await User.findById(user._id).select("username location email");
+    expect(updated.username).to.equal("renamed");
+    expect(updated.location).to.equal("Queens");
+    expect(updated.email).to.equal(user.email);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LoginThrottle - counters survive pressure from other addresses
+// ---------------------------------------------------------------------------
+// Finds an address sharing a slot with `target`, using only the public
+// interface: locking the target makes every address in its slot report limited.
+function findCollidingAddress(target) {
+  const probe = new LoginThrottle();
+  for (let i = 0; i < DEFAULT_OPTIONS.accountMaxAttempts; i += 1) {
+    probe.recordFailure(target);
+  }
+
+  for (let i = 0; i < SLOT_COUNT * 20; i += 1) {
+    const candidate = `collide-${i}@example.com`;
+    if (probe.check(candidate).limited) return candidate;
+  }
+
+  throw new Error("no colliding address found");
+}
+
+describe("LoginThrottle under pressure from other addresses", () => {
+  it("keeps a locked account locked while many other addresses fail", () => {
     const throttle = new LoginThrottle();
     const now = Date.now();
     const victim = "victim@example.com";
@@ -591,15 +691,59 @@ describe("LoginThrottle entry eviction", () => {
     }
     expect(throttle.check(victim, now).limited, "locked out to begin with").to.equal(true);
 
-    // One failure for each unseen address. Pruning runs before each insert, so
-    // the cap has to be passed by one for an eviction to actually happen. The
-    // victim's entry is the oldest, so insertion-order eviction takes it first.
-    for (let i = 0; i <= DEFAULT_OPTIONS.maxEntries; i += 1) {
+    for (let i = 0; i <= SLOT_COUNT; i += 1) {
       throttle.recordFailure(`spray-${i}@example.com`, now);
     }
 
     expect(throttle.check(victim, now).limited, "still locked out after the spray").to.equal(
       true
     );
+  });
+
+  it("still locks an address that is guessed in rotation with many others", () => {
+    const throttle = new LoginThrottle();
+    const now = Date.now();
+    // More distinct addresses than there are slots, so any structure that drops
+    // a counter to make room loses the first address's failures before the
+    // rotation comes back around to it.
+    const addresses = Array.from(
+      { length: SLOT_COUNT + 1 },
+      (_, i) => `rotate-${i}@example.com`
+    );
+
+    expect(throttle.check(addresses[0], now).limited, "not locked yet").to.equal(false);
+
+    for (let round = 0; round < DEFAULT_OPTIONS.accountMaxAttempts; round += 1) {
+      for (const address of addresses) {
+        throttle.recordFailure(address, now);
+      }
+    }
+
+    expect(
+      throttle.check(addresses[0], now).limited,
+      "the rotation still reaches the lockout"
+    ).to.equal(true);
+  });
+
+  it("does not let one address clear another address's failures", () => {
+    const throttle = new LoginThrottle();
+    const now = Date.now();
+    // Two addresses that land in the same slot: a success on one must not
+    // discard failures counted for the other.
+    const victim = "victim@example.com";
+    const collider = findCollidingAddress(victim);
+
+    throttle.recordFailure(collider, now);
+    for (let i = 0; i < DEFAULT_OPTIONS.accountMaxAttempts - 2; i += 1) {
+      throttle.recordFailure(victim, now);
+    }
+
+    throttle.recordSuccess(collider, now);
+
+    throttle.recordFailure(victim, now);
+    expect(
+      throttle.check(victim, now).limited,
+      "the victim's failures were not wiped by the collider"
+    ).to.equal(true);
   });
 });

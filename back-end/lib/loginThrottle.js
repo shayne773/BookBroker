@@ -1,8 +1,8 @@
 // Brute-force protection for POST /auth/login.
 //
 // Deliberately in-process and dependency-free: the API runs as a single
-// long-lived Express process, so a Map is enough and is one less moving part
-// than a shared store. If the API is ever scaled to several instances this
+// long-lived Express process, so a local table is enough and is one less moving
+// part than a shared store. If the API is ever scaled to several instances this
 // needs to move to a shared backend (Redis / Mongo), because each process would
 // otherwise keep its own counters.
 //
@@ -11,114 +11,123 @@
 // exists, so the 429 response is identical either way and leaks no account
 // existence. Rate limiting by client address belongs to the edge (load
 // balancer / WAF), which is the only place that reliably sees the real caller.
+//
+// Counters live in a fixed-size table indexed by a hash of the address, not in
+// a growable map. Memory is bounded by construction, so there is no eviction
+// path and no volume of failures against other addresses can reset a counter or
+// cut a lockout short. Slots are reclaimed by time alone. Two addresses that
+// share a slot share its counter, which can only bring a lockout on sooner.
+
+import { normalizeEmail } from "./validation.js";
 
 const MINUTE = 60 * 1000;
+
+// Preallocated once and never grown: ~16k slots of five small fields, on the
+// order of a megabyte.
+export const SLOT_COUNT = 16384;
 
 export const DEFAULT_OPTIONS = {
   windowMs: 15 * MINUTE,
   lockoutMs: 15 * MINUTE,
   accountMaxAttempts: 5,
-  // Bound on tracked accounts so a spray across many addresses cannot grow the
-  // Map without limit. Expired entries are dropped first; if that is not enough
-  // the oldest entries go.
-  maxEntries: 10000,
 };
+
+// FNV-1a: stable across runs and cheap, which is all this index needs.
+function slotIndex(key) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < key.length; i += 1) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0) % SLOT_COUNT;
+}
 
 export class LoginThrottle {
   constructor() {
     this.options = DEFAULT_OPTIONS;
-    this.entries = new Map();
+    this.slots = Array.from({ length: SLOT_COUNT }, () => ({
+      owner: null,
+      shared: false,
+      failures: 0,
+      windowStart: 0,
+      lockedUntil: 0,
+    }));
   }
 
   /** @returns {{ limited: boolean, retryAfterSeconds: number }} */
   check(account, now = Date.now()) {
-    const entry = this.#get(account, now);
-    if (!entry || entry.lockedUntil <= now) {
+    const key = this.#keyOf(account);
+    if (!key) return { limited: false, retryAfterSeconds: 0 };
+
+    const slot = this.slots[slotIndex(key)];
+    if (slot.lockedUntil <= now) {
       return { limited: false, retryAfterSeconds: 0 };
     }
 
     return {
       limited: true,
-      retryAfterSeconds: Math.max(1, Math.ceil((entry.lockedUntil - now) / 1000)),
+      retryAfterSeconds: Math.max(1, Math.ceil((slot.lockedUntil - now) / 1000)),
     };
   }
 
   recordFailure(account, now = Date.now()) {
-    this.#prune(now);
-
     const key = this.#keyOf(account);
     if (!key) return;
 
-    let entry = this.#get(account, now);
-    if (!entry) {
-      entry = { failures: 0, windowStart: now, lockedUntil: 0 };
-      this.entries.set(key, entry);
-    }
+    const slot = this.slots[slotIndex(key)];
+    this.#claimIfStale(slot, key, now);
+    if (slot.owner !== key) slot.shared = true;
 
-    // A new window starts once the previous one has elapsed.
-    if (now - entry.windowStart >= this.options.windowMs) {
-      entry.failures = 0;
-      entry.windowStart = now;
-    }
-
-    entry.failures += 1;
-    if (entry.failures >= this.options.accountMaxAttempts) {
-      entry.lockedUntil = now + this.options.lockoutMs;
-      entry.failures = 0;
-      entry.windowStart = now;
+    slot.failures += 1;
+    if (slot.failures >= this.options.accountMaxAttempts) {
+      slot.lockedUntil = now + this.options.lockoutMs;
+      slot.failures = 0;
+      slot.windowStart = now;
     }
   }
 
   /** Clear the account's counters after a successful sign-in. */
   recordSuccess(account, now = Date.now()) {
     const key = this.#keyOf(account);
-    if (key) this.entries.delete(key);
-    this.#prune(now);
+    if (!key) return;
+
+    const slot = this.slots[slotIndex(key)];
+    // Only the address that owns the slot outright may clear it. Once another
+    // address has counted against the same slot, a success here would be
+    // clearing failures that are not this account's, so the slot is left alone.
+    if (slot.owner !== key || slot.shared) return;
+
+    this.#release(slot);
   }
 
   reset() {
-    this.entries.clear();
+    for (const slot of this.slots) this.#release(slot);
   }
 
   #keyOf(account) {
-    return account ? String(account) : null;
+    return normalizeEmail(account) || null;
   }
 
-  #get(account, now) {
-    const key = this.#keyOf(account);
-    if (!key) return null;
+  // A slot is reclaimed by time only: once its window has passed and any
+  // lockout has elapsed, the next address to touch it takes it over.
+  #claimIfStale(slot, key, now) {
+    const stale =
+      slot.lockedUntil <= now && now - slot.windowStart >= this.options.windowMs;
+    if (slot.owner !== null && !stale) return;
 
-    const entry = this.entries.get(key);
-    if (!entry) return null;
-    if (this.#isExpired(entry, now)) {
-      this.entries.delete(key);
-      return null;
-    }
-    return entry;
+    slot.owner = key;
+    slot.shared = false;
+    slot.failures = 0;
+    slot.windowStart = now;
+    slot.lockedUntil = 0;
   }
 
-  #isExpired(entry, now) {
-    return (
-      entry.lockedUntil <= now && now - entry.windowStart >= this.options.windowMs
-    );
-  }
-
-  #prune(now) {
-    for (const [key, entry] of this.entries) {
-      if (this.#isExpired(entry, now)) this.entries.delete(key);
-    }
-
-    // Map preserves insertion order, so the head is the least recently created.
-    // An account still serving a lockout is never evicted, because dropping its
-    // entry would clear the lockout. Those entries expire on their own.
-    let overflow = this.entries.size - this.options.maxEntries;
-    if (overflow <= 0) return;
-    for (const [key, entry] of this.entries) {
-      if (overflow <= 0) break;
-      if (entry.lockedUntil > now) continue;
-      this.entries.delete(key);
-      overflow -= 1;
-    }
+  #release(slot) {
+    slot.owner = null;
+    slot.shared = false;
+    slot.failures = 0;
+    slot.windowStart = 0;
+    slot.lockedUntil = 0;
   }
 }
 
