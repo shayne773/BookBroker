@@ -19,7 +19,7 @@ export default function Login() {
         const { email, password } = e.target.elements;
 
         try{
-            const response = await fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/auth/login`, {
+            const response = await fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/auth/login`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"

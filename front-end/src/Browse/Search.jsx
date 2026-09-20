@@ -1,4 +1,4 @@
-// src/Browse/Search.js
+// src/Browse/Search.jsx
 import "./Search.css";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -109,7 +109,7 @@ export default function Search() {
 
     try {
       const res = await authFetch(
-        `${process.env.REACT_APP_SERVER_ADDRESS}/books?query=${encodeURIComponent(query)}`
+        `${import.meta.env.VITE_SERVER_ADDRESS}/books?query=${encodeURIComponent(query)}`
       );
 
       const text = await res.text();
@@ -171,7 +171,7 @@ export default function Search() {
       setLoading(true);
       setError("");
 
-      const res = await authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-wishlist-book`, {
+      const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-wishlist-book`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -210,7 +210,7 @@ export default function Search() {
 
       const payload = { ...selectedGoogleBook, owner: userId };
 
-      const res = await authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-offered-book`, {
+      const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-offered-book`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

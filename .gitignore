@@ -86,6 +86,10 @@ jspm_packages/
 build/
 **/build/
 
+# Results of the Vite build (front-end/dist)
+dist/
+**/dist/
+
 # React dependencies
 .pnp
 .pnp.js

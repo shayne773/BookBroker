@@ -1,8 +1,9 @@
+import { vi } from 'vitest';
 import { authFetch, clearSession, isSessionExpiredError, saveSession, SESSION_EXPIRED_EVENT } from './auth';
 
 beforeEach(() => {
   localStorage.clear();
-  global.fetch = jest.fn();
+  global.fetch = vi.fn();
 });
 
 afterEach(() => {
@@ -24,7 +25,7 @@ test('a 401 clears the session, announces it, and throws SessionExpiredError', a
   saveSession({ token: 'expired', userId: 'u1', username: 'reader' });
   global.fetch.mockResolvedValue({ status: 401, ok: false });
 
-  const onExpired = jest.fn();
+  const onExpired = vi.fn();
   window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
 
   const err = await authFetch('/messages').catch((e) => e);

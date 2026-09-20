@@ -15,7 +15,7 @@ const Home = () => {
 
     useEffect(() => {
         // Fetch real offered books from backend
-        authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/feed`)
+        authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/feed`)
             .then(res => res.json())
             .then(data => {
                 setBooks(data);
@@ -33,7 +33,7 @@ const Home = () => {
     useEffect(() => {
         // Fetch real user data
         if (userId) {
-            authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user?id=${userId}`)
+            authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user?id=${userId}`)
             .then(res => res.json())
             .then(data => {
                 setUser(data);
@@ -67,7 +67,7 @@ const Home = () => {
     }, [books]);
 
     const handleAddBook = (book) => {
-        authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-wishlist-book`, {
+        authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-wishlist-book`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

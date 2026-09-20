@@ -10,19 +10,32 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   attaches the bearer token and turns a 401 into one shared "session expired" policy.
   Do not hand-roll `Authorization` headers or read `localStorage.token` in a page.
 - Pages that need a signed-in user live under the `RequireAuth` layout route in
-  `front-end/src/AppContent.js`; `front-end/src/RequireAuth.js` redirects to `/login` and
-  passes the intended destination in the navigation state, which `Login.js` reads.
+  `front-end/src/AppContent.jsx`; `front-end/src/RequireAuth.jsx` redirects to `/login` and
+  passes the intended destination in the navigation state, which `Login.jsx` reads.
 - In a `catch`, ignore the error when `isSessionExpiredError(err)` is true: the redirect is
   already in flight, so showing a page-level error would flash.
 
+## Front-end build (Vite)
+
+- The front end is a Vite app, not Create React App: `npm run dev`, `npm run build` (into
+  `front-end/dist`), `npm run preview`. `front-end/index.html` is the entry point and lives at
+  the front-end root, not in `public/`.
+- Any file containing JSX must use the `.jsx` extension; Vite's esbuild transform does not
+  parse JSX out of a `.js` file.
+- The API base URL is `import.meta.env.VITE_SERVER_ADDRESS`, compiled into the bundle at build
+  time, so every environment needs its own build with its own value. Only `VITE_`-prefixed
+  variables reach client code, which also makes them public - never a secret. See
+  `front-end/.env.example`.
+- Tailwind is wired through `front-end/postcss.config.js`; react-scripts 5 did that implicitly
+  from the presence of `tailwind.config.js`, Vite does not.
+
 ## Tests
 
-- `cd front-end && CI=true npx react-scripts test --watchAll=false` runs the suite.
-- react-router v7 needs two shims for the Jest/jsdom that ships with react-scripts 5: the
-  `jest.moduleNameMapper` entry for `react-router/dom` in `front-end/package.json`, and the
-  `TextEncoder`/`TextDecoder` polyfill in `front-end/src/setupTests.js`.
-- `CI=true npx react-scripts build` fails on pre-existing `no-unused-vars` warnings; a plain
-  `npx react-scripts build` succeeds.
+- `cd front-end && npm test` runs the suite once under Vitest (jsdom); `npm run test:watch`
+  watches. Tests use `vi` from `vitest` for mocks; other globals come from `globals: true` in
+  `front-end/vite.config.js`.
+- The two react-router v7 shims CRA's Jest needed - the `react-router/dom` moduleNameMapper and
+  the `TextEncoder`/`TextDecoder` polyfill - are gone; Vitest's jsdom needs neither.
 
 ## Maintaining this file
 

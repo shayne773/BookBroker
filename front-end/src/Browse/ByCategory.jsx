@@ -7,7 +7,7 @@ const ByCategory = () => {
   const [genres, setGenres] = useState([]);
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/genres`)
+    fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/genres`)
       .then((res) => res.json())
       .then((data) => {
         setGenres(data);

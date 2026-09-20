@@ -1,10 +1,10 @@
-// App.js
-// I moved the routing to AppContent.js for uselocation to work (for navbar)
+// App.jsx
+// I moved the routing to AppContent.jsx for uselocation to work (for navbar)
 import { BrowserRouter as Router } from 'react-router-dom';
 import AppContent from './AppContent';
 
 const App = () => (
-  <Router basename={process.env.PUBLIC_URL}>
+  <Router basename={import.meta.env.BASE_URL}>
     <AppContent />
   </Router>
 );

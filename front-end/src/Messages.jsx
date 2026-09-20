@@ -15,7 +15,7 @@ const Messages = () => {
         setLoading(true);
         setError("");
 
-        const res = await authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/messages`);
+        const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/messages`);
 
         const data = await res.json();
 

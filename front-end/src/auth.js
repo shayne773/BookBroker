@@ -1,6 +1,6 @@
 // auth.js
 // Shared session helpers so every page treats a missing or expired token the same way.
-// Route protection lives in RequireAuth.js, which listens for SESSION_EXPIRED_EVENT.
+// Route protection lives in RequireAuth.jsx, which listens for SESSION_EXPIRED_EVENT.
 
 const TOKEN_KEY = 'token';
 const USER_ID_KEY = 'userId';

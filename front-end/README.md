@@ -1,70 +1,55 @@
-# Getting Started with Create React App
+# BookBroker front end
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A React single-page app built with [Vite](https://vite.dev/). The Express + MongoDB
+API in `../back-end` is a separate service; this app only talks to it over HTTP.
 
-## Available Scripts
+## Configuration
 
-In the project directory, you can run:
+The API base URL is a build-time value, not a runtime one: Vite substitutes
+`import.meta.env.VITE_SERVER_ADDRESS` into the bundle when it builds. Each
+environment therefore needs its own build with its own value.
 
-### `npm start`
+Copy `.env.example` to `.env.local` for local development:
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```
+cp .env.example .env.local
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+On Vercel, set `VITE_SERVER_ADDRESS` per environment (production / preview /
+development) and redeploy so a new bundle is produced.
 
-### `npm test`
+Only variables prefixed `VITE_` reach client code — that prefix is what makes a
+value public, so never put a secret behind it.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Available scripts
+
+In this directory, you can run:
+
+### `npm run dev`
+
+Runs the app in development mode on [http://localhost:3000](http://localhost:3000),
+with hot module replacement.
 
 ### `npm run build`
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Builds the app for production into the `dist` folder, minified and with hashed
+filenames. This is the directory Vercel serves.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### `npm run preview`
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+Serves the contents of `dist` locally, so you can check a production build
+before deploying it.
 
-### `npm run eject`
+### `npm test`
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+Runs the test suite once with [Vitest](https://vitest.dev/) in a jsdom
+environment. `npm run test:watch` keeps it running in watch mode.
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Layout notes
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- `index.html` lives at the project root, not in `public/`: it is the app's
+  entry point and it loads `src/index.jsx` as a module.
+- `public/` holds static files copied to the site root as-is, such as
+  `/favicon.ico` and `/manifest.json`.
+- Files containing JSX use the `.jsx` extension, which is what Vite's esbuild
+  transform expects.

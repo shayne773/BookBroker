@@ -24,7 +24,7 @@ const BookPage = () => {
       desc: book.desc
     };
 
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/add-wishlist-book`, {
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-wishlist-book`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -50,7 +50,7 @@ const BookPage = () => {
   };
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_SERVER_ADDRESS}/books/${id}`)
+    fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/books/${id}`)
       .then(res => res.json())
       .then(data => {
         setBook(data);
@@ -62,7 +62,7 @@ const BookPage = () => {
   }, [id]);
 
   async function openConversationWithOwner() {
-    authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/messages/${book.owner?.id}`, {
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/messages/${book.owner?.id}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -84,7 +84,7 @@ const BookPage = () => {
   }
   useEffect(() => {
     if (book.isbn) {
-      authFetch(`${process.env.REACT_APP_SERVER_ADDRESS}/user/wishlist/${book.isbn}`)
+      authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/wishlist/${book.isbn}`)
         .then(res => res.json())
         .then(data => setIsInWishlist(data.exists))
         .catch(err => {
