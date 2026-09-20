@@ -33,7 +33,10 @@ with hot module replacement.
 ### `npm run build`
 
 Builds the app for production into the `dist` folder, minified and with hashed
-filenames. This is the directory Vercel serves.
+filenames. This is the directory Vercel serves. `vercel.json` in this directory
+rewrites every path that does not match a built file to `/index.html`, so a
+refresh or a direct link to a client-side route such as `/books/:id` still loads
+the app instead of a 404.
 
 ### `npm run preview`
 
@@ -44,6 +47,11 @@ before deploying it.
 
 Runs the test suite once with [Vitest](https://vitest.dev/) in a jsdom
 environment. `npm run test:watch` keeps it running in watch mode.
+
+There is no `lint` script: the only linting this app had came from
+react-scripts, which ran `eslint-config-react-app` on every start and build.
+That went away with the migration and `vite build` does not lint, so choosing
+and wiring up a replacement linter is tracked as separate follow-up work.
 
 ## Layout notes
 
