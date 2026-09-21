@@ -56,13 +56,28 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Tailwind is wired through `front-end/postcss.config.js`; react-scripts 5 did that implicitly
   from the presence of `tailwind.config.js`, Vite does not.
 
+## Checks and CI
+
+- `.no-mistakes.yaml` pins the canonical checks (front-end lint, build and tests, back-end
+  tests); `.github/workflows/ci.yml` was generated from it with `no-mistakes ci-workflow` and
+  runs the same commands. Change a command in both files together. The commands themselves
+  are listed in `CONTRIBUTING.md` under "Building and Testing".
+- Neither package commits a lockfile (`package-lock.json` is git-ignored), so installs are
+  `npm install`, not `npm ci`.
+- Front-end lint is ESLint 9 with the flat config in `front-end/eslint.config.mjs`. It enables
+  `react/jsx-uses-vars` because core `no-unused-vars` does not count a name used only as a JSX
+  tag. Fix violations rather than disabling rules.
+
 ## Tests
 
 - `cd front-end && npm test` runs the suite once under Vitest (jsdom); `npm run test:watch`
   watches. Tests use `vi` from `vitest` for mocks; other globals come from `globals: true` in
   `front-end/vite.config.js`.
-- The two react-router v7 shims CRA's Jest needed - the `react-router/dom` moduleNameMapper and
-  the `TextEncoder`/`TextDecoder` polyfill - are gone; Vitest's jsdom needs neither.
+- `cd back-end && npm test` runs Mocha against an in-process MongoDB started as a one-node
+  replica set (the exchange accept and complete routes use transactions, which a standalone
+  mongod rejects). `back-end/test/setup.js` is the root hook: it sets `JWT_SECRET`, connects
+  Mongoose and empties every collection after each test. `back-end/test/helpers.js` signs users
+  up through the real auth routes, so protected routes get a genuine token.
 
 ## Maintaining this file
 

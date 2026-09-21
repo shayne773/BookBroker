@@ -48,10 +48,12 @@ before deploying it.
 Runs the test suite once with [Vitest](https://vitest.dev/) in a jsdom
 environment. `npm run test:watch` keeps it running in watch mode.
 
-There is no `lint` script: the only linting this app had came from
-react-scripts, which ran `eslint-config-react-app` on every start and build.
-That went away with the migration and `vite build` does not lint, so choosing
-and wiring up a replacement linter is tracked as separate follow-up work.
+### `npm run lint`
+
+Lints the app with [ESLint](https://eslint.org/) using the flat config in
+`eslint.config.mjs`: ESLint's recommended rules, the React Hooks rules and
+React Refresh's Vite rules. `vite build` does not lint, so this is a separate
+check; CI runs it on every pull request.
 
 ## Layout notes
 
