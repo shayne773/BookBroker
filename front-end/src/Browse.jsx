@@ -123,7 +123,7 @@ const BookRow = ({ books }) => {
       {books.map((b) => (
         <Link key={b._id} to={`/books/${b._id}`} className="book-tile">
           <span className="cover">
-            <BookCover src={b.cover} title={b.title} />
+            <BookCover src={b.cover} />
           </span>
 
           <span className="book-tile__title">{b.title || "[NO TITLE]"}</span>

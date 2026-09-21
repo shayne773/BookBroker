@@ -125,7 +125,7 @@ const Home = () => {
                     ref={(el) => (screenRefs.current[0] = el)}
                 >
                     <Link to={`/books/${lead._id}`} className="lead__cover cover">
-                        <BookCover src={lead.cover} title={lead.title} />
+                        <BookCover src={lead.cover} />
                     </Link>
 
                     <div className="lead__body">
@@ -176,7 +176,7 @@ const Home = () => {
                                 >
                                     <Link to={`/books/${book._id}`} className="book-tile">
                                         <span className="cover">
-                                            <BookCover src={book.cover} title={book.title} />
+                                            <BookCover src={book.cover} />
                                         </span>
 
                                         <span className="book-tile__title">

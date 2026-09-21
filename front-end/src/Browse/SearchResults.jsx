@@ -16,8 +16,8 @@ export const GoogleSuggestions = ({ results, onPick }) => (
           onMouseDown={(e) => onPick(book, e)}
           onTouchStart={(e) => onPick(book, e)}
         >
-          <span className="suggestion__cover cover">
-            <BookCover src={book.cover} title={book.title} />
+          <span className="suggestion__cover cover cover--thumb">
+            <BookCover src={book.cover} />
           </span>
 
           <span className="suggestion__body">
@@ -34,7 +34,7 @@ export const GoogleSuggestions = ({ results, onPick }) => (
 export const GoogleSelection = ({ book, loading, onWishlist, onOffer, onCancel }) => (
   <article className="selection">
     <div className="selection__cover cover">
-      <BookCover src={book.cover} title={book.title} />
+      <BookCover src={book.cover} />
     </div>
 
     <div className="selection__body">
@@ -80,7 +80,7 @@ export const MarketResults = ({ books }) => {
       {books.map((book, index) => (
         <article key={book._id || index} className="book-row">
           <span className="cover">
-            <BookCover src={book.cover} title={book.title} />
+            <BookCover src={book.cover} />
           </span>
 
           <div className="book-row__body">

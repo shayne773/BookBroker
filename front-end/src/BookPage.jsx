@@ -112,7 +112,7 @@ const BookPage = () => {
         <div className="book__body">
           <div className="book__aside">
             <div className="cover">
-              <BookCover src={book.cover} title={book.title} />
+              <BookCover src={book.cover} />
             </div>
 
             <div className="book__actions">

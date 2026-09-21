@@ -14,7 +14,7 @@ const BookList = ({ books, emptyLabel }) => {
         return (
           <article key={id} className="book-row">
             <Link to={`/books/${id}`} className="cover" tabIndex={-1} aria-hidden="true">
-              <BookCover src={book.cover} title={book.title} />
+              <BookCover src={book.cover} />
             </Link>
 
             <div className="book-row__body">
