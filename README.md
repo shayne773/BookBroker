@@ -29,6 +29,8 @@ See [back-end/.env.example](./back-end/.env.example) for the full list of back-e
 environment variables, including the CORS allowlist (`CORS_ALLOWED_ORIGINS`). Every
 optional variable has a working local default, so the two lines above are still enough
 for development.
+Without `RESEND_API_KEY` the API sends no email: sign-up confirmation and password reset
+links are printed to the back-end console instead, so you can follow them locally.
 
 ### Frontend
 Navigate to the frontend directory and run the react app

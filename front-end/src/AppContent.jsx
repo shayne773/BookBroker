@@ -18,6 +18,9 @@ import UserPageWishlist from './UserPageWishlist';
 import UserPageOffered from './UserPageOffered';
 import Login from './Login';
 import Signup from './Signup';
+import ConfirmEmail from './ConfirmEmail';
+import ForgotPassword from './ForgotPassword';
+import ResetPassword from './ResetPassword';
 import Navbar from './Navbar';
 import RequireAuth from './RequireAuth';
 import ExchangesList from "./ExchangesList";
@@ -27,7 +30,7 @@ const AppContent = () => {
 
   // The sign-in screens carry no navigation.
   const location = useLocation();
-  const hideNavbarRoutes = ['/login', '/signup'];
+  const hideNavbarRoutes = ['/login', '/signup', '/confirm-email', '/forgot-password', '/reset-password'];
   const shouldHideNavbar = hideNavbarRoutes.includes(location.pathname);
 
   return (
@@ -39,6 +42,9 @@ const AppContent = () => {
           <Route index element={<Navigate to="login" replace />} />
           <Route path="login" element={<Login />} />
           <Route path="signup" element={<Signup />} />
+          <Route path="confirm-email" element={<ConfirmEmail />} />
+          <Route path="forgot-password" element={<ForgotPassword />} />
+          <Route path="reset-password" element={<ResetPassword />} />
 
           {/* Everything below needs a signed-in user. */}
           <Route element={<RequireAuth />}>

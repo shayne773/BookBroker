@@ -22,6 +22,11 @@ const userSchema = new Schema({
   password: { type: String, required: true },
   location: String,
   ratings: Number,
+  // Sign-up stores false until the emailed link is used. Accounts created before
+  // email confirmation existed have no such field and read as confirmed: the
+  // default applies when they are loaded, and the login check only refuses an
+  // explicit false, so no backfill is needed.
+  emailVerified: { type: Boolean, default: true },
   // Running totals kept by POST /exchanges/:id/rate; a user who predates them reads as unrated.
   ratingsCount: { type: Number, default: 0 },
   ratingsAvg:   { type: Number, default: 0 },

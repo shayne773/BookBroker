@@ -1,4 +1,5 @@
-// Brute-force protection for POST /auth/login.
+// Brute-force protection for POST /auth/login, and the request limits on the
+// endpoints that send email (resend confirmation, forgot password).
 //
 // Counters live in MongoDB, one document per normalized email, so they are
 // shared by every API instance and survive a restart. A document's _id is the
@@ -7,11 +8,16 @@
 // can reset, shorten or trigger another address's lockout. A TTL index removes
 // a document once its window and any lockout have both passed.
 //
-// Failures are counted per account, keyed on the submitted email, which caps
-// guesses against one account. They are recorded whether or not the account
-// exists, so the 429 response is identical either way and leaks no account
-// existence. Rate limiting by client address belongs to the edge (load
-// balancer / WAF), which is the only place that reliably sees the real caller.
+// Login failures are counted per account, keyed on the submitted email, which
+// caps guesses against one account. They are recorded whether or not the
+// account exists, so the 429 response is identical either way and leaks no
+// account existence. Login is not limited by client address: that belongs to
+// the edge (load balancer / WAF), which reliably sees the real caller.
+//
+// A throttle built with a `scope` keeps its own counters, keyed on the scope
+// plus the value, so the email-sending endpoints can count each request per
+// address and per client without touching the login counters. The login
+// throttle has no scope, so its keys are unchanged.
 //
 // Store errors propagate to the caller: the login route fails rather than
 // letting an attempt through unthrottled.
@@ -46,19 +52,27 @@ export const LoginAttempt =
 
 const EPOCH = new Date(0);
 
-export function throttleKey(account) {
-  const email = normalizeEmail(account);
-  return email ? createHash("sha256").update(email).digest("hex") : null;
+export function throttleKey(account, scope = "") {
+  const value = normalizeEmail(account);
+  if (!value) return null;
+  return createHash("sha256")
+    .update(scope ? `${scope}\0${value}` : value)
+    .digest("hex");
 }
 
 export class LoginThrottle {
-  constructor() {
-    this.options = DEFAULT_OPTIONS;
+  /**
+   * @param {object} [options] `scope` namespaces the counters; `windowMs`,
+   *   `lockoutMs` and `accountMaxAttempts` override DEFAULT_OPTIONS.
+   */
+  constructor({ scope = "", ...options } = {}) {
+    this.scope = scope;
+    this.options = { ...DEFAULT_OPTIONS, ...options };
   }
 
   /** @returns {Promise<{ limited: boolean, retryAfterSeconds: number }>} */
   async check(account, now = Date.now()) {
-    const key = throttleKey(account);
+    const key = throttleKey(account, this.scope);
     if (!key) return { limited: false, retryAfterSeconds: 0 };
 
     const attempt = await LoginAttempt.findById(key).select("lockedUntil").lean();
@@ -74,7 +88,7 @@ export class LoginThrottle {
   }
 
   async recordFailure(account, now = Date.now()) {
-    const key = throttleKey(account);
+    const key = throttleKey(account, this.scope);
     if (!key) return;
 
     const { windowMs, lockoutMs, accountMaxAttempts } = this.options;
@@ -117,9 +131,20 @@ export class LoginThrottle {
     );
   }
 
+  /**
+   * Count one request against `value` unless it is already over its limit.
+   * For the request limits, where every request counts, not only failures.
+   * @returns {Promise<{ limited: boolean, retryAfterSeconds: number }>}
+   */
+  async hit(value, now = Date.now()) {
+    const limit = await this.check(value, now);
+    if (!limit.limited) await this.recordFailure(value, now);
+    return limit;
+  }
+
   /** Clear the account's counters after a successful sign-in. */
   async recordSuccess(account) {
-    const key = throttleKey(account);
+    const key = throttleKey(account, this.scope);
     if (!key) return;
 
     await LoginAttempt.deleteOne({ _id: key });

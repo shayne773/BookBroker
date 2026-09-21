@@ -49,13 +49,31 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Configuration is environment-driven. `back-end/.env.example` is the authoritative
   list of variables and their defaults; `back-end/.env` is gitignored.
 - Security helpers used by `app.js` live in `back-end/lib/`: the CORS allowlist,
-  the MongoDB-backed per-email login throttle, and the input validation / regex-escaping
-  helpers. Any user input that reaches a Mongo `$regex` must go through
+  the MongoDB-backed throttle (`loginThrottle.js`; a `scope` gives an endpoint its own
+  counters, as the resend-confirmation and forgot-password limits do), and the input
+  validation / regex-escaping helpers. Any user input that reaches a Mongo `$regex` must go through
   `safeRegex` from `lib/validation.js`.
 - Client responses never carry `err.message` or a stack trace for an unexpected failure.
   Route handlers log in full with `console.error` and hand unexpected failures to the
   generic error handler at the bottom of `app.js` via `next(err)`. Express 4 does not
   forward rejections automatically, so every `await` in a handler needs a `try`/`catch`.
+
+## Email, confirmation and password reset
+
+- All mail goes through `mail` in `back-end/lib/mail.js` (Resend SDK). Without
+  `RESEND_API_KEY` nothing is sent and the recipient, subject and link are logged instead.
+  `EMAIL_FROM` defaults to Resend's test sender `onboarding@resend.dev`, which only
+  delivers to the Resend account owner: mail to real users needs a domain verified in
+  Resend and an `EMAIL_FROM` on it. Links are built from `FRONTEND_BASE_URL` (required in
+  production), never the request's Host. See `back-end/.env.example`.
+- Emailed-link tokens live in `back-end/lib/authTokens.js`: stored as a SHA-256 hash,
+  single-use, expiring (confirm 24 h, reset 1 h).
+- `User.emailVerified` defaults to `true` so accounts from before confirmation count as
+  confirmed with no backfill; sign-up stores `false` and login refuses only an explicit
+  `false`. Keep both halves if you touch it.
+- Tests never reach Resend: `back-end/test/setup.js` replaces `mail.deliver` with an
+  `outbox`; `emailedToken` / `confirmEmail` in `test/helpers.js` read links from it, and
+  `signUp` confirms through the real route.
 
 ## Back-end trades
 

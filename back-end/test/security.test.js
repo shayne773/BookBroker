@@ -14,6 +14,7 @@ import { User } from "../Data.js";
 import {
   authHeader,
   clearDatabase,
+  confirmEmail,
   createOfferedBook,
   createUser,
   TEST_PASSWORD,
@@ -299,6 +300,7 @@ describe("POST /auth/register", () => {
 
   it("round-trips the city through login and GET /user", async () => {
     await request.execute(app).post("/auth/register").send(validBody());
+    await confirmEmail("new.reader@example.com");
 
     const login = await request
       .execute(app)
@@ -330,6 +332,7 @@ describe("POST /auth/register", () => {
 
   it("lets a user sign in with a different email casing", async () => {
     await request.execute(app).post("/auth/register").send(validBody());
+    await confirmEmail("new.reader@example.com");
 
     const login = await request
       .execute(app)

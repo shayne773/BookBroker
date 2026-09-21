@@ -1,10 +1,14 @@
 import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { saveSession } from "./auth";
 import AuthShell from "./AuthShell";
+import ResendConfirmation from "./ResendConfirmation";
+import { EMAIL_NOT_CONFIRMED, postPublic } from "./publicApi";
 
 export default function Login() {
     const [error, setError] = useState('');
+    // Set to the address when the account exists but is not confirmed yet.
+    const [unconfirmedEmail, setUnconfirmedEmail] = useState('');
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -15,21 +19,18 @@ export default function Login() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+        setUnconfirmedEmail('');
 
         const { email, password } = e.target.elements;
 
         try{
-            const response = await fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/auth/login`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ email: email.value, password: password.value })
-            })
-            
-            const data = await response.json().catch(() => ({}));
+            const { ok, data } = await postPublic('/auth/login', {
+                email: email.value,
+                password: password.value
+            });
 
-            if (!response.ok) {
+            if (!ok) {
+                if (data.code === EMAIL_NOT_CONFIRMED) setUnconfirmedEmail(email.value.trim());
                 setError(data.message || 'Login failed. Please try again.');
                 return;
             }
@@ -61,10 +62,21 @@ export default function Login() {
                     <input className="input" type="password" id="password" name="password" placeholder="••••••••" required />
                 </label>
 
+                <p>
+                    <Link className="textlink-quiet" to="/forgot-password">Forgot password?</Link>
+                </p>
+
                 {error && <p className="notice notice--error" role="alert">{error}</p>}
 
                 <button className="button button--primary button--block" type="submit">Log in</button>
             </form>
+
+            {unconfirmedEmail && (
+                <div className="stack mt-6">
+                    <p className="hint">Need a new link? We will send it to {unconfirmedEmail}.</p>
+                    <ResendConfirmation email={unconfirmedEmail} />
+                </div>
+            )}
 
             <p className="auth__switch">
                 <span>New here?</span>

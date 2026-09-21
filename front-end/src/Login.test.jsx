@@ -93,3 +93,37 @@ test('clears a previous error when the next attempt succeeds', async () => {
 
   await waitFor(() => expect(screen.queryByText('Invalid credentials')).not.toBeInTheDocument());
 });
+
+test('offers to resend the confirmation email when the address is not confirmed', async () => {
+  global.fetch.mockResolvedValueOnce({
+    ok: false,
+    status: 403,
+    json: async () => ({
+      message: 'Please confirm your email address before signing in.',
+      code: 'EMAIL_NOT_CONFIRMED'
+    })
+  });
+
+  renderLogin();
+  await fillAndSubmit();
+
+  expect(await screen.findByText('Please confirm your email address before signing in.')).toBeInTheDocument();
+
+  global.fetch.mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    json: async () => ({ message: 'We have sent it a new link.' })
+  });
+  await userEvent.click(screen.getByRole('button', { name: 'Resend confirmation email' }));
+
+  expect(await screen.findByText('We have sent it a new link.')).toBeInTheDocument();
+  const [url, options] = global.fetch.mock.calls[1];
+  expect(url).toMatch(/\/auth\/resend-confirmation$/);
+  expect(JSON.parse(options.body)).toEqual({ email: 'reader@example.com' });
+});
+
+test('links to the forgot password page', () => {
+  renderLogin();
+
+  expect(screen.getByRole('link', { name: 'Forgot password?' })).toHaveAttribute('href', '/forgot-password');
+});

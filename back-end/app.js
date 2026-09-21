@@ -9,9 +9,13 @@ import { body, matchedData, validationResult } from "express-validator";
 import exchangesRouter from "./routes/exchanges.js";
 import { buildCorsOptions } from "./lib/cors.js";
 import { LOGIN_THROTTLED_MESSAGE, LoginThrottle } from "./lib/loginThrottle.js";
+import { consumeToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/authTokens.js";
+import { mail, resolveFrontEndBaseUrl } from "./lib/mail.js";
 import {
+  emailOnlyValidators,
   loginValidators,
   registerValidators,
+  resetPasswordValidators,
   safeRegex,
   userEditValidators,
   validationProblem,
@@ -30,9 +34,77 @@ import {
 
 const app = express();
 
+// Behind a load balancer every request arrives from the balancer's address, so
+// the per-client limits below need TRUST_PROXY to read the caller from
+// X-Forwarded-For. Left unset, the header is ignored, since anyone can forge it.
+if (process.env.TRUST_PROXY) {
+  const raw = process.env.TRUST_PROXY.trim();
+  app.set("trust proxy", /^\d+$/.test(raw) ? Number(raw) : raw === "true" ? true : raw);
+}
+
 const loginThrottle = new LoginThrottle();
 
 const INVALID_CREDENTIALS_MESSAGE = "Invalid credentials";
+
+// Emailed links point at the front end; read once so a production process
+// without FRONTEND_BASE_URL refuses to start instead of mailing dead links.
+const FRONTEND_BASE_URL = resolveFrontEndBaseUrl();
+
+const HOUR = 60 * 60 * 1000;
+
+// Limits on the two endpoints that send mail on request, so neither can be used
+// to flood an inbox or to run up the sending quota. Every request counts, per
+// address and per client, whether or not the address has an account.
+const mailThrottles = (endpoint) => ({
+  address: new LoginThrottle({
+    scope: `${endpoint}:address`,
+    windowMs: HOUR,
+    lockoutMs: HOUR,
+    accountMaxAttempts: 3,
+  }),
+  client: new LoginThrottle({
+    scope: `${endpoint}:client`,
+    windowMs: HOUR,
+    lockoutMs: HOUR,
+    accountMaxAttempts: 10,
+  }),
+});
+const resendConfirmationThrottles = mailThrottles("resend-confirmation");
+const forgotPasswordThrottles = mailThrottles("forgot-password");
+
+const MAIL_THROTTLED_MESSAGE = "Too many requests. Please try again later.";
+
+// Answers 429 and returns true when the caller or the address is over its limit.
+async function mailRequestLimited(throttles, req, res, email) {
+  let limit = await throttles.client.hit(req.ip);
+  if (!limit.limited) limit = await throttles.address.hit(email);
+  if (!limit.limited) return false;
+
+  res.set("Retry-After", String(limit.retryAfterSeconds));
+  res.status(429).json({ message: MAIL_THROTTLED_MESSAGE });
+  return true;
+}
+
+const EMAIL_NOT_CONFIRMED = "EMAIL_NOT_CONFIRMED";
+const TOKEN_INVALID = "TOKEN_INVALID";
+
+const frontEndLink = (path, token) =>
+  `${FRONTEND_BASE_URL}${path}?token=${encodeURIComponent(token)}`;
+
+// Mail goes out after the response is decided, not before: a slow or failing
+// provider neither holds up the request nor, for the endpoints that must answer
+// identically for unknown addresses, makes a known address take longer.
+function sendInBackground(send, what) {
+  send.catch((err) => console.error(`Failed to send ${what}:`, err));
+}
+
+async function sendEmailConfirmation(user) {
+  const token = await issueToken(TOKEN_PURPOSES.confirmEmail, user._id);
+  sendInBackground(
+    mail.sendEmailConfirmation(user.email, frontEndLink("/confirm-email", token)),
+    "email confirmation"
+  );
+}
 
 // New emails are stored normalized, but accounts created before that still hold
 // whatever casing the user typed. A strength-2 collation compares case- and
@@ -104,10 +176,15 @@ app.post("/auth/register", registerValidators, async (req, res, next) => {
       password: hashedPassword,
       location,
       ratings: 5,
+      emailVerified: false,
     });
     await user.save();
 
-    res.status(201).json({ message: "User registered successfully" });
+    await sendEmailConfirmation(user);
+
+    res.status(201).json({
+      message: "Account created. Check your email for a link to confirm your address.",
+    });
   } catch (err) {
     // The unique index on email catches a signup that lost the race above.
     if (err?.code === 11000) {
@@ -148,9 +225,122 @@ app.post("/auth/login", loginValidators, async (req, res, next) => {
 
     await loginThrottle.recordSuccess(email);
 
+    // Only an explicit false: accounts from before confirmation existed have
+    // no flag and count as confirmed. Checked after the password, so the
+    // answer tells nothing to someone who does not know it.
+    if (user.emailVerified === false) {
+      return res.status(403).json({
+        message: "Please confirm your email address before signing in.",
+        code: EMAIL_NOT_CONFIRMED,
+      });
+    }
+
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "2h" });
 
     res.json({ token, user: { id: user._id, username: user.username } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/auth/confirm-email", async (req, res, next) => {
+  try {
+    const userId = await consumeToken(TOKEN_PURPOSES.confirmEmail, req.body?.token);
+    const updated = userId
+      ? await User.updateOne({ _id: userId }, { $set: { emailVerified: true } })
+      : null;
+
+    if (!updated?.matchedCount) {
+      return res.status(400).json({
+        message: "This confirmation link has expired or has already been used.",
+        code: TOKEN_INVALID,
+      });
+    }
+
+    res.json({ message: "Email confirmed. You can sign in now." });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Answers the same whether or not the address has an account, or is already
+// confirmed, so it cannot be used to find out who has signed up.
+app.post("/auth/resend-confirmation", emailOnlyValidators, async (req, res, next) => {
+  const problem = validationProblem(req);
+  if (problem) return res.status(400).json(problem);
+
+  const { email } = matchedData(req);
+
+  try {
+    if (await mailRequestLimited(resendConfirmationThrottles, req, res, email)) return;
+
+    const user = await findUserByEmail(email);
+    if (user && user.emailVerified === false) await sendEmailConfirmation(user);
+
+    res.json({
+      message: "If that address has an account waiting to be confirmed, we have sent it a new link.",
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Answers the same whether or not the address has an account.
+app.post("/auth/forgot-password", emailOnlyValidators, async (req, res, next) => {
+  const problem = validationProblem(req);
+  if (problem) return res.status(400).json(problem);
+
+  const { email } = matchedData(req);
+
+  try {
+    if (await mailRequestLimited(forgotPasswordThrottles, req, res, email)) return;
+
+    const user = await findUserByEmail(email);
+    if (user) {
+      const token = await issueToken(TOKEN_PURPOSES.resetPassword, user._id);
+      sendInBackground(
+        mail.sendPasswordReset(user.email, frontEndLink("/reset-password", token)),
+        "password reset"
+      );
+    }
+
+    res.json({
+      message: "If an account uses that address, we have sent it a link to reset the password.",
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/auth/reset-password", resetPasswordValidators, async (req, res, next) => {
+  // Validated before the token is touched, so a password the rules refuse
+  // leaves the link usable for another try.
+  const problem = validationProblem(req);
+  if (problem) return res.status(400).json(problem);
+
+  const { token, password } = matchedData(req);
+
+  try {
+    const userId = await consumeToken(TOKEN_PURPOSES.resetPassword, token);
+    const user = userId ? await User.findById(userId) : null;
+
+    if (!user) {
+      return res.status(400).json({
+        message: "This reset link has expired or has already been used.",
+        code: TOKEN_INVALID,
+      });
+    }
+
+    // Following the emailed link proves the address, so it confirms it too.
+    user.password = await bcrypt.hash(password, 10);
+    user.emailVerified = true;
+    await user.save();
+
+    await revokeTokens(TOKEN_PURPOSES.resetPassword, user._id);
+    await revokeTokens(TOKEN_PURPOSES.confirmEmail, user._id);
+    await loginThrottle.recordSuccess(user.email);
+
+    res.json({ message: "Password updated. You can sign in with it now." });
   } catch (err) {
     next(err);
   }
