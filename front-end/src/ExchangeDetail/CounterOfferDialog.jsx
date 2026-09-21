@@ -65,7 +65,8 @@ export default function CounterOfferDialog({ ex, meIsRequester, otherUser, busy,
       >
         <div className="dialog__head">
           <h2 className="dialog__title" id={titleId}>Counter Offer</h2>
-          <button type="button" className="dialog__close" onClick={onClose} aria-label="Close">
+          {/* Focus moves into the dialog as it opens. */}
+          <button type="button" className="dialog__close" onClick={onClose} aria-label="Close" autoFocus>
             &#10005;
           </button>
         </div>

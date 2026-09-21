@@ -34,6 +34,7 @@ const AddBookDialog = ({ title, search, onSubmit, onClose }) => {
               onChange={(e) => search.type(e.target.value)}
               placeholder="Type book name..."
               autoComplete="off"
+              autoFocus
             />
 
             {search.results.length > 0 && (
