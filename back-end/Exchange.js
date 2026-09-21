@@ -26,6 +26,10 @@ const ExchangeSchema = new mongoose.Schema(
       default: "DRAFT",
     },
 
+    // who made the offer currently on the table (the invite or the latest
+    // counter); only the other side may accept it
+    proposedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+
     // optional details
     message: { type: String, default: "" },
     meetMethod: { type: String, enum: ["IN_PERSON", "MAIL", "OTHER"], default: "IN_PERSON" },

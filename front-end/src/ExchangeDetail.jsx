@@ -199,10 +199,15 @@ export default function ExchangeDetail() {
   }
 
   const canRespond = ["PENDING", "COUNTERED"].includes(ex.status);
-  const canAccept = canRespond;
+  // Only the side that received the offer on the table may accept it. Older
+  // exchanges carry no proposedBy; a pending one was proposed by the requester.
+  const proposer = ex.proposedBy ?? (ex.status === "PENDING" ? ex.requester?._id : null);
+  const canAccept = canRespond && String(proposer) !== String(userId);
   const canDecline = canRespond;
-  const canCancel = canRespond; // both can cancel for now; you can restrict to requester only
   const canComplete = ex.status === "ACCEPTED";
+  // Either side can cancel an offer, or back out of an accepted trade before it
+  // completes, which releases both sides' books.
+  const canCancel = canRespond || canComplete;
 
   return (
     <main className="page page--reading">

@@ -42,6 +42,14 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `tokens.css` collapses those durations under `prefers-reduced-motion: reduce`, so a
   component honours the preference by using the tokens rather than by opting in.
 
+## Back-end trades
+
+- A route in `back-end/routes/exchanges.js` that opens a transaction signals every early
+  exit by throwing `httpError(status, message)`, never `return res.status(...)`, so the
+  shared `catch` aborts the transaction and `finally` ends the session.
+- An ACCEPTED exchange holds its books via `locked` / `lockedByExchange`; anything that lists
+  books as available to trade must filter `locked: false`.
+
 ## Front-end build (Vite)
 
 - The front end is a Vite app, not Create React App: `npm run dev`, `npm run build` (into

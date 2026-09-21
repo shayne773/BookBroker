@@ -50,6 +50,11 @@ export default function CounterOfferDialog({ ex, meIsRequester, otherUser, busy,
     loadLists();
   }, [ex, server, userId, otherUser]);
 
+  // requesterBooks are always the requester's books and responderBooks the
+  // responder's, so which selection is "mine" depends on my side of the trade.
+  const [mySelected, setMySelected] = meIsRequester ? [reqSelected, setReqSelected] : [resSelected, setResSelected];
+  const [theirSelected, setTheirSelected] = meIsRequester ? [resSelected, setResSelected] : [reqSelected, setReqSelected];
+
   const send = () =>
     onSubmit({
       requesterBooks: Array.from(reqSelected),
@@ -78,24 +83,12 @@ export default function CounterOfferDialog({ ex, meIsRequester, otherUser, busy,
           <div className="split">
             <div>
               <p className="fact__term">Your offered books</p>
-              <SelectableGrid
-                books={myOffered}
-                selected={reqSelected}
-                setSelected={setReqSelected}
-                // IMPORTANT: requesterBooks must be requester’s books
-                forceRequesterSide={meIsRequester}
-              />
+              <SelectableGrid books={myOffered} selected={mySelected} setSelected={setMySelected} />
             </div>
 
             <div>
               <p className="fact__term">{otherUser?.username || "Their"} offered books</p>
-              <SelectableGrid
-                books={theirOffered}
-                selected={resSelected}
-                setSelected={setResSelected}
-                // IMPORTANT: responderBooks must be responder’s books
-                forceRequesterSide={!meIsRequester}
-              />
+              <SelectableGrid books={theirOffered} selected={theirSelected} setSelected={setTheirSelected} />
             </div>
           </div>
 
@@ -127,17 +120,7 @@ export default function CounterOfferDialog({ ex, meIsRequester, otherUser, busy,
   );
 }
 
-/**
- * SelectableGrid needs to map "my books" -> correct side arrays:
- * - If I'm requester, my selection goes to requesterBooks
- * - If I'm responder, my selection goes to responderBooks
- *
- * To keep it simple, we pass `forceRequesterSide`:
- * - true means selection is requesterBooks
- * - false means selection is responderBooks
- *
- * In this component we only manage selected IDs; parent decides how to send.
- */
+// Manages only the selected ids; the dialog decides which side they are sent as.
 function SelectableGrid({ books, selected, setSelected }) {
   if (!books?.length) return <p className="hint">No offerings found.</p>;
 
