@@ -212,3 +212,76 @@ describe("user shelves", () => {
     expect(list.body).to.have.lengthOf(1);
   });
 });
+
+describe("most wanted", () => {
+  let me;
+  let seller;
+
+  beforeEach(async () => {
+    me = await signUp();
+    seller = await signUp();
+  });
+
+  // Puts the same book on each reader's wishlist.
+  async function wish(readers, fields) {
+    for (const reader of readers) await WishlistBook.create({ userId: reader.id, ...fields });
+  }
+
+  // An offered book listed `minutesAgo` minutes in the past.
+  const listed = (fields, minutesAgo) =>
+    offerBook(seller, { ...fields, createdAt: new Date(Date.now() - minutesAgo * 60000) });
+
+  const titles = (res) => res.body.map((b) => b.title);
+
+  it("ranks a book wishlisted by more readers above one wishlisted by fewer", async () => {
+    const [a, b, c] = [await signUp(), await signUp(), await signUp()];
+    await listed({ title: "Emma", author: "Jane Austen", isbn: "111" }, 3);
+    await listed({ title: "Dune", author: "Frank Herbert", isbn: "" }, 2);
+    await listed({ title: "Newest, unwanted", isbn: "333" }, 1);
+    await wish([a], { title: "Emma", author: "Jane Austen", isbn: "111" });
+    // No ISBN on either side: matched on title and author, ignoring case.
+    await wish([a, b, c], { title: "dune", author: "FRANK HERBERT" });
+
+    const popular = await api().get("/popular");
+    expect(popular).to.have.status(200);
+    expect(titles(popular)).to.deep.equal(["Dune", "Emma", "Newest, unwanted"]);
+
+    const browse = await api(me.token).get("/browse");
+    expect(browse.body.popular.map((b) => b.title)).to.deep.equal(["Dune", "Emma", "Newest, unwanted"]);
+  });
+
+  it("matches on ISBN when both sides have one, not on title", async () => {
+    const [a, b] = [await signUp(), await signUp()];
+    await listed({ title: "Emma", author: "Jane Austen", isbn: "111" }, 2);
+    await listed({ title: "Persuasion", author: "Jane Austen", isbn: "222" }, 1);
+    // Same title and author as Emma, but a different edition's ISBN.
+    await wish([a, b], { title: "Emma", author: "Jane Austen", isbn: "999" });
+    await wish([a], { title: "Some other title", isbn: "111" });
+
+    const res = await api().get("/popular");
+
+    expect(titles(res)).to.deep.equal(["Emma", "Persuasion"]);
+  });
+
+  it("leaves out books locked in an accepted trade", async () => {
+    const reader = await signUp();
+    await listed({ title: "Locked", isbn: "111", locked: true }, 2);
+    await listed({ title: "Free", isbn: "222" }, 1);
+    await wish([reader], { title: "Locked", isbn: "111" });
+
+    expect(titles(await api().get("/popular"))).to.deep.equal(["Free"]);
+    const browse = await api(me.token).get("/browse");
+    expect(browse.body.popular.map((b) => b.title)).to.deep.equal(["Free"]);
+  });
+
+  it("falls back to newest listings when nothing is wishlisted", async () => {
+    await listed({ title: "Oldest", isbn: "1" }, 3);
+    await listed({ title: "Newest", isbn: "3" }, 1);
+    await listed({ title: "Middle", isbn: "2" }, 2);
+
+    const res = await api().get("/popular");
+
+    expect(res).to.have.status(200);
+    expect(titles(res)).to.deep.equal(["Newest", "Middle", "Oldest"]);
+  });
+});
