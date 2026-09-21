@@ -589,6 +589,8 @@
   font-size: var(--text-h4);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
+  /* A long unbroken word wraps inside its column instead of spilling over the next tile. */
+  overflow-wrap: anywhere;
   /* The underline is drawn on the text box so it tracks the wrapped lines. */
   background-image: linear-gradient(currentColor, currentColor);
   background-repeat: no-repeat;
