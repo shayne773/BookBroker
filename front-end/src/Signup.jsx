@@ -1,6 +1,5 @@
-import "./Login.css";
-import "./Signup.css";
 import { useState } from "react";
+import AuthShell from "./AuthShell";
 
 export default function Signup() {
   const [error, setError] = useState("");
@@ -49,97 +48,94 @@ export default function Signup() {
   };
 
   return (
-    <div className="loginPage">
-      <div className="loginCard">
-        <div className="appTitle">BookBroker</div>
-        <div className="appSubtitle">Create your account</div>
+    <AuthShell kicker="Join BookBroker" title="Create your account">
+      <form className="form" onSubmit={handleSubmit}>
+        <label className="field">
+          <span className="field__label">Email</span>
+          <input className="input" type="email" id="email" name="email" placeholder="you@example.com" required />
+        </label>
 
-        <form className="loginForm" onSubmit={handleSubmit}>
+        <label className="field">
+          <span className="field__label">Username</span>
+          <input className="input" type="text" id="username" name="username" placeholder="yourname" required />
+        </label>
+
+        <div className="form__row">
           <label className="field">
-            <span>Email</span>
-            <input type="email" id="email" name="email" placeholder="you@example.com" required />
+            <span className="field__label">Password</span>
+            <input className="input" type="password" id="password" name="password" placeholder="••••••••" required />
           </label>
 
           <label className="field">
-            <span>Username</span>
-            <input type="text" id="username" name="username" placeholder="yourname" required />
+            <span className="field__label">Confirm</span>
+            <input className="input" type="password" id="confirm" name="confirm" placeholder="••••••••" required />
           </label>
+        </div>
 
-          <div className="twoCol">
-            <label className="field">
-              <span>Password</span>
-              <input type="password" id="password" name="password" placeholder="••••••••" required />
-            </label>
+        <label className="field">
+          <span className="field__label">City</span>
+          <select
+            className="input"
+            id="location"
+            name="location"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            required
+          >
+            <option value="">--Choose a city--</option>
+            <option value="New York">New York, NY</option>
+            <option value="Los Angeles">Los Angeles, CA</option>
+            <option value="Chicago">Chicago, IL</option>
+            <option value="Houston">Houston, TX</option>
+            <option value="Phoenix">Phoenix, AZ</option>
+            <option value="Philadelphia">Philadelphia, PA</option>
+            <option value="San Antonio">San Antonio, TX</option>
+            <option value="San Diego">San Diego, CA</option>
+            <option value="Dallas">Dallas, TX</option>
+            <option value="San Jose">San Jose, CA</option>
+            <option value="Austin">Austin, TX</option>
+            <option value="Jacksonville">Jacksonville, FL</option>
+            <option value="San Francisco">San Francisco, CA</option>
+            <option value="Columbus">Columbus, OH</option>
+            <option value="Charlotte">Charlotte, NC</option>
+            <option value="Indianapolis">Indianapolis, IN</option>
+            <option value="Seattle">Seattle, WA</option>
+            <option value="Denver">Denver, CO</option>
+            <option value="Nashville">Nashville, TN</option>
+            <option value="Washington D.C.">Washington, D.C.</option>
+            <option value="Other">Other</option>
+          </select>
+        </label>
 
-            <label className="field">
-              <span>Confirm</span>
-              <input type="password" id="confirm" name="confirm" placeholder="••••••••" required />
-            </label>
-          </div>
-
-          <label className="field">
-            <span>City</span>
-            <select
-              id="location"
-              name="location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
+        {location === "Other" && (
+          <label className="field field--enter">
+            <span className="field__label">Enter your city</span>
+            <input
+              className="input"
+              type="text"
+              id="customLocation"
+              name="customLocation"
+              value={customLocation}
+              onChange={(e) => setCustomLocation(e.target.value)}
+              placeholder="e.g., Champaign, IL"
               required
-            >
-              <option value="">--Choose a city--</option>
-              <option value="New York">New York, NY</option>
-              <option value="Los Angeles">Los Angeles, CA</option>
-              <option value="Chicago">Chicago, IL</option>
-              <option value="Houston">Houston, TX</option>
-              <option value="Phoenix">Phoenix, AZ</option>
-              <option value="Philadelphia">Philadelphia, PA</option>
-              <option value="San Antonio">San Antonio, TX</option>
-              <option value="San Diego">San Diego, CA</option>
-              <option value="Dallas">Dallas, TX</option>
-              <option value="San Jose">San Jose, CA</option>
-              <option value="Austin">Austin, TX</option>
-              <option value="Jacksonville">Jacksonville, FL</option>
-              <option value="San Francisco">San Francisco, CA</option>
-              <option value="Columbus">Columbus, OH</option>
-              <option value="Charlotte">Charlotte, NC</option>
-              <option value="Indianapolis">Indianapolis, IN</option>
-              <option value="Seattle">Seattle, WA</option>
-              <option value="Denver">Denver, CO</option>
-              <option value="Nashville">Nashville, TN</option>
-              <option value="Washington D.C.">Washington, D.C.</option>
-              <option value="Other">Other</option>
-            </select>
+            />
           </label>
+        )}
 
-          {location === "Other" && (
-            <label className="field slideDown">
-              <span>Enter your city</span>
-              <input
-                type="text"
-                id="customLocation"
-                name="customLocation"
-                value={customLocation}
-                onChange={(e) => setCustomLocation(e.target.value)}
-                placeholder="e.g., Champaign, IL"
-                required
-              />
-            </label>
-          )}
+        {error && <p className="notice notice--error" role="alert">{error}</p>}
 
-          {error && <div className="errorBox">{error}</div>}
+        <button className="button button--primary button--block" type="submit">
+          Sign up
+        </button>
+      </form>
 
-          <button className="primaryBtn" type="submit">
-            Sign up
-          </button>
-
-          <div className="footerRow">
-            <span>Already have an account?</span>
-            <a className="link" href="/login">
-              Log in
-            </a>
-          </div>
-        </form>
-      </div>
-    </div>
+      <p className="auth__switch">
+        <span>Already have an account?</span>
+        <a className="textlink" href="/login">
+          Log in
+        </a>
+      </p>
+    </AuthShell>
   );
 }

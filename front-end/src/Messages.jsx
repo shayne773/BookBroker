@@ -1,4 +1,3 @@
-import "./Messages.css";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { authFetch, isSessionExpiredError } from "./auth";
@@ -43,15 +42,21 @@ const Messages = () => {
   }, [convos, q]);
 
   return (
-    <main className="MessagesPage">
-      <div className="MessagesHeader">
-        <div className="titlebox">
-          <h1 className="title">Messages</h1>
+    <main className="page page--reading">
+      <div className="page-head">
+        <div className="page-head__main">
+          <p className="kicker">Inbox</p>
+          <h1 className="page-title">Messages</h1>
         </div>
 
-        <div className="MessagesSearchRow">
+        <div className="page-head__aside page-head__search">
+          <label className="visually-hidden" htmlFor="messages-search">
+            Search by username
+          </label>
           <input
-            className="MessagesSearch"
+            id="messages-search"
+            type="search"
+            className="input"
             placeholder="Search by username…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -60,54 +65,52 @@ const Messages = () => {
       </div>
 
       {loading && (
-        <div className="MessagesState">
-          <p className="MessagesStateTitle">Loading…</p>
-          <p className="MessagesStateSub">Fetching your conversations.</p>
+        <div className="empty" role="status">
+          <p>Loading…</p>
+          <p>Fetching your conversations.</p>
         </div>
       )}
 
       {!loading && error && (
-        <div className="MessagesState">
-          <p className="MessagesStateTitle">{error}</p>
-          <button className="MessagesBtn" onClick={() => window.location.reload()}>
-            Retry
-          </button>
+        <div className="section stack">
+          <p className="notice notice--error" role="alert">{error}</p>
+          <div>
+            <button className="button button--secondary" onClick={() => window.location.reload()}>
+              Retry
+            </button>
+          </div>
         </div>
       )}
 
       {!loading && !error && filtered.length === 0 && (
-        <div className="MessagesState">
-          <p className="MessagesStateTitle">No conversations found.</p>
-          <p className="MessagesStateSub">Start a chat by messaging someone from a book page.</p>
+        <div className="empty">
+          <p>No conversations found.</p>
+          <p>Start a chat by messaging someone from a book page.</p>
         </div>
       )}
 
       {!loading && !error && filtered.length > 0 && (
-        <ul className="MessagesList">
+        <ul className="list section">
           {filtered.map((c) => {
             const u = c.otherUser || {};
             const initials = (u.username || "?").slice(0, 1).toUpperCase();
 
             return (
-              <li key={c.id} className="MessagesCard">
-                <Link to={`/messages/${u.id}`} className="MessagesLink">
-                  <div className="MessagesAvatar">{initials}</div>
+              <li key={c.id}>
+                <Link to={`/messages/${u.id}`} className="list-row">
+                  <span className="avatar" aria-hidden="true">{initials}</span>
 
-                  <div className="MessagesInfo">
-                    <div className="MessagesTopRow">
-                      <div className="MessagesName">{u.username || "Unknown"}</div>
-                      <div className="MessagesMeta">
-                        {u.location ? u.location : "—"} · ⭐ {u.ratings ?? 0}
-                      </div>
-                    </div>
-
-                    <div className="MessagesPreview">
-                    {c.lastMessage || "Tap to open chat"}
-                    </div>
-
+                  <div className="list-row__body">
+                    <h2 className="list-row__title">{u.username || "Unknown"}</h2>
+                    <p className="list-row__meta">
+                      {u.location ? u.location : "—"} · Rated {u.ratings ?? 0}
+                    </p>
+                    <p className="list-row__excerpt">{c.lastMessage || "Tap to open chat"}</p>
                   </div>
 
-                  <div className="MessagesChevron">›</div>
+                  <div className="list-row__trail">
+                    <span className="textlink-arrow__mark" aria-hidden="true">&rarr;</span>
+                  </div>
                 </Link>
               </li>
             );

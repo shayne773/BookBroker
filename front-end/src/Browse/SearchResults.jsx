@@ -16,7 +16,7 @@ export const GoogleSuggestions = ({ results, onPick }) => (
           onMouseDown={(e) => onPick(book, e)}
           onTouchStart={(e) => onPick(book, e)}
         >
-          <span className="suggestion__cover cover cover--thumb">
+          <span className="suggestion__cover cover">
             <BookCover src={book.cover} />
           </span>
 

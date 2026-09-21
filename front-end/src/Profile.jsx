@@ -1,34 +1,11 @@
-import './Profile.css';
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import Popup from 'reactjs-popup';
+import { useNavigate } from 'react-router-dom';
 import { authFetch, clearSession, isSessionExpiredError } from './auth';
-import { FaMapMarkerAlt, FaEnvelope, FaStar, FaBookOpen, FaPlus, FaAngleRight } from 'react-icons/fa';
-
-const fetchBooksFromGoogle = async (query) => {
-  const response = await fetch(
-    `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}`
-  );
-
-  // If rate limited etc, throw so UI shows message
-  if (!response.ok) {
-    throw new Error(`Google Books HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  const items = data.items || [];
-
-  return items.map(item => ({
-    title: item.volumeInfo?.title || '',
-    author: item.volumeInfo?.authors?.join(', ') || 'Unknown',
-    publisher: item.volumeInfo?.publisher || 'Unknown',
-    year: item.volumeInfo?.publishedDate?.substring(0, 4) || '',
-    cover: item.volumeInfo?.imageLinks?.thumbnail || '',
-    isbn: item.volumeInfo?.industryIdentifiers?.[0]?.identifier || '',
-    genre: item.volumeInfo?.categories?.[0] || 'Unknown',
-    desc: item.volumeInfo?.description || ''
-  }));
-};
+import ProfileHead from './ProfileHead';
+import ShelfPreview from './ShelfPreview';
+import AddBookDialog from './Profile/AddBookDialog';
+import EditProfileDialog from './Profile/EditProfileDialog';
+import useBookSearch from './Profile/useBookSearch';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -38,33 +15,14 @@ const Profile = () => {
   const [wishlistBooks, setWishlistBooks] = useState([]);
   const [offeredBooks, setOfferedBooks] = useState([]);
 
-  const [fadeInClass, setFadeInClass] = useState({
-    profile: 'fade-start',
-    wishlist: 'fade-start',
-    offerings: 'fade-start'
-  });
-
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAddOfferingsModal, setShowAddOfferingsModal] = useState(false);
 
   const [showToastWishlist, setShowToastWishlist] = useState(false);
   const [showToastOfferings, setShowToastOfferings] = useState(false);
 
-  // Wishlist search
-  const [searchText, setSearchText] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [selectedBook, setSelectedBook] = useState(null);
-  const [isTypingWishlist, setIsTypingWishlist] = useState(false);
-  const [isSearchingWishlist, setIsSearchingWishlist] = useState(false);
-  const [googleErrorWishlist, setGoogleErrorWishlist] = useState("");
-
-  // Offerings search
-  const [searchTextOffer, setSearchTextOffer] = useState("");
-  const [searchResultsOffer, setSearchResultsOffer] = useState([]);
-  const [selectedBookOffer, setSelectedBookOffer] = useState(null);
-  const [isTypingOffer, setIsTypingOffer] = useState(false);
-  const [isSearchingOffer, setIsSearchingOffer] = useState(false);
-  const [googleErrorOffer, setGoogleErrorOffer] = useState("");
+  const wishlistSearch = useBookSearch();
+  const offerSearch = useBookSearch();
 
   // Edit profile fields
   const [location, setLocation] = useState('');
@@ -80,12 +38,6 @@ const Profile = () => {
         console.log('Failed to fetch user:', err);
       });
   };
-
-  useEffect(() => {
-    setTimeout(() => setFadeInClass(prev => ({ ...prev, profile: 'fade-in' })), 200);
-    setTimeout(() => setFadeInClass(prev => ({ ...prev, wishlist: 'fade-in' })), 300);
-    setTimeout(() => setFadeInClass(prev => ({ ...prev, offerings: 'fade-in' })), 500);
-  }, []);
 
   useEffect(() => {
     fetchUserData();
@@ -111,94 +63,21 @@ const Profile = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Wishlist search effect
-  useEffect(() => {
-    if (!isTypingWishlist) return;
-
-    const q = searchText.trim();
-    setGoogleErrorWishlist("");
-
-    if (q.length < 3) {
-      setSearchResults([]);
-      return;
-    }
-
-    const t = setTimeout(async () => {
-      try {
-        setIsSearchingWishlist(true);
-        const results = await fetchBooksFromGoogle(q);
-        setSearchResults(results);
-      } catch (err) {
-        console.error(err);
-        setSearchResults([]);
-        const msg = String(err.message || "");
-        setGoogleErrorWishlist(
-          msg.includes("429")
-            ? "Google Books rate limit hit. Please wait ~1–2 minutes and try again."
-            : "Google Books search failed."
-        );
-      } finally {
-        setIsSearchingWishlist(false);
-      }
-    }, 500);
-
-    return () => clearTimeout(t);
-  }, [searchText, isTypingWishlist]);
-
-  // Offerings search effect
-  useEffect(() => {
-    if (!isTypingOffer) return;
-
-    const q = searchTextOffer.trim();
-    setGoogleErrorOffer("");
-
-    if (q.length < 3) {
-      setSearchResultsOffer([]);
-      return;
-    }
-
-    const t = setTimeout(async () => {
-      try {
-        setIsSearchingOffer(true);
-        const results = await fetchBooksFromGoogle(q);
-        setSearchResultsOffer(results);
-      } catch (err) {
-        console.error(err);
-        setSearchResultsOffer([]);
-        const msg = String(err.message || "");
-        setGoogleErrorOffer(
-          msg.includes("429")
-            ? "Google Books rate limit hit. Please wait ~1–2 minutes and try again."
-            : "Google Books search failed."
-        );
-      } finally {
-        setIsSearchingOffer(false);
-      }
-    }, 500);
-
-    return () => clearTimeout(t);
-  }, [searchTextOffer, isTypingOffer]);
-
   const handleAddBook = (e) => {
     e.preventDefault();
-    if (!selectedBook) return;
+    if (!wishlistSearch.selected) return;
 
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-wishlist-book`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(selectedBook)
+      body: JSON.stringify(wishlistSearch.selected)
     })
       .then(res => res.json())
       .then(() => {
         setShowToastWishlist(true);
         setTimeout(() => setShowToastWishlist(false), 2000);
         setShowAddModal(false);
-
-        // reset modal state
-        setSelectedBook(null);
-        setSearchText("");
-        setSearchResults([]);
-        setIsTypingWishlist(false);
+        wishlistSearch.reset();
       })
       .catch(err => {
         if (isSessionExpiredError(err)) return;
@@ -208,9 +87,9 @@ const Profile = () => {
 
   const handleAddOffering = (e) => {
     e.preventDefault();
-    if (!selectedBookOffer) return;
+    if (!offerSearch.selected) return;
 
-    const payload = { ...selectedBookOffer, owner: userId };
+    const payload = { ...offerSearch.selected, owner: userId };
 
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-offered-book`, {
       method: 'POST',
@@ -222,12 +101,7 @@ const Profile = () => {
         setShowToastOfferings(true);
         setTimeout(() => setShowToastOfferings(false), 2000);
         setShowAddOfferingsModal(false);
-
-        // reset modal state
-        setSelectedBookOffer(null);
-        setSearchTextOffer("");
-        setSearchResultsOffer([]);
-        setIsTypingOffer(false);
+        offerSearch.reset();
       })
       .catch(err => {
         if (isSessionExpiredError(err)) return;
@@ -272,238 +146,71 @@ const Profile = () => {
       });
   };
 
-  // Close + reset wishlist modal
   const closeWishlistModal = () => {
     setShowAddModal(false);
-    setSearchResults([]);
-    setGoogleErrorWishlist("");
-    setIsTypingWishlist(false);
+    wishlistSearch.dismiss();
   };
 
-  // Close + reset offerings modal
   const closeOfferModal = () => {
     setShowAddOfferingsModal(false);
-    setSearchResultsOffer([]);
-    setGoogleErrorOffer("");
-    setIsTypingOffer(false);
+    offerSearch.dismiss();
   };
 
   return (
-    <div>
-      <main className="profile">
-        <div className="titlebox">
-          <h1 className="title">Profile</h1>
-        </div>
+    <main className="page">
+      <ProfileHead kicker="Your profile" user={user}>
+        <EditProfileDialog
+          location={location}
+          setLocation={setLocation}
+          customLocation={customLocation}
+          setCustomLocation={setCustomLocation}
+          onSubmit={handleProfileEdit}
+        />
 
-        <div className={`infoContainer ${fadeInClass.profile}`}>
-          <div className="photoAndButton">
-            <div className="profilePhoto">
-              {(user?.username?.[0] || "?").toUpperCase()}
-            </div>
-            <div className="profile-buttons">
-              <Popup trigger={<button className="editProfileBtn">Edit Profile</button>} modal>
-                {(close) => (
-                  <div className="edit-popup">
-                    <form onSubmit={(e) => handleProfileEdit(e, close)}>
-                      <div className="form-group">
-                        <label htmlFor="username">Enter username:</label>
-                        <input type="text" name="username" id="username" />
-                      </div>
+        <button type="button" className="button button--quiet" onClick={handleLogout}>
+          Log out
+        </button>
+      </ProfileHead>
 
-                      <div className="form-group">
-                        <label htmlFor="email">Enter email:</label>
-                        <input type="text" name="email" id="email" />
-                      </div>
+      <div className="split">
+        <ShelfPreview
+          title="Wishlist"
+          books={wishlistBooks}
+          emptyLabel="Loading wishlist..."
+          seeAllTo="/profile/my-books"
+          onAdd={() => setShowAddModal(true)}
+        />
 
-                      <div className="form-group">
-                        <label htmlFor="location">Select city:</label>
-                        <select
-                          id="location"
-                          name="location"
-                          value={location}
-                          onChange={(e) => setLocation(e.target.value)}
-                        >
-                          <option value="">--Choose a city--</option>
-                          <option value="New York">New York, NY</option>
-                          <option value="Los Angeles">Los Angeles, CA</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      </div>
+        <ShelfPreview
+          title="Offerings"
+          books={offeredBooks}
+          emptyLabel="Loading offerings..."
+          seeAllTo="/profile/my-trades"
+          onAdd={() => setShowAddOfferingsModal(true)}
+        />
+      </div>
 
-                      {location === 'Other' && (
-                        <div className="edit-profile-custom-location">
-                          <label htmlFor="customLocation">Enter your city:</label>
-                          <input
-                            type="text"
-                            id="customLocation"
-                            name="customLocation"
-                            value={customLocation}
-                            onChange={(e) => setCustomLocation(e.target.value)}
-                            required
-                          />
-                        </div>
-                      )}
-
-                      <button type="submit" className="editProfileBtn">Submit</button>
-                    </form>
-                  </div>
-                )}
-              </Popup>
-
-              <button className="editProfileBtn logout-button" onClick={handleLogout}>
-                Logout
-              </button>
-            </div>
-          </div>
-
-          <ul className="infoList">
-            <li><div className="infoRow"><span className="truncate usernameText">{user.username}</span></div></li>
-            <li><div className="infoRow"><FaEnvelope className="infoIcon" /><span className="truncate">{user.email}</span></div></li>
-            <li><div className="infoRow"><FaMapMarkerAlt className="infoIcon" /><span className="truncate">{user.location ?? 'N/A'}</span></div></li>
-            <li><div className="infoRow"><FaStar className="infoIcon" /><span className="truncate">{user.ratings}</span></div></li>
-          </ul>
-        </div>
-
-        <div className={`wishlistContainer ${fadeInClass.wishlist}`}>
-          <div className="sectionHeader">
-            <button className="iconButton" onClick={() => setShowAddModal(true)}><FaPlus /></button>
-            <h2 className="sectionTitle">Wishlist</h2>
-            <Link to="/profile/my-books" className="iconButton"><FaAngleRight /></Link>
-          </div>
-
-          <ul className="wishlist">
-            {wishlistBooks.length > 0 ? wishlistBooks.slice(0, 4).map((book) => (
-              <li key={book._id || book.isbn} className="wishlistItem">
-                <FaBookOpen className="bookIcon" />
-                <strong>{book.title}</strong>
-              </li>
-            )) : <li>Loading wishlist...</li>}
-          </ul>
-        </div>
-
-        <div className={`offeringsContainer ${fadeInClass.offerings}`}>
-          <div className="sectionHeader">
-            <button className="iconButton" onClick={() => setShowAddOfferingsModal(true)}><FaPlus /></button>
-            <h2 className="sectionTitle">Offerings</h2>
-            <Link to="/profile/my-trades" className="iconButton"><FaAngleRight /></Link>
-          </div>
-
-          <ul className="offerings">
-            {offeredBooks.length > 0 ? offeredBooks.slice(0, 4).map((book) => (
-              <li key={book._id || book.isbn} className="offeringItem">
-                <FaBookOpen className="bookIcon" />
-                <strong>{book.title}</strong>
-              </li>
-            )) : <li>Loading offerings...</li>}
-          </ul>
-        </div>
-      </main>
-
-      {/* Wishlist modal */}
       {showAddModal && (
-        <div className="modalOverlay" onClick={closeWishlistModal}>
-          <div className="modalSheet" onClick={(e) => e.stopPropagation()}>
-            <h2>Add Book to Wishlist</h2>
-            <form onSubmit={handleAddBook}>
-              <div className="modalFields">
-                <div className="fieldRow" style={{ position: 'relative' }}>
-                  <label>Search Book:</label>
-                  <input
-                    type="text"
-                    value={searchText}
-                    onChange={(e) => {
-                      setSearchText(e.target.value);
-                      setIsTypingWishlist(true);
-                    }}
-                    placeholder="Type book name..."
-                  />
-
-                  {isSearchingWishlist && <div className="search-hint">Searching…</div>}
-                  {googleErrorWishlist && <div className="search-error">{googleErrorWishlist}</div>}
-
-                  {searchResults.length > 0 && (
-                    <ul className="search-dropdown">
-                      {searchResults.map((book, idx) => (
-                        <li
-                          key={idx}
-                          onClick={() => {
-                            setSelectedBook(book);
-                            setSearchText(book.title);
-                            setSearchResults([]);
-                            setIsTypingWishlist(false);
-                          }}
-                        >
-                          <img src={book.cover} alt="cover" width="40" style={{ borderRadius: 8 }} />
-                          <span>{book.title} — {book.author}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-
-              <button type="submit" className="editProfileBtn" disabled={!selectedBook}>
-                Add
-              </button>
-            </form>
-          </div>
-        </div>
+        <AddBookDialog
+          title="Add a book to your wishlist"
+          search={wishlistSearch}
+          onSubmit={handleAddBook}
+          onClose={closeWishlistModal}
+        />
       )}
 
-      {/* Offerings modal */}
       {showAddOfferingsModal && (
-        <div className="modalOverlay" onClick={closeOfferModal}>
-          <div className="modalSheet" onClick={(e) => e.stopPropagation()}>
-            <h2>Add Book to Offerings</h2>
-            <form onSubmit={handleAddOffering}>
-              <div className="modalFields">
-                <div className="fieldRow" style={{ position: 'relative' }}>
-                  <label>Search Book:</label>
-                  <input
-                    type="text"
-                    value={searchTextOffer}
-                    onChange={(e) => {
-                      setSearchTextOffer(e.target.value);
-                      setIsTypingOffer(true);
-                    }}
-                    placeholder="Type book name..."
-                  />
-
-                  {isSearchingOffer && <div className="search-hint">Searching…</div>}
-                  {googleErrorOffer && <div className="search-error">{googleErrorOffer}</div>}
-
-                  {searchResultsOffer.length > 0 && (
-                    <ul className="search-dropdown">
-                      {searchResultsOffer.map((book, idx) => (
-                        <li
-                          key={idx}
-                          onClick={() => {
-                            setSelectedBookOffer(book);
-                            setSearchTextOffer(book.title);
-                            setSearchResultsOffer([]);
-                            setIsTypingOffer(false);
-                          }}
-                        >
-                          <img src={book.cover} alt="cover" width="40" style={{ borderRadius: 8 }} />
-                          <span>{book.title} — {book.author}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-
-              <button type="submit" className="editProfileBtn" disabled={!selectedBookOffer}>
-                Add
-              </button>
-            </form>
-          </div>
-        </div>
+        <AddBookDialog
+          title="Add a book to your offerings"
+          search={offerSearch}
+          onSubmit={handleAddOffering}
+          onClose={closeOfferModal}
+        />
       )}
 
-      {showToastWishlist && <div className="toast-success-wishlist">Book added to wishlist!</div>}
-      {showToastOfferings && <div className="toast-success-offerings">Book added to offerings!</div>}
-    </div>
+      {showToastWishlist && <div className="toast" role="status">Book added to wishlist</div>}
+      {showToastOfferings && <div className="toast" role="status">Book added to offerings</div>}
+    </main>
   );
 };
 

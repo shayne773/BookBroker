@@ -34,7 +34,10 @@
   max-width: var(--measure-page);
   margin: 0 auto;
   padding: var(--space-12) var(--gutter) var(--space-24);
-  animation: page-enter var(--duration-slow) var(--ease-out) both;
+  /* backwards, not both: a transform left in effect after the entry would make
+     the page the containing block for its fixed children, pinning a toast or a
+     dialog overlay to the page instead of the window. */
+  animation: page-enter var(--duration-slow) var(--ease-out) backwards;
 }
 
 /* For long-form screens that want a single reading column. */
@@ -170,6 +173,11 @@
   padding-bottom: var(--space-1);
 }
 
+/* A search field set in the head, e.g. on Browse and Messages. */
+.page-head__search {
+  width: min(360px, 40vw);
+}
+
 /* The small tracked capital line above a headline. */
 .kicker {
   margin-bottom: var(--space-3);
@@ -186,6 +194,14 @@
   font-size: var(--text-h1);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-tight);
+}
+
+/* One sentence under a page title that says what the screen is for. */
+.page-lede {
+  max-width: var(--measure-text);
+  margin-top: var(--space-3);
+  color: var(--color-ink-muted);
+  font-size: var(--text-body);
 }
 
 /* ======================================================================
@@ -221,6 +237,39 @@
   font-size: var(--text-sm);
   font-weight: var(--weight-regular);
   letter-spacing: var(--tracking-normal);
+}
+
+/* Actions that belong to a section - "Add a book", "See all" - on its right. */
+.section-head__aside {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+/* Two sections side by side, e.g. a profile's wishlist and offerings. */
+.split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-16);
+  align-items: start;
+}
+
+.split > .section + .section {
+  margin-top: 0;
+  border-top: 0;
+}
+
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .split > .section + .section {
+    margin-top: var(--space-10);
+    border-top: var(--border-hairline);
+  }
 }
 
 /* ======================================================================
@@ -487,6 +536,8 @@
 /* Segmented control - one row of choices divided by hairlines. */
 .segmented {
   display: inline-flex;
+  /* Keeps its own width when it is a grid item, e.g. inside a dialog. */
+  justify-self: start;
   border: var(--border-strong);
 }
 
@@ -533,7 +584,13 @@
   aspect-ratio: 2 / 3;
   border: var(--border-hairline);
   background: var(--color-paper-sunken);
+  /* The frame is a size container, so what goes inside it can respond to how
+     big the frame is drawn rather than to which screen drew it. */
+  container-type: inline-size;
 }
+
+/* A size container takes no width from its content, so every .cover must be
+   given one by its layout: a grid track, a stretched flex item, or a width. */
 
 .cover__img {
   width: 100%;
@@ -543,9 +600,11 @@
 }
 
 /*
- * A cover we do not have: the same frame, empty but for a small label, rather
- * than an image fetched from anywhere. `.cover--thumb` is the thumbnail size,
- * too narrow for the label, where the bare frame is enough.
+ * A cover we do not have: the same frame, with a small label that says so, so
+ * the absence reads as deliberate rather than as an image that failed to load.
+ * The label is sized by the design system, not by the caller: the frame's own
+ * width decides whether it fits. Only a thumbnail too narrow to hold a word
+ * (the 36px suggestion cover, the exchange strip) keeps the bare frame.
  */
 .cover__fallback {
   position: absolute;
@@ -561,15 +620,24 @@
   min-width: 0;
   color: var(--color-ink-muted);
   font-family: var(--font-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-label);
   line-height: var(--leading-snug);
   text-transform: uppercase;
 }
 
-.cover--thumb .cover__fallback-label {
-  display: none;
+/* Room for the label on one line, at the interface's small type step. */
+@container (min-width: 120px) {
+  .cover__fallback-label {
+    font-size: var(--text-xs);
+  }
+}
+
+@container (max-width: 55px) {
+  .cover__fallback-label {
+    display: none;
+  }
 }
 
 .book-tile {
@@ -579,8 +647,10 @@
   color: var(--color-ink);
 }
 
-.book-tile:hover .cover__img,
-.book-tile:focus-visible .cover__img {
+/* Only a tile that goes somewhere answers the pointer; a tile that is just a
+   record (a profile's wishlist preview) stays still. */
+a.book-tile:hover .cover__img,
+a.book-tile:focus-visible .cover__img {
   transform: scale(1.04);
 }
 
@@ -599,8 +669,8 @@
   transition: background-size var(--duration-base) var(--ease-out);
 }
 
-.book-tile:hover .book-tile__title,
-.book-tile:focus-visible .book-tile__title {
+a.book-tile:hover .book-tile__title,
+a.book-tile:focus-visible .book-tile__title {
   background-size: 100% 1px;
 }
 
@@ -619,6 +689,19 @@
 /* A denser grid for rows that sit inside a section. */
 .book-grid--compact {
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-6) var(--space-5);
+}
+
+/* Small covers that keep their size however few there are, e.g. the books
+   on one side of an exchange. */
+.book-grid--small {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--space-6) var(--space-4);
+}
+
+/* A four-up preview, for a grid that shares its row with another. */
+.book-grid--four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-6) var(--space-5);
 }
 
@@ -824,10 +907,6 @@
 /* ======================================================================
    Browse
    ====================================================================== */
-
-.browse-search {
-  width: min(360px, 40vw);
-}
 
 /* Standing links to the Browse subsections, set as a rule-separated row. */
 .browse-links {
@@ -1177,6 +1256,685 @@
     opacity: 1;
     transform: none;
   }
+}
+
+/* ======================================================================
+   Forms
+   ====================================================================== */
+
+.form {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.form__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+
+/* A label set above its control, in the same tracked capitals as a kicker. */
+.field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.field__label {
+  color: var(--color-ink-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+/* A field that appears in response to another (e.g. "Other" city). */
+.field--enter {
+  animation: page-enter var(--duration-base) var(--ease-out) both;
+}
+
+/* The native arrow is replaced by one drawn in ink, so a select sits on the
+   same baseline rule as a text input. */
+select.input {
+  padding-right: var(--space-6);
+  appearance: none;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-ink-muted) 50%),
+    linear-gradient(135deg, var(--color-ink-muted) 50%, transparent 50%);
+  background-position: calc(100% - 7px) 50%, calc(100% - 2px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+textarea.input {
+  min-height: 6rem;
+  line-height: var(--leading-normal);
+  resize: vertical;
+}
+
+@media (max-width: 720px) {
+  .form__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ======================================================================
+   Sign in and sign up
+   ====================================================================== */
+
+/*
+ * The sign-in screens carry no navigation, so they are a spread of their own:
+ * an ink panel on the left holding the wordmark and one line of copy, and the
+ * form set on paper on the right.
+ */
+.auth {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  min-height: 100vh;
+}
+
+.auth__aside {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-16);
+  padding: var(--space-12) var(--space-16);
+  background: var(--color-fill-strong);
+  color: var(--color-ink-inverse);
+}
+
+.auth__aside .wordmark {
+  color: var(--color-ink-inverse);
+}
+
+.auth__headline {
+  max-width: 14ch;
+  color: var(--color-ink-inverse);
+  font-family: var(--font-serif);
+  font-size: var(--text-display);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  animation: page-enter var(--duration-slow) var(--ease-out) both;
+}
+
+.auth__note {
+  color: var(--color-ink-inverse-muted);
+  font-size: var(--text-sm);
+}
+
+.auth__main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16) var(--gutter);
+}
+
+.auth__form {
+  width: 100%;
+  max-width: 420px;
+  animation: page-enter var(--duration-slow) var(--ease-out) both;
+}
+
+.auth__form .page-title {
+  margin-bottom: var(--space-10);
+}
+
+.auth__switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-8);
+  padding-top: var(--space-6);
+  border-top: var(--border-hairline);
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 900px) {
+  .auth {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .auth__aside {
+    gap: var(--space-8);
+    padding: var(--space-8) var(--gutter);
+  }
+
+  .auth__headline {
+    font-size: var(--text-h1);
+  }
+}
+
+/* ======================================================================
+   Dialog
+   ====================================================================== */
+
+/*
+ * Named to match reactjs-popup, which suffixes its `className` with -overlay
+ * and -content: <Popup className="dialog"> and a hand-built modal therefore
+ * share one set of rules.
+ */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-16) var(--gutter);
+  overflow-y: auto;
+  background: var(--color-scrim);
+  animation: scrim-in var(--duration-base) var(--ease-standard) both;
+}
+
+.dialog-content {
+  width: min(100%, 560px);
+  margin: auto;
+  padding: var(--space-8);
+  border: var(--border-strong);
+  background: var(--color-paper);
+  box-shadow: var(--shadow-overlay);
+  animation: dialog-in var(--duration-base) var(--ease-out) both;
+}
+
+.dialog-content--wide {
+  width: min(100%, 960px);
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.dialog__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-5);
+  border-bottom: var(--border-rule-thick);
+}
+
+.dialog__title {
+  font-family: var(--font-serif);
+  font-size: var(--text-h2);
+  font-weight: var(--weight-semibold);
+}
+
+.dialog__close {
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  font-size: var(--text-h4);
+  line-height: 1;
+  transition: var(--transition-colors);
+}
+
+.dialog__close:hover,
+.dialog__close:focus-visible {
+  color: var(--color-ink);
+}
+
+.dialog__body {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.dialog__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-8);
+  padding-top: var(--space-5);
+  border-top: var(--border-hairline);
+}
+
+/* Inside a form the grid gap already separates the actions. */
+.form > .dialog__foot {
+  margin-top: 0;
+}
+
+/* The anchor a field's live suggestions float from. */
+.field-anchor {
+  position: relative;
+}
+
+/* ======================================================================
+   Status tags
+   ====================================================================== */
+
+/*
+ * Status without colour: the border carries it. Dashed is waiting on someone,
+ * solid is agreed, filled is finished, grey is closed.
+ */
+.status {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border: var(--border-strong);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  line-height: var(--leading-normal);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.status--waiting {
+  border-style: dashed;
+}
+
+.status--done {
+  background: var(--color-fill-strong);
+  color: var(--color-ink-inverse);
+}
+
+.status--closed {
+  border-color: var(--color-rule);
+  color: var(--color-ink-muted);
+}
+
+/* ======================================================================
+   People
+   ====================================================================== */
+
+/* A reader's initial, set in the serif inside a ruled circle. */
+.avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-serif);
+  font-size: var(--text-h3);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.avatar--large {
+  width: 88px;
+  height: 88px;
+  font-size: var(--text-h1);
+}
+
+/* Avatar beside a name, e.g. inside a page head. */
+.person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.person__text {
+  min-width: 0;
+}
+
+/* Definition pairs set in one row under a page head. */
+.facts--row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6) var(--space-12);
+  padding: var(--space-6) 0;
+  border-bottom: var(--border-hairline);
+}
+
+.facts--row .fact__value {
+  overflow-wrap: anywhere;
+}
+
+/* ======================================================================
+   Record lists (conversations, exchanges)
+   ====================================================================== */
+
+.list {
+  border-top: var(--border-hairline);
+}
+
+/*
+ * A record that opens something: leading visual, title and meta, and trailing
+ * status. Like a contents line, it steps in and shades on hover.
+ */
+.list-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-3) var(--space-5) 0;
+  border-bottom: var(--border-hairline);
+  color: var(--color-ink);
+  transition: padding-left var(--duration-base) var(--ease-out),
+    background-color var(--duration-base) var(--ease-standard);
+}
+
+a.list-row:hover,
+a.list-row:focus-visible {
+  padding-left: var(--space-4);
+  background: var(--color-paper-raised);
+}
+
+.list-row__body {
+  min-width: 0;
+}
+
+.list-row__title {
+  font-family: var(--font-serif);
+  font-size: var(--text-h3);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+}
+
+.list-row__meta {
+  margin-top: var(--space-1);
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+}
+
+.list-row__excerpt {
+  margin-top: var(--space-2);
+  overflow: hidden;
+  color: var(--color-ink-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row__trail {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+}
+
+.list-row__trail .textlink-arrow__mark {
+  color: var(--color-ink-muted);
+  transition: transform var(--duration-base) var(--ease-out),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+a.list-row:hover .textlink-arrow__mark,
+a.list-row:focus-visible .textlink-arrow__mark {
+  color: var(--color-ink);
+  transform: translateX(3px);
+}
+
+/* Anything set under a row's meta line, e.g. the covers in an exchange. */
+.list-row__extra {
+  margin-top: var(--space-3);
+}
+
+/* A status tag with its timestamp beneath, aligned to the row's end. */
+.list-row__status {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-2);
+}
+
+/* Small covers side by side, e.g. the books in an exchange. */
+.cover-strip {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.cover-strip > .cover {
+  flex: 0 0 auto;
+  width: 40px;
+}
+
+/* ======================================================================
+   Exchange
+   ====================================================================== */
+
+/* The status track: one segment per stage, ruled in ink once reached. */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.step {
+  padding-top: var(--space-3);
+  border-top: var(--border-rule-thick);
+  border-top-color: var(--color-rule-subtle);
+  color: var(--color-ink-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  transition: border-color var(--duration-slow) var(--ease-out),
+    color var(--duration-slow) var(--ease-out);
+}
+
+.step.is-done {
+  border-top-color: var(--color-rule-strong);
+  color: var(--color-ink);
+}
+
+/* A note someone wrote, set as a pull quote. */
+.quote {
+  max-width: var(--measure-text);
+  padding-left: var(--space-5);
+  border-left: var(--border-rule-thick);
+  color: var(--color-ink-secondary);
+  font-family: var(--font-serif);
+  font-size: var(--text-h4);
+  font-style: italic;
+  line-height: var(--leading-normal);
+}
+
+.rating-picker {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.rating-picker__star {
+  padding: 0 var(--space-1);
+  border: 0;
+  background: none;
+  color: var(--color-ink);
+  cursor: pointer;
+  font-size: var(--text-h2);
+  line-height: 1;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.rating-picker__star:hover {
+  transform: scale(1.15);
+}
+
+/* ======================================================================
+   Book picker (proposing and countering a trade)
+   ====================================================================== */
+
+.pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--space-6) var(--space-4);
+}
+
+/* A cover that can be chosen: it gains an ink ring and a check when it is. */
+.pick {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Stated, because a button does not stretch its children by default, and a
+     .cover (a size container) has no width of its own to fall back on. */
+  align-items: stretch;
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.pick .cover {
+  transition: box-shadow var(--duration-base) var(--ease-out);
+}
+
+.pick:hover .cover__img,
+.pick:focus-visible .cover__img {
+  transform: scale(1.04);
+}
+
+.pick.is-selected .cover {
+  box-shadow: 0 0 0 2px var(--color-paper), 0 0 0 4px var(--color-ink);
+}
+
+.pick__check {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: var(--color-fill-strong);
+  /* A paper ring keeps the check legible on a dark jacket. */
+  box-shadow: 0 0 0 2px var(--color-paper);
+  color: var(--color-ink-inverse);
+  font-size: var(--text-xs);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+
+.pick.is-selected .pick__check {
+  opacity: 1;
+  transform: none;
+}
+
+.pick__title {
+  font-family: var(--font-serif);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  overflow-wrap: anywhere;
+}
+
+.pick__meta {
+  color: var(--color-ink-muted);
+  font-size: var(--text-xs);
+}
+
+/* ======================================================================
+   Conversation
+   ====================================================================== */
+
+/* The conversation fills the window under the header, so the thread scrolls
+   and the composer stays put. */
+.page--chat {
+  display: flex;
+  flex-direction: column;
+  /* The header is --header-h tall plus its hairline. */
+  height: calc(100vh - var(--header-h) - 1px);
+  padding-top: var(--space-8);
+  padding-bottom: var(--space-8);
+}
+
+.thread {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-height: 0;
+  padding: var(--space-8) var(--space-1);
+  overflow-y: auto;
+}
+
+.message {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-1);
+  max-width: min(560px, 75%);
+  animation: message-in var(--duration-base) var(--ease-out) both;
+}
+
+.message--mine {
+  align-self: flex-end;
+  justify-items: end;
+}
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.message__sender {
+  color: var(--color-ink-muted);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.message__bubble {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-paper-sunken);
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.message--mine .message__bubble {
+  background: var(--color-fill-strong);
+  color: var(--color-ink-inverse);
+}
+
+.message__time {
+  color: var(--color-ink-muted);
+  font-size: var(--text-xs);
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  padding-top: var(--space-5);
+  border-top: var(--border-rule-thick);
+}
+
+.composer .input {
+  flex: 1 1 auto;
 }
 
 /* ======================================================================

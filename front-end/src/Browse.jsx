@@ -42,7 +42,7 @@ const Browse = () => {
           <h1 className="page-title">Browse</h1>
         </div>
 
-        <div className="page-head__aside browse-search">
+        <div className="page-head__aside page-head__search">
           <label className="visually-hidden" htmlFor="browse-search">
             Search title or author
           </label>
