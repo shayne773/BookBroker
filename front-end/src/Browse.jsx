@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { authFetch, isSessionExpiredError } from "./auth";
-
-const FALLBACK_COVER = "/default-book.png";
+import BookCover from "./BookCover";
 
 const Browse = () => {
   const [query, setQuery] = useState("");
@@ -107,7 +106,9 @@ const Section = ({ title, count, children }) => (
     <div className="section-head">
       <h2 className="section-title">{title}</h2>
       {count !== undefined && (
-        <span className="section-count">{count} books</span>
+        <span className="section-count">
+          {count} {count === 1 ? "book" : "books"}
+        </span>
       )}
     </div>
     {children}
@@ -122,11 +123,7 @@ const BookRow = ({ books }) => {
       {books.map((b) => (
         <Link key={b._id} to={`/books/${b._id}`} className="book-tile">
           <span className="cover">
-            <img
-              src={b.cover || FALLBACK_COVER}
-              alt=""
-              className="cover__img"
-            />
+            <BookCover src={b.cover} title={b.title} />
           </span>
 
           <span className="book-tile__title">{b.title || "[NO TITLE]"}</span>

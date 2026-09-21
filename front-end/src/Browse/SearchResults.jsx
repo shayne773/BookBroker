@@ -1,10 +1,5 @@
 import { Link } from 'react-router-dom';
-
-const FALLBACK_COVER = '/default-book.png';
-
-const onCoverError = (e) => {
-  e.currentTarget.src = FALLBACK_COVER;
-};
+import BookCover from '../BookCover';
 
 // The live suggestion list under the Google Books field.
 export const GoogleSuggestions = ({ results, onPick }) => (
@@ -22,12 +17,7 @@ export const GoogleSuggestions = ({ results, onPick }) => (
           onTouchStart={(e) => onPick(book, e)}
         >
           <span className="suggestion__cover cover">
-            <img
-              src={book.cover || FALLBACK_COVER}
-              alt=""
-              className="cover__img"
-              onError={onCoverError}
-            />
+            <BookCover src={book.cover} title={book.title} />
           </span>
 
           <span className="suggestion__body">
@@ -44,12 +34,7 @@ export const GoogleSuggestions = ({ results, onPick }) => (
 export const GoogleSelection = ({ book, loading, onWishlist, onOffer, onCancel }) => (
   <article className="selection">
     <div className="selection__cover cover">
-      <img
-        src={book.cover || FALLBACK_COVER}
-        alt=""
-        className="cover__img"
-        onError={onCoverError}
-      />
+      <BookCover src={book.cover} title={book.title} />
     </div>
 
     <div className="selection__body">
@@ -95,12 +80,7 @@ export const MarketResults = ({ books }) => {
       {books.map((book, index) => (
         <article key={book._id || index} className="book-row">
           <span className="cover">
-            <img
-              src={book.cover || FALLBACK_COVER}
-              alt=""
-              className="cover__img"
-              onError={onCoverError}
-            />
+            <BookCover src={book.cover} title={book.title} />
           </span>
 
           <div className="book-row__body">

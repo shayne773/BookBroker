@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from './auth';
-
-const FALLBACK_COVER = '/default-book.png';
+import BookCover from './BookCover';
 
 const Home = () => {
     const [books, setBooks] = useState([]);
@@ -126,11 +125,7 @@ const Home = () => {
                     ref={(el) => (screenRefs.current[0] = el)}
                 >
                     <Link to={`/books/${lead._id}`} className="lead__cover cover">
-                        <img
-                            src={lead.cover || FALLBACK_COVER}
-                            alt=""
-                            className="cover__img"
-                        />
+                        <BookCover src={lead.cover} title={lead.title} />
                     </Link>
 
                     <div className="lead__body">
@@ -167,7 +162,9 @@ const Home = () => {
                     <section className="section">
                         <div className="section-head">
                             <h2 className="section-title">More in your feed</h2>
-                            <span className="section-count">{rest.length} books</span>
+                            <span className="section-count">
+                                {rest.length} {rest.length === 1 ? 'book' : 'books'}
+                            </span>
                         </div>
 
                         <div className="book-grid">
@@ -179,11 +176,7 @@ const Home = () => {
                                 >
                                     <Link to={`/books/${book._id}`} className="book-tile">
                                         <span className="cover">
-                                            <img
-                                                src={book.cover || FALLBACK_COVER}
-                                                alt=""
-                                                className="cover__img"
-                                            />
+                                            <BookCover src={book.cover} title={book.title} />
                                         </span>
 
                                         <span className="book-tile__title">

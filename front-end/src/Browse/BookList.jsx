@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
-
-const FALLBACK_COVER = '/default-book.png';
+import BookCover from '../BookCover';
 
 // The shared record list behind Newly Added, Popular Now and a genre: one row
 // per book, hairline-separated, with the cover small and the title leading.
@@ -15,11 +14,7 @@ const BookList = ({ books, emptyLabel }) => {
         return (
           <article key={id} className="book-row">
             <Link to={`/books/${id}`} className="cover" tabIndex={-1} aria-hidden="true">
-              <img
-                src={book.cover || FALLBACK_COVER}
-                alt=""
-                className="cover__img"
-              />
+              <BookCover src={book.cover} title={book.title} />
             </Link>
 
             <div className="book-row__body">

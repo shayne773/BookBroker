@@ -1,8 +1,7 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { authFetch, isSessionExpiredError } from './auth';
-
-const FALLBACK_COVER = 'https://via.placeholder.com/128x192?text=No+Cover';
+import BookCover from './BookCover';
 
 const BookPage = () => {
   const { id } = useParams();
@@ -113,11 +112,7 @@ const BookPage = () => {
         <div className="book__body">
           <div className="book__aside">
             <div className="cover">
-              <img
-                src={book.cover || FALLBACK_COVER}
-                alt=""
-                className="cover__img"
-              />
+              <BookCover src={book.cover} title={book.title} />
             </div>
 
             <div className="book__actions">
