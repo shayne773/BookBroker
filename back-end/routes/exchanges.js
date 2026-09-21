@@ -255,8 +255,9 @@ router.post("/:id/decline", async (req, res) => {
 
 // --------------------
 // POST /exchanges/:id/cancel
-// Either participant can cancel an offer, or an ACCEPTED trade that has not
-// completed; cancelling an accepted trade unlocks both sides' books with it.
+// Either participant can cancel an offer, or an ACCEPTED trade the other side
+// has not yet confirmed complete; cancelling an accepted trade unlocks both
+// sides' books with it.
 // --------------------
 router.post("/:id/cancel", async (req, res) => {
   const userId = req.user.userId;
@@ -274,6 +275,13 @@ router.post("/:id/cancel", async (req, res) => {
     }
 
     if (ex.status === "ACCEPTED") {
+      const otherConfirmed = isRequester(ex, userId)
+        ? ex.responderConfirmedComplete
+        : ex.requesterConfirmedComplete;
+      if (otherConfirmed) {
+        throw httpError(409, "The other participant has already confirmed completion");
+      }
+
       await OfferedBook.updateMany(
         { lockedByExchange: ex._id },
         { $set: { locked: false, lockedByExchange: null } },

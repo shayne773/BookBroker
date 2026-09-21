@@ -186,6 +186,43 @@ describe("exchanges", () => {
       }
     });
 
+    for (const [confirmer, canceller] of [["requester", "responder"], ["responder", "requester"]]) {
+      it(`is refused with 409 for the ${canceller} once the ${confirmer} has confirmed completion`, async () => {
+        const users = { requester, responder };
+        const id = await propose();
+        await api(responder.token).post(`/exchanges/${id}/accept`);
+        await api(users[confirmer].token).post(`/exchanges/${id}/confirm-complete`);
+
+        const res = await api(users[canceller].token).post(`/exchanges/${id}/cancel`);
+
+        expect(res).to.have.status(409);
+        expect((await Exchange.findById(id)).status).to.equal("ACCEPTED");
+        const books = await OfferedBook.find({ _id: { $in: [requesterBook.id, responderBook.id] } });
+        expect(books).to.have.lengthOf(2);
+        for (const book of books) {
+          expect(book.locked).to.equal(true);
+          expect(String(book.lockedByExchange)).to.equal(id);
+        }
+      });
+    }
+
+    it("is still allowed after only the canceller has confirmed, unlocking both sides' books", async () => {
+      const id = await propose();
+      await api(responder.token).post(`/exchanges/${id}/accept`);
+      await api(requester.token).post(`/exchanges/${id}/confirm-complete`);
+
+      const res = await api(requester.token).post(`/exchanges/${id}/cancel`);
+
+      expect(res).to.have.status(200);
+      expect((await Exchange.findById(id)).status).to.equal("CANCELLED");
+      const books = await OfferedBook.find({ _id: { $in: [requesterBook.id, responderBook.id] } });
+      expect(books).to.have.lengthOf(2);
+      for (const book of books) {
+        expect(book.locked).to.equal(false);
+        expect(book.lockedByExchange).to.equal(null);
+      }
+    });
+
     it("an outsider cannot cancel it, and the books stay locked", async () => {
       const id = await propose();
       await api(responder.token).post(`/exchanges/${id}/accept`);

@@ -205,9 +205,10 @@ export default function ExchangeDetail() {
   const canAccept = canRespond && String(proposer) !== String(userId);
   const canDecline = canRespond;
   const canComplete = ex.status === "ACCEPTED";
-  // Either side can cancel an offer, or back out of an accepted trade before it
-  // completes, which releases both sides' books.
-  const canCancel = canRespond || canComplete;
+  // Either side can cancel an offer, or back out of an accepted trade until the
+  // other side confirms it complete, which releases both sides' books.
+  const otherConfirmed = meIsRequester ? ex.responderConfirmedComplete : ex.requesterConfirmedComplete;
+  const canCancel = canRespond || (canComplete && !otherConfirmed);
 
   return (
     <main className="page page--reading">
