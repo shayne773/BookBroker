@@ -36,12 +36,14 @@ module.exports = {
         secondary: 'var(--color-ink-secondary)',
         muted: 'var(--color-ink-muted)',
         inverse: 'var(--color-ink-inverse)',
+        'inverse-muted': 'var(--color-ink-inverse-muted)',
       },
       rule: {
         DEFAULT: 'var(--color-rule)',
         subtle: 'var(--color-rule-subtle)',
         strong: 'var(--color-rule-strong)',
       },
+      scrim: 'var(--color-scrim)',
     },
     fontFamily: {
       serif: 'var(--font-serif)',
@@ -77,6 +79,7 @@ module.exports = {
     borderRadius: {
       none: 'var(--radius-none)',
       sm: 'var(--radius-sm)',
+      full: 'var(--radius-full)',
     },
     extend: {
       maxWidth: {

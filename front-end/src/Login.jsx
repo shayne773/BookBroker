@@ -1,7 +1,7 @@
-import './Login.css';
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { saveSession } from "./auth";
+import AuthShell from "./AuthShell";
 
 export default function Login() {
     const [error, setError] = useState('');
@@ -49,32 +49,27 @@ export default function Login() {
     };
 
     return (
-        <div className="loginPage">
-            <div className="loginCard">
-                <div className="appTitle">BookBroker</div>
-                <div className="appSubtitle">Sign in to continue</div>
+        <AuthShell kicker="Welcome back" title="Sign in">
+            <form className="form" onSubmit={handleSubmit}>
+                <label className="field">
+                    <span className="field__label">Email</span>
+                    <input className="input" type="email" id="email" name="email" placeholder="you@example.com" required />
+                </label>
 
-                <form className="loginForm" onSubmit={handleSubmit}>
-                    <label className="field">
-                    <span>Email</span>
-                    <input type="email" id="email" name="email" placeholder="you@example.com" required />
-                    </label>
+                <label className="field">
+                    <span className="field__label">Password</span>
+                    <input className="input" type="password" id="password" name="password" placeholder="••••••••" required />
+                </label>
 
-                    <label className="field">
-                    <span>Password</span>
-                    <input type="password" id="password" name="password" placeholder="••••••••" required />
-                    </label>
+                {error && <p className="notice notice--error" role="alert">{error}</p>}
 
-                    {error && <div className="errorBox">{error}</div>}
+                <button className="button button--primary button--block" type="submit">Log in</button>
+            </form>
 
-                    <button className="primaryBtn" type="submit">Log in</button>
-
-                    <div className="footerRow">
-                    <span>New here?</span>
-                    <a className="link" href="/signup">Create an account</a>
-                    </div>
-                </form>
-            </div>
-        </div>
+            <p className="auth__switch">
+                <span>New here?</span>
+                <a className="textlink" href="/signup">Create an account</a>
+            </p>
+        </AuthShell>
     )
 }
