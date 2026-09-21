@@ -1,15 +1,8 @@
-import './Profile.css';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { authFetch, isSessionExpiredError } from './auth';
-import {
-  FaMapMarkerAlt,
-  FaEnvelope,
-  FaStar,
-  FaBookOpen,
-  FaAngleRight,
-  FaAngleLeft
-} from 'react-icons/fa';
+import ProfileHead from './ProfileHead';
+import ShelfPreview from './ShelfPreview';
 
 const UserPage = () => {
   const { id } = useParams();
@@ -18,18 +11,6 @@ const UserPage = () => {
   const [user, setUser] = useState({});
   const [wishlistBooks, setWishlistBooks] = useState([]);
   const [offeredBooks, setOfferedBooks] = useState([]);
-
-  const [fadeInClass, setFadeInClass] = useState({
-    profile: 'fade-start',
-    wishlist: 'fade-start',
-    offerings: 'fade-start'
-  });
-
-  useEffect(() => {
-    setTimeout(() => setFadeInClass(p => ({ ...p, profile: 'fade-in' })), 200);
-    setTimeout(() => setFadeInClass(p => ({ ...p, wishlist: 'fade-in' })), 300);
-    setTimeout(() => setFadeInClass(p => ({ ...p, offerings: 'fade-in' })), 500);
-  }, []);
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}`)
@@ -59,99 +40,30 @@ const UserPage = () => {
   }, [id]);
 
   return (
-    <div>
-      <main className="profile">
-        <button className="iconButton" onClick={() => navigate(-1)}>
-            <FaAngleLeft />
-        </button>
-        <div className="titlebox">
-          <h1 className="title">User</h1>
-        </div>
+    <main className="page">
+      <button type="button" className="back-link" onClick={() => navigate(-1)}>
+        <span className="back-link__mark" aria-hidden="true">&larr;</span>
+        Back
+      </button>
 
-        {/* Profile card */}
-        <div className={`infoContainer ${fadeInClass.profile}`}>
-          <div className="photoAndButton">
-            <div className="profilePhoto">
-              {(user?.username?.[0] || '?').toUpperCase()}
-            </div>
-          </div>
+      <ProfileHead kicker="Reader" user={user} />
 
-          <ul className="infoList">
-            <li>
-              <div className="infoRow">
-                <span className="truncate usernameText">{user.username}</span>
-              </div>
-            </li>
-            <li>
-              <div className="infoRow">
-                <FaEnvelope className="infoIcon" />
-                <span className="truncate">{user.email}</span>
-              </div>
-            </li>
-            <li>
-              <div className="infoRow">
-                <FaMapMarkerAlt className="infoIcon" />
-                <span className="truncate">{user.location ?? 'N/A'}</span>
-              </div>
-            </li>
-            <li>
-              <div className="infoRow">
-                <FaStar className="infoIcon" />
-                <span className="truncate">{user.ratings}</span>
-              </div>
-            </li>
-          </ul>
-        </div>
+      <div className="split">
+        <ShelfPreview
+          title="Wishlist"
+          books={wishlistBooks}
+          emptyLabel="No items in wishlist"
+          seeAllTo={`/users/${id}/wishlist`}
+        />
 
-        {/* Wishlist */}
-        <div className={`wishlistContainer ${fadeInClass.wishlist}`}>
-          <div className="sectionHeader">
-            <div /> {/* placeholder for grid */}
-            <h2 className="sectionTitle">Wishlist</h2>
-            <Link to={`/users/${id}/wishlist`} className="iconButton">
-              <FaAngleRight />
-            </Link>
-          </div>
-
-          <ul className="wishlist">
-            {wishlistBooks.length > 0 ? (
-              wishlistBooks.slice(0, 4).map((book, i) => (
-                <li key={i} className="wishlistItem">
-                  <FaBookOpen className="bookIcon" />
-                  <strong>{book.title}</strong>
-                </li>
-              ))
-            ) : (
-              <li>No items in wishlist</li>
-            )}
-          </ul>
-        </div>
-
-        {/* Offerings */}
-        <div className={`offeringsContainer ${fadeInClass.offerings}`}>
-          <div className="sectionHeader">
-            <div /> {/* placeholder */}
-            <h2 className="sectionTitle">Offerings</h2>
-            <Link to={`/users/${id}/offered`} className="iconButton">
-              <FaAngleRight />
-            </Link>
-          </div>
-
-          <ul className="offerings">
-            {offeredBooks.length > 0 ? (
-              offeredBooks.slice(0, 4).map((book, i) => (
-                <li key={i} className="offeringItem">
-                  <FaBookOpen className="bookIcon" />
-                  <strong>{book.title}</strong>
-                </li>
-              ))
-            ) : (
-              <li>No open offerings</li>
-            )}
-          </ul>
-        </div>
-      </main>
-    </div>
+        <ShelfPreview
+          title="Offerings"
+          books={offeredBooks}
+          emptyLabel="No open offerings"
+          seeAllTo={`/users/${id}/offered`}
+        />
+      </div>
+    </main>
   );
 };
 

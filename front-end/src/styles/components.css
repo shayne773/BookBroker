@@ -34,7 +34,10 @@
   max-width: var(--measure-page);
   margin: 0 auto;
   padding: var(--space-12) var(--gutter) var(--space-24);
-  animation: page-enter var(--duration-slow) var(--ease-out) both;
+  /* backwards, not both: a transform left in effect after the entry would make
+     the page the containing block for its fixed children, pinning a toast or a
+     dialog overlay to the page instead of the window. */
+  animation: page-enter var(--duration-slow) var(--ease-out) backwards;
 }
 
 /* For long-form screens that want a single reading column. */
@@ -1492,6 +1495,11 @@ textarea.input {
   margin-top: var(--space-8);
   padding-top: var(--space-5);
   border-top: var(--border-hairline);
+}
+
+/* Inside a form the grid gap already separates the actions. */
+.form > .dialog__foot {
+  margin-top: 0;
 }
 
 /* The anchor a field's live suggestions float from. */

@@ -1,12 +1,9 @@
-import './MyTrades.css';
+import ShelfPage from '../ShelfPage';
 import { useEffect, useState } from 'react';
-import { FaBookOpen, FaTrash, FaAngleLeft } from 'react-icons/fa';
-import { useNavigate } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from '../auth';
 
 const MyTrades = () => {
   const [offeringsBooks, setOfferingsBooks] = useState([]);
-  const navigate = useNavigate();
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/offered`)
@@ -39,40 +36,13 @@ const MyTrades = () => {
   };
 
   return (
-    <div>
-      <main className="profile">
-        <div className="mytradesContainer fade-in">
-          <div className="titlebox mytradesTitlebox">
-            <button
-              className="iconButton backButton"
-              onClick={() => navigate(-1)}
-              aria-label="Back"
-              type="button"
-            >
-              <FaAngleLeft />
-            </button>
-
-            <h1 className="title">Offerings</h1>
-          </div>
-
-          <ul className="offerings">
-            {offeringsBooks.length > 0 ? (
-              offeringsBooks.map((book) => (
-                <li key={book._id} className="offeringItem">
-                  <FaBookOpen className="bookIcon" />
-                  <strong>{book.title}</strong>
-                  <button className="deleteButton" onClick={() => handleDelete(book._id)}>
-                    <FaTrash />
-                  </button>
-                </li>
-              ))
-            ) : (
-              <li>Loading Offerings...</li>
-            )}
-          </ul>
-        </div>
-      </main>
-    </div>
+    <ShelfPage
+      kicker="Your profile"
+      title="Offerings"
+      books={offeringsBooks}
+      emptyLabel="Loading Offerings..."
+      onRemove={handleDelete}
+    />
   );
 };
 

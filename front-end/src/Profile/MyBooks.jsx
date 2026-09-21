@@ -1,12 +1,9 @@
-import './MyBooks.css';
+import ShelfPage from '../ShelfPage';
 import { useEffect, useState } from 'react';
-import { FaBookOpen, FaTrash, FaAngleLeft } from 'react-icons/fa';
-import { useNavigate } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from '../auth';
 
 const MyBooks = () => {
   const [wishlistBooks, setWishlistBooks] = useState([]);
-  const navigate = useNavigate(); // ✅ add this
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/wishlist`)
@@ -36,41 +33,13 @@ const MyBooks = () => {
   };
 
   return (
-    <div>
-      <main className="profile">
-        <div className="mybooksContainer fade-in">
-          <div className="titlebox mybooksTitlebox">
-            {/* ✅ Back button like BookPage */}
-            <button
-              className="iconButton backButton"
-              onClick={() => navigate(-1)}
-              aria-label="Back"
-              type="button"
-            >
-              <FaAngleLeft />
-            </button>
-
-            <h1 className="title">Wishlist</h1>
-          </div>
-
-          <ul className="wishlist">
-            {wishlistBooks.length > 0 ? (
-              wishlistBooks.map((book) => (
-                <li key={book._id} className="wishlistItem">
-                  <FaBookOpen className="bookIcon" />
-                  <strong>{book.title}</strong>
-                  <button className="deleteButton" onClick={() => handleDelete(book._id)}>
-                    <FaTrash />
-                  </button>
-                </li>
-              ))
-            ) : (
-              <li>Loading wishlist...</li>
-            )}
-          </ul>
-        </div>
-      </main>
-    </div>
+    <ShelfPage
+      kicker="Your profile"
+      title="Wishlist"
+      books={wishlistBooks}
+      emptyLabel="Loading wishlist..."
+      onRemove={handleDelete}
+    />
   );
 };
 
