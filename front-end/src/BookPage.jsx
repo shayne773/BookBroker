@@ -70,7 +70,7 @@ const BookPage = () => {
       if(!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     })
-      .then((data)=>navigate(`/messages/${book.owner?.id}`))
+      .then(()=>navigate(`/messages/${book.owner?.id}`))
       .then(res => console.log(res))
       .catch((err) => {
         // RequireAuth is already redirecting to the login page.

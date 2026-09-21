@@ -40,12 +40,7 @@ const useBookSearch = () => {
     if (!isTyping) return;
 
     const q = text.trim();
-    setError('');
-
-    if (q.length < 3) {
-      setResults([]);
-      return;
-    }
+    if (q.length < 3) return;
 
     const t = setTimeout(async () => {
       try {
@@ -71,6 +66,8 @@ const useBookSearch = () => {
   const type = (value) => {
     setText(value);
     setIsTyping(true);
+    setError('');
+    if (value.trim().length < 3) setResults([]);
   };
 
   const pick = (book) => {

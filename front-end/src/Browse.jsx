@@ -11,8 +11,6 @@ const Browse = () => {
   const server = import.meta.env.VITE_SERVER_ADDRESS;
 
   useEffect(() => {
-    setLoading(true);
-
     const t = setTimeout(() => {
       authFetch(`${server}/browse?q=${encodeURIComponent(query)}`)
         .then((r) => r.json())
@@ -52,7 +50,10 @@ const Browse = () => {
             className="input"
             placeholder="Search title or author"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setLoading(true);
+            }}
           />
         </div>
       </div>

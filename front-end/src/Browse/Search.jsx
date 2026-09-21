@@ -181,7 +181,7 @@ export default function Search() {
 
       const text = await res.text();
       let data = {};
-      try { data = JSON.parse(text); } catch {}
+      try { data = JSON.parse(text); } catch { /* not JSON: report the status below */ }
 
       if (!res.ok) {
         console.log("Backend error body:", text);
