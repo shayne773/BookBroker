@@ -5,13 +5,8 @@ import BookCover from './BookCover';
 
 const Home = () => {
     const [books, setBooks] = useState([]);
-    const [user, setUser] = useState(null);
     const screenRefs = useRef([]);
     const [showToast, setShowToast] = useState(false);
-
-
-    const userId = localStorage.getItem('userId');
-
 
     useEffect(() => {
         // Fetch real offered books from backend
@@ -29,23 +24,6 @@ const Home = () => {
             });
     }, []);
    
-
-    useEffect(() => {
-        // Fetch real user data
-        if (userId) {
-            authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user?id=${userId}`)
-            .then(res => res.json())
-            .then(data => {
-                setUser(data);
-            })
-            .catch(err => {
-                if (isSessionExpiredError(err)) return;
-
-                console.error('Failed to fetch user:', err);
-                setUser(null);
-            });
-        }
-    }, [userId]);
 
     useEffect(() => {
         // Intersection Observer for the scroll reveal

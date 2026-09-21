@@ -60,7 +60,6 @@ const Profile = () => {
         if (isSessionExpiredError(err)) return;
         console.log("Failed to fetch offerings", err);
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAddBook = (e) => {

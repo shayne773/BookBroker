@@ -1,6 +1,6 @@
 import { statusClass } from '../exchangeStatus';
 
-export const STATUSES = ["PENDING", "COUNTERED", "ACCEPTED", "COMPLETED"];
+const STATUSES = ["PENDING", "COUNTERED", "ACCEPTED", "COMPLETED"];
 
 function statusIndex(s) {
   const i = STATUSES.indexOf(s);

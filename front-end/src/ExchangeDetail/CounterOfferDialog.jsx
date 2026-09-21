@@ -13,16 +13,19 @@ export default function CounterOfferDialog({ ex, meIsRequester, otherUser, busy,
   const [resSelected, setResSelected] = useState(new Set());
   const [counterMsg, setCounterMsg] = useState("");
 
-  // for counter UI: we need both users' offered lists
-  const [myOffered, setMyOffered] = useState([]);
-  const [theirOffered, setTheirOffered] = useState([]);
-
-  // initialize counter selections when opening modal
-  useEffect(() => {
+  // Start from the exchange's current books and message, and again whenever the
+  // exchange itself changes (adjusting state during render, not in an effect).
+  const [selectionsFor, setSelectionsFor] = useState(null);
+  if (selectionsFor !== ex) {
+    setSelectionsFor(ex);
     setReqSelected(new Set((ex.requesterBooks || []).map((b) => b._id)));
     setResSelected(new Set((ex.responderBooks || []).map((b) => b._id)));
     setCounterMsg(ex.message || "");
-  }, [ex]);
+  }
+
+  // for counter UI: we need both users' offered lists
+  const [myOffered, setMyOffered] = useState([]);
+  const [theirOffered, setTheirOffered] = useState([]);
 
   useEffect(() => {
     const meId = userId;

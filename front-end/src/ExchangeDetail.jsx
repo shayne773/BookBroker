@@ -203,7 +203,6 @@ export default function ExchangeDetail() {
   const canDecline = canRespond;
   const canCancel = canRespond; // both can cancel for now; you can restrict to requester only
   const canComplete = ex.status === "ACCEPTED";
-  const canRate = ex.status === "COMPLETED" && !myRatedAlready;
 
   return (
     <main className="page page--reading">

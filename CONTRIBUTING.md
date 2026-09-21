@@ -30,4 +30,16 @@
 (Will be added as needed)
 
 ## Building and Testing
-(Will be added as needed)
+The checks every pull request must pass are pinned in `.no-mistakes.yaml` and run by
+the `CI` GitHub workflow (`.github/workflows/ci.yml`). From the repository root:
+
+```
+npm --prefix front-end install && npm --prefix back-end install
+npm --prefix front-end run lint     # ESLint
+npm --prefix front-end run build    # Vite production build
+npm --prefix front-end test         # Vitest
+npm --prefix back-end test          # Mocha, against an in-process MongoDB
+```
+
+The back-end tests need no database of their own: they start MongoDB in-process
+(and download its binary on the first run).
