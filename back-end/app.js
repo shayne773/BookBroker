@@ -139,9 +139,65 @@ app.get("/new", async (req, res) => {
   }
 });
 
+// Normalised (trimmed, lower-cased) value of a book field, "" when missing.
+const normalised = (field) => ({ $toLower: { $trim: { input: { $ifNull: [field, ""] } } } });
+
+// Books matching `match`, most wanted first: ranked by how many readers have the
+// same book on their wishlist. Two books are the same when both carry an ISBN and
+// it agrees; otherwise title and author agree, ignoring case. Ties, including the
+// case where nothing is wishlisted yet, fall back to newest listing first.
+function mostWanted(match, limit) {
+  return OfferedBook.aggregate([
+    { $match: match },
+    {
+      $lookup: {
+        from: WishlistBook.collection.name,
+        let: {
+          bookIsbn: normalised("$isbn"),
+          bookTitle: normalised("$title"),
+          bookAuthor: normalised("$author"),
+        },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $let: {
+                  vars: {
+                    isbn: normalised("$isbn"),
+                    title: normalised("$title"),
+                    author: normalised("$author"),
+                  },
+                  in: {
+                    $cond: [
+                      { $and: [{ $ne: ["$$bookIsbn", ""] }, { $ne: ["$$isbn", ""] }] },
+                      { $eq: ["$$bookIsbn", "$$isbn"] },
+                      {
+                        $and: [
+                          { $ne: ["$$bookTitle", ""] },
+                          { $eq: ["$$bookTitle", "$$title"] },
+                          { $eq: ["$$bookAuthor", "$$author"] },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+          { $group: { _id: "$userId" } },
+        ],
+        as: "wantedBy",
+      },
+    },
+    { $addFields: { wantedBy: { $size: "$wantedBy" } } },
+    { $sort: { wantedBy: -1, createdAt: -1, _id: -1 } },
+    { $limit: limit },
+  ]);
+}
+
 app.get("/popular", async (req, res) => {
   try {
-    const books = await OfferedBook.aggregate([{ $sample: { size: 20 } }]);
+    const books = await mostWanted({ locked: false }, 20);
     res.json(books);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -223,11 +279,8 @@ app.get("/browse", authMiddleware, async (req, res) => {
           .limit(40)
       : [];
 
-    /* ---------------- POPULAR ---------------- */
-    const popular = await OfferedBook.aggregate([
-      { $match: onMarket },
-      { $sample: { size: LIMIT_SECTION } },
-    ]);
+    /* ---------------- MOST WANTED ---------------- */
+    const popular = await mostWanted(onMarket, LIMIT_SECTION);
 
     /* ---------------- NEW ---------------- */
     const newlyAdded = await OfferedBook.find(onMarket)

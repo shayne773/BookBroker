@@ -3,12 +3,11 @@ import Home from './Home';
 import Feed from './Feed';
 import Browse from './Browse';
 import NewlyAdded from './Browse/NewlyAdded';
-import PopularNow from './Browse/PopularNow';
+import MostWanted from './Browse/MostWanted';
 import Search from './Browse/Search';
 import ByCategory from './Browse/ByCategory';
 import Genre from './Browse/ByCategory/Genre';
 import Profile from './Profile';
-import EditProfile from './Profile/EditProfile';
 import MyBooks from './Profile/MyBooks';
 import MyTrades from './Profile/MyTrades';
 import Messages from './Messages';
@@ -48,7 +47,7 @@ const AppContent = () => {
             <Route path="browse">
               <Route index element={<Browse />} />
               <Route path="newly-added" element={<NewlyAdded />} />
-              <Route path="popular" element={<PopularNow />} />
+              <Route path="popular" element={<MostWanted />} />
               <Route path="search" element={<Search />} />
               <Route path="by-category">
                 <Route index element={<ByCategory />} />
@@ -59,7 +58,7 @@ const AppContent = () => {
             <Route path="/exchanges/:exchangeId" element={<ExchangeDetail />} />
             <Route path="profile">
               <Route index element={<Profile />} />
-              <Route path="edit" element={<EditProfile />} />
+              <Route path="edit" element={<Navigate to="/profile" replace />} />
               <Route path="my-books" element={<MyBooks />} />
               <Route path="my-trades" element={<MyTrades />} />
             </Route>

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import BookList from './BookList';
 
-const PopularNow = () => {
+const MostWanted = () => {
     const [books, setBooks] = useState([]);
 
     useEffect(() => {
@@ -10,7 +10,7 @@ const PopularNow = () => {
             .then(res => res.json())
             .then(data => setBooks(data))
             .catch(err => {
-                console.error("Failed to fetch popular books:", err);
+                console.error("Failed to fetch most wanted books:", err);
                 setBooks([]);
             });
     }, []);
@@ -20,7 +20,7 @@ const PopularNow = () => {
             <div className="page-head">
                 <div className="page-head__main">
                     <p className="kicker">Browse</p>
-                    <h1 className="page-title">Popular Now</h1>
+                    <h1 className="page-title">Most wanted</h1>
                 </div>
 
                 <div className="page-head__aside">
@@ -31,9 +31,9 @@ const PopularNow = () => {
                 </div>
             </div>
 
-            <BookList books={books} emptyLabel="No popular books found." />
+            <BookList books={books} emptyLabel="No books on the market yet." />
         </main>
     );
 };
 
-export default PopularNow;
+export default MostWanted;

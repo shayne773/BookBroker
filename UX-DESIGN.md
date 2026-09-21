@@ -29,9 +29,9 @@
 #### Shows different book catagories
 ![Browse](./ux-design/browse_wireframe.png)
 
-### Popular Now
-#### Allows users to browse books that are popular right now
-![Popular Now](./ux-design/popularNow_wireframe.png)
+### Most Wanted
+#### Allows users to browse books on the market, ranked by how many readers have them on their wishlist
+![Most Wanted](./ux-design/popularNow_wireframe.png)
 
 ### Newly Added
 #### Allows users to browse books that are newly added

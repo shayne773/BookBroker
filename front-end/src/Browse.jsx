@@ -60,7 +60,7 @@ const Browse = () => {
 
       <nav className="browse-links" aria-label="Browse sections">
         <Link to="/browse/newly-added" className="textlink-quiet">Newly added</Link>
-        <Link to="/browse/popular" className="textlink-quiet">Popular now</Link>
+        <Link to="/browse/popular" className="textlink-quiet">Most wanted</Link>
         <Link to="/browse/by-category" className="textlink-quiet">By category</Link>
         <Link to="/browse/search" className="textlink-quiet">Advanced search</Link>
       </nav>
@@ -81,7 +81,7 @@ const Browse = () => {
                 <BookRow books={data.recommended} />
               </Section>
 
-              <Section title="Popular now">
+              <Section title="Most wanted">
                 <BookRow books={data.popular} />
               </Section>
 

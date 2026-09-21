@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import BookCover from '../BookCover';
 
-// The shared record list behind Newly Added, Popular Now and a genre: one row
+// The shared record list behind Newly Added, Most Wanted and a genre: one row
 // per book, hairline-separated, with the cover small and the title leading.
 const BookList = ({ books, emptyLabel }) => {
   if (!books?.length) return <p className="no-books">{emptyLabel}</p>;
