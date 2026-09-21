@@ -173,6 +173,11 @@
   padding-bottom: var(--space-1);
 }
 
+/* A search field set in the head, e.g. on Browse and Messages. */
+.page-head__search {
+  width: min(360px, 40vw);
+}
+
 /* The small tracked capital line above a headline. */
 .kicker {
   margin-bottom: var(--space-3);
@@ -531,6 +536,8 @@
 /* Segmented control - one row of choices divided by hairlines. */
 .segmented {
   display: inline-flex;
+  /* Keeps its own width when it is a grid item, e.g. inside a dialog. */
+  justify-self: start;
   border: var(--border-strong);
 }
 
@@ -893,10 +900,6 @@ a.book-tile:focus-visible .book-tile__title {
 /* ======================================================================
    Browse
    ====================================================================== */
-
-.browse-search {
-  width: min(360px, 40vw);
-}
 
 /* Standing links to the Browse subsections, set as a rule-separated row. */
 .browse-links {
@@ -1849,7 +1852,8 @@ a.list-row:focus-visible .textlink-arrow__mark {
 .page--chat {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--header-h));
+  /* The header is --header-h tall plus its hairline. */
+  height: calc(100vh - var(--header-h) - 1px);
   padding-top: var(--space-8);
   padding-bottom: var(--space-8);
 }

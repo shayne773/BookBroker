@@ -1,6 +1,6 @@
-import './Feed.css';
 import { useState, useEffect } from "react";
 import { authFetch, isSessionExpiredError } from './auth';
+import BookCover from './BookCover';
 
 const Feed = () => {
   const [booksData, setBooksData] = useState([]);
@@ -25,27 +25,37 @@ const Feed = () => {
   }, []);
 
   return (
-    <main className="Feed">
-      <h1 className="feed-title">For You</h1>
+    <main className="page">
+      <div className="page-head">
+        <div className="page-head__main">
+          <p className="kicker">Recommended</p>
+          <h1 className="page-title">For You</h1>
+        </div>
+      </div>
 
       {/* Books */}
-      <div className="feed-books">
-        {booksData.map((book, index) => (
-          <div key={index} className="feed-book">
-            <img
-              src={book.cover || 'https://via.placeholder.com/128x192?text=No+Cover'}
-              alt="Book Cover"
-            />
-            <div className="feed-book-text">
-              <h2>{book.title || "[NO TITLE]"}</h2>
-              <p>{book.year || "[NO YEAR]"}</p>
-              <p>{book.author || "[NO AUTHOR]"}</p>
-            </div>
-            <a href={`/books/${book._id}`} className="feed-book-button">
-              <button className="interest-btn">Show Interest</button>
-            </a>
-          </div>
-        ))}
+      <div className="section">
+        <div className="book-grid">
+          {booksData.map((book, index) => (
+            <article key={index} className="book-tile">
+              <span className="cover">
+                <BookCover src={book.cover} />
+              </span>
+              <h2 className="book-tile__title">{book.title || "[NO TITLE]"}</h2>
+              <p className="book-tile__meta">
+                {book.year || "[NO YEAR]"}
+                <br />
+                {book.author || "[NO AUTHOR]"}
+              </p>
+              <a
+                href={`/books/${book._id}`}
+                className="button button--secondary button--small button--block tile-action"
+              >
+                Show Interest
+              </a>
+            </article>
+          ))}
+        </div>
       </div>
     </main>
   );
