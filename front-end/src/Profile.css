@@ -12,10 +12,12 @@
   gap: 14px;
 }
 
-/* If Profile is wrapped by a parent div, make sure the background shows */
-body {
-  background: #0b0f17;
-}
+/*
+ * A `body` background used to be set here so Profile's dark page showed through
+ * any gap. It was global, so it painted every other screen dark too; the
+ * redesigned pages need the paper background from styles/base.css. `.profile`
+ * below still covers its own viewport, so only the rule leaking out is gone.
+ */
 
 /* Title pill (match Home) */
 .titlebox {

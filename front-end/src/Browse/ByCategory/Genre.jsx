@@ -1,11 +1,8 @@
-import './Genre.css';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-
-const fallbackCover = 'https://via.placeholder.com/128x192?text=No+Cover';
+import BookList from '../BookList';
 
 const Genre = () => {
-  const navigate = useNavigate();
   const { genre } = useParams();
   const [books, setBooks] = useState([]);
 
@@ -20,33 +17,24 @@ const Genre = () => {
   }, [genre]);
 
   return (
-    <main className="Genre">
-      <h1 className="genre-title">{genre.charAt(0).toUpperCase() + genre.slice(1)}</h1>
+    <main className="page page--reading">
+      <div className="page-head">
+        <div className="page-head__main">
+          <p className="kicker">Genre</p>
+          <h1 className="page-title">
+            {genre.charAt(0).toUpperCase() + genre.slice(1)}
+          </h1>
+        </div>
 
-      <div className="genre-books">
-        {books.length > 0 ? (
-          books.map((book) => (
-            <div key={book._id} className="genre-book">
-              <img
-                src={book.cover || fallbackCover}
-                alt={book.title || "Book Cover"}
-              />
-
-              <div className="genre-book-text">
-                <h2>{book.title || "[NO TITLE]"}</h2>
-                <p>{book.year || "[NO DATE]"}</p>
-                <p>{book.author || "[NO AUTHOR]"}</p>
-              </div>
-
-              <Link to={`/books/${book._id}`} className="genre-book-button">
-                <button className="interest-btn">Show Interest</button>
-              </Link>
-            </div>
-          ))
-        ) : (
-          <p className="no-books">No books found in this genre.</p>
-        )}
+        <div className="page-head__aside">
+          <Link to="/browse/by-category" className="textlink-quiet">
+            <span className="textlink-arrow__mark textlink-arrow__mark--back" aria-hidden="true">&larr;</span>
+            All genres
+          </Link>
+        </div>
       </div>
+
+      <BookList books={books} emptyLabel="No books found in this genre." />
     </main>
   );
 };

@@ -1,7 +1,7 @@
 // src/Browse/Search.jsx
-import "./Search.css";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { GoogleSuggestions, GoogleSelection, MarketResults } from "./SearchResults";
 import { authFetch, isSessionExpiredError } from "../auth";
 
 const fetchBooksFromGoogle = async (query) => {
@@ -234,211 +234,134 @@ export default function Search() {
   };
 
   return (
-    <main className="SearchPage">
-      <div className="SearchSticky">
-        <header className="SearchTop">
-          <button className="SearchBack" onClick={() => navigate("/browse")} aria-label="Back">
-            ←
-          </button>
-          <h1 className="SearchTitle">Search</h1>
-          <div className="SearchTopSpacer" />
-        </header>
+    <main className="page page--reading">
+      <button className="back-link" onClick={() => navigate("/browse")}>
+        <span className="back-link__mark" aria-hidden="true">&larr;</span>
+        Browse
+      </button>
 
-        <div className="SearchToggleRow">
-          <button
-            className={`SearchToggle ${mode === "market" ? "active" : ""}`}
-            onClick={() => {
-              setMode("market");
-              setError("");
-              setGoogleResults([]);
-              setSelectedGoogleBook(null);
-              setShowDropdown(false);
-              setBooksData([]);
-              setHasSearched(false);
-            }}
-          >
-            Marketplace
-          </button>
-
-          <button
-            className={`SearchToggle ${mode === "google" ? "active" : ""}`}
-            onClick={() => {
-              setMode("google");
-              setError("");
-              setBooksData([]);
-              setHasSearched(false);
-              // keep input
-            }}
-          >
-            Google Books
-          </button>
+      <div className="page-head">
+        <div className="page-head__main">
+          <p className="kicker">Find a book</p>
+          <h1 className="page-title">Search</h1>
         </div>
 
-        <div className="SearchBar">
-          <input
-            type="text"
-            placeholder={mode === "market" ? "Search offered books (title/author)" : "Search Google Books"}
-            value={inputValue}
-            onChange={(e) => onChangeInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onBlur={handleInputBlur}
-            onFocus={handleInputFocus}
-            autoComplete="off"
-          />
-
-          {inputValue && (
-            <button className="SearchClear" onClick={clearAll} aria-label="Clear">
-              ×
+        <div className="page-head__aside">
+          <div className="segmented" role="group" aria-label="Where to search">
+            <button
+              type="button"
+              className={`segmented__option ${mode === "market" ? "is-active" : ""}`}
+              aria-pressed={mode === "market"}
+              onClick={() => {
+                setMode("market");
+                setError("");
+                setGoogleResults([]);
+                setSelectedGoogleBook(null);
+                setShowDropdown(false);
+                setBooksData([]);
+                setHasSearched(false);
+              }}
+            >
+              Marketplace
             </button>
-          )}
 
-          {mode === "market" ? (
-            <button className="SearchBtn" onClick={handleMarketSearch} disabled={loading || query.length < 2}>
-              {loading ? "..." : "Search"}
+            <button
+              type="button"
+              className={`segmented__option ${mode === "google" ? "is-active" : ""}`}
+              aria-pressed={mode === "google"}
+              onClick={() => {
+                setMode("google");
+                setError("");
+                setBooksData([]);
+                setHasSearched(false);
+                // keep input
+              }}
+            >
+              Google Books
             </button>
-          ) : (
-            <button className="SearchBtn" disabled>
-              {loading ? "..." : "Live"}
-            </button>
-          )}
-
-          {/* ✅ Google dropdown (reliably closes) */}
-          {mode === "google" && showDropdown && googleResults.length > 0 && !selectedGoogleBook && (
-            <ul className="search-dropdown">
-              {googleResults.map((book, idx) => (
-                <li
-                  key={idx}
-                  onMouseDown={(e) => pickGoogleBook(book, e)}
-                  onTouchStart={(e) => pickGoogleBook(book, e)}
-                >
-                  <img
-                    src={book.cover || "/default-book.png"}
-                    alt="cover"
-                    width="40"
-                    height="60"
-                    style={{ marginRight: "10px", objectFit: "cover", borderRadius: "8px" }}
-                    onError={(e) => {
-                      e.currentTarget.src = "/default-book.png";
-                    }}
-                  />
-                  <span className="DropdownText">
-                    <span className="DropdownTitle">{book.title}</span>
-                    <span className="DropdownSub">{book.author}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {error && (
-          <div className="SearchError compact">
-            <div className="SearchErrorTitle">Search failed</div>
-            <div className="SearchErrorText">{error}</div>
           </div>
+        </div>
+      </div>
+
+      <div className="search-bar">
+        <label className="visually-hidden" htmlFor="search-input">
+          {mode === "market" ? "Search offered books" : "Search Google Books"}
+        </label>
+
+        <input
+          id="search-input"
+          type="text"
+          className="input search-bar__input"
+          placeholder={mode === "market" ? "Search offered books (title/author)" : "Search Google Books"}
+          value={inputValue}
+          onChange={(e) => onChangeInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={handleInputBlur}
+          onFocus={handleInputFocus}
+          autoComplete="off"
+        />
+
+        {inputValue && (
+          <button className="button button--quiet" onClick={clearAll} aria-label="Clear">
+            Clear
+          </button>
+        )}
+
+        {mode === "market" ? (
+          <button
+            className="button button--primary"
+            onClick={handleMarketSearch}
+            disabled={loading || query.length < 2}
+          >
+            {loading ? "Searching\u2026" : "Search"}
+          </button>
+        ) : (
+          <button className="button button--secondary" disabled>
+            {loading ? "Searching\u2026" : "Live"}
+          </button>
+        )}
+
+        {mode === "google" && showDropdown && googleResults.length > 0 && !selectedGoogleBook && (
+          <GoogleSuggestions results={googleResults} onPick={pickGoogleBook} />
         )}
       </div>
 
-      <div className="SearchScrollArea">
-        {/* Google selected card */}
-        {mode === "google" && selectedGoogleBook && (
-          <div className="GoogleSelectedCard">
-            <div className="GoogleSelectedTop">
-              <img
-                className="GoogleSelectedCover"
-                src={selectedGoogleBook.cover || "/default-book.png"}
-                alt="cover"
-                onError={(e) => {
-                  e.currentTarget.src = "/default-book.png";
-                }}
-              />
-              <div className="GoogleSelectedMeta">
-                <div className="GoogleSelectedTitle">{selectedGoogleBook.title}</div>
-                <div className="GoogleSelectedSub">
-                  {selectedGoogleBook.author} {selectedGoogleBook.year ? `· ${selectedGoogleBook.year}` : ""}
-                </div>
-                <div className="GoogleSelectedSub subtle">
-                  {selectedGoogleBook.publisher ? selectedGoogleBook.publisher : ""}
-                  {selectedGoogleBook.isbn ? ` · ISBN ${selectedGoogleBook.isbn}` : ""}
-                </div>
-              </div>
-            </div>
+      {error && (
+        <p className="notice notice--error" role="alert">
+          <span className="notice__title">Search failed.</span> {error}
+        </p>
+      )}
 
-            <div className="GoogleSelectedActions">
-              <button className="SearchInterestBtn" onClick={addToWishlist} disabled={loading}>
-                Add to Wishlist
-              </button>
-              <button className="SearchInterestBtn" onClick={addToOfferings} disabled={loading}>
-                Add to Offerings
-              </button>
-              <button className="SearchSecondaryBtn" onClick={clearAll} disabled={loading}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
+      {/* Google selected card */}
+      {mode === "google" && selectedGoogleBook && (
+        <GoogleSelection
+          book={selectedGoogleBook}
+          loading={loading}
+          onWishlist={addToWishlist}
+          onOffer={addToOfferings}
+          onCancel={clearAll}
+        />
+      )}
 
-        {/* Marketplace results */}
-        {mode === "market" && (
-          <section className="SearchResults">
-            {!hasSearched && (
-              <div className="SearchHint">
-                Type at least <b>2</b> characters, then press <b>Enter</b> or tap <b>Search</b>.
-              </div>
-            )}
+      {/* Marketplace results */}
+      {mode === "market" && (
+        <section>
+          {!hasSearched && (
+            <p className="hint search-note">
+              Type at least <b>2</b> characters, then press <b>Enter</b> or choose <b>Search</b>.
+            </p>
+          )}
 
-            {hasSearched && !loading && (
-              <>
-                {booksData.length > 0 ? (
-                  booksData.map((book, index) => (
-                    <div key={book._id || index} className="SearchCard">
-                      <div className="SearchCover">
-                        <img
-                          src={book.cover || "/default-book.png"}
-                          alt={book.title ? `${book.title} cover` : "Book cover"}
-                          onError={(e) => {
-                            e.currentTarget.src = "/default-book.png";
-                          }}
-                        />
-                      </div>
+          {hasSearched && !loading && <MarketResults books={booksData} />}
+        </section>
+      )}
 
-                      <div className="SearchMeta">
-                        <div className="SearchCardTop">
-                          <h2 className="SearchBookTitle">{book.title || "[NO TITLE]"}</h2>
-                          {book.year && <span className="SearchYear">{book.year}</span>}
-                        </div>
-
-                        <div className="SearchSub">{book.author || "[NO AUTHOR]"}</div>
-
-                        <div className="SearchActions">
-                          {book._id ? (
-                            <Link to={`/books/${book._id}`} className="SearchLink">
-                              <button className="SearchInterestBtn">Show Interest</button>
-                            </Link>
-                          ) : (
-                            <button className="SearchInterestBtn" disabled title="Missing book id">
-                              Show Interest
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="SearchEmpty">No books found for this search.</p>
-                )}
-              </>
-            )}
-          </section>
-        )}
-
-        {/* Google hint */}
-        {mode === "google" && !selectedGoogleBook && query.length < 2 && (
-          <div className="SearchHint">
-            Type at least <b>2</b> characters to see suggestions.
-          </div>
-        )}
-      </div>
+      {/* Google hint */}
+      {mode === "google" && !selectedGoogleBook && query.length < 2 && (
+        <p className="hint search-note">
+          Type at least <b>2</b> characters to see suggestions.
+        </p>
+      )}
     </main>
   );
 }

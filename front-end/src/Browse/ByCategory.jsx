@@ -1,9 +1,7 @@
-import './ByCategory.css';
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useEffect, useState } from 'react';
 
 const ByCategory = () => {
-  const navigate = useNavigate();
   const [genres, setGenres] = useState([]);
 
   useEffect(() => {
@@ -19,19 +17,33 @@ const ByCategory = () => {
   }, []);
 
   return (
-    <main className="ByCategory">
-      <div className="titlebox">
-        <h1 className='title'>Choose a Genre</h1>
+    <main className="page page--reading">
+      <div className="page-head">
+        <div className="page-head__main">
+          <p className="kicker">Browse</p>
+          <h1 className="page-title">Choose a Genre</h1>
+        </div>
+
+        <div className="page-head__aside">
+          <Link to="/browse" className="textlink-quiet">
+            <span className="textlink-arrow__mark textlink-arrow__mark--back" aria-hidden="true">&larr;</span>
+            All of Browse
+          </Link>
+        </div>
       </div>
+
       <ul className="category-list">
         {genres.map((genre, index) => (
           <li key={index}>
-            <button
-              onClick={() => navigate(`/browse/by-category/${encodeURIComponent(genre.toLowerCase())}`)}
-              className="category-btn"
+            <Link
+              to={`/browse/by-category/${encodeURIComponent(genre.toLowerCase())}`}
+              className="category-item"
             >
-              {genre.charAt(0).toUpperCase() + genre.slice(1)}
-            </button>
+              <span className="category-item__name">
+                {genre.charAt(0).toUpperCase() + genre.slice(1)}
+              </span>
+              <span className="textlink-arrow__mark" aria-hidden="true">&rarr;</span>
+            </Link>
           </li>
         ))}
       </ul>

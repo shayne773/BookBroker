@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import './Home.css';
 import { Link } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from './auth';
+
+const FALLBACK_COVER = '/default-book.png';
 
 const Home = () => {
     const [books, setBooks] = useState([]);
@@ -48,11 +49,11 @@ const Home = () => {
     }, [userId]);
 
     useEffect(() => {
-        // Intersection Observer for fade-in
+        // Intersection Observer for the scroll reveal
         const callback = (entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
-                    entry.target.classList.add('fade-in');
+                    entry.target.classList.add('is-revealed');
                 }
             });
         };
@@ -92,79 +93,125 @@ const Home = () => {
         });
     };
 
+    // The first book runs as the lead story; the rest sit on the grid below it.
+    const [lead, ...rest] = books;
+
     return (
-    <main className="Home">
-        <div className="home-header">
-        <div className="titlebox">
-            <h1 className="title">Home</h1>
-        </div>
+    <main className="page">
+        <div className="page-head">
+            <div className="page-head__main">
+                <p className="kicker">Today's picks</p>
+                <h1 className="page-title">Home</h1>
+            </div>
 
-        <div className="home-header-message">
-            <h3 className="subtle">Today's picks</h3>
-
-            <Link to="/browse" className="home-cta">
-            Browse the full feed →
-            </Link>
-        </div>
+            <div className="page-head__aside">
+                <Link to="/browse" className="textlink-quiet">
+                    Browse the full feed
+                    <span className="textlink-arrow__mark" aria-hidden="true">&rarr;</span>
+                </Link>
+            </div>
         </div>
 
         {/* success toast for adding book */}
         {showToast && (
-        <div className="toast-success">
-            Book added to wishlist!
+        <div className="toast" role="status">
+            Book added to wishlist
         </div>
         )}
 
-        <div>
         {books.length > 0 ? (
-            books.map((book, index) => (
-            <div
-                key={book._id || index}
-                className="home-book-screen fade-start"
-                ref={(el) => (screenRefs.current[index] = el)}
-            >
-                <div className="home-book-wrapper">
-                <div
-                    className="home-book-blur"
-                    style={{
-                    backgroundImage: `url(${book.cover || '/default-book.png'})`
-                    }}
-                />
-
-                <Link to={`/books/${book._id}`} className="home-book-link">
-                    <img
-                    src={book.cover || "/default-book.png"}
-                    alt="Book Cover"
-                    className="home-book-image"
-                    />
-                    <div className="home-book-info-centered">
-                    <p className="home-book-title">{book.title || "[NO TITLE]"}</p>
-                    <p className="home-book-year">{book.year || "[NO DATE]"}</p>
-                    <p className="home-book-author">{book.author || "[NO AUTHOR]"}</p>
-                    </div>
-                </Link>
-
-                <div className="home-book-actions">
-                    <button
-                    className="home-book-btn wishlist-btn"
-                    onClick={() => handleAddBook(book)}
-                    >
-                    Add to Wishlist
-                    </button>
-
-                    <Link to={`/books/${book._id}`}>
-                    <button className="home-book-btn details-btn">
-                        View Details
-                    </button>
+            <>
+                <article
+                    className="lead reveal"
+                    ref={(el) => (screenRefs.current[0] = el)}
+                >
+                    <Link to={`/books/${lead._id}`} className="lead__cover cover">
+                        <img
+                            src={lead.cover || FALLBACK_COVER}
+                            alt=""
+                            className="cover__img"
+                        />
                     </Link>
-                </div>
-                </div>
-            </div>
-            ))
+
+                    <div className="lead__body">
+                        <p className="kicker">Lead pick</p>
+
+                        <h2 className="lead__title">
+                            <Link to={`/books/${lead._id}`} className="headline-link">
+                                {lead.title || "[NO TITLE]"}
+                            </Link>
+                        </h2>
+
+                        <p className="lead__byline">
+                            {lead.author || "[NO AUTHOR]"} &middot; {lead.year || "[NO DATE]"}
+                        </p>
+
+                        {lead.desc && <p className="prose lead__desc">{lead.desc}</p>}
+
+                        <div className="button-row lead__actions">
+                            <button
+                                className="button button--primary"
+                                onClick={() => handleAddBook(lead)}
+                            >
+                                Add to Wishlist
+                            </button>
+
+                            <Link to={`/books/${lead._id}`} className="button button--secondary">
+                                View Details
+                            </Link>
+                        </div>
+                    </div>
+                </article>
+
+                {rest.length > 0 && (
+                    <section className="section">
+                        <div className="section-head">
+                            <h2 className="section-title">More in your feed</h2>
+                            <span className="section-count">{rest.length} books</span>
+                        </div>
+
+                        <div className="book-grid">
+                            {rest.map((book, index) => (
+                                <article
+                                    key={book._id || index}
+                                    className="reveal"
+                                    ref={(el) => (screenRefs.current[index + 1] = el)}
+                                >
+                                    <Link to={`/books/${book._id}`} className="book-tile">
+                                        <span className="cover">
+                                            <img
+                                                src={book.cover || FALLBACK_COVER}
+                                                alt=""
+                                                className="cover__img"
+                                            />
+                                        </span>
+
+                                        <span className="book-tile__title">
+                                            {book.title || "[NO TITLE]"}
+                                        </span>
+
+                                        <span className="book-tile__meta">
+                                            {book.author || "[NO AUTHOR]"}
+                                            <br />
+                                            {book.year || "[NO DATE]"}
+                                        </span>
+                                    </Link>
+
+                                    <button
+                                        className="button button--secondary button--small button--block tile-action"
+                                        onClick={() => handleAddBook(book)}
+                                    >
+                                        Add to Wishlist
+                                    </button>
+                                </article>
+                            ))}
+                        </div>
+                    </section>
+                )}
+            </>
         ) : (
             <p className="no-books">No books found in this genre.</p>
         )}
-        </div>
     </main>
     );
 

@@ -1,6 +1,6 @@
-import './PopularNow.css';
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import BookList from './BookList';
 
 const PopularNow = () => {
     const [books, setBooks] = useState([]);
@@ -16,33 +16,22 @@ const PopularNow = () => {
     }, []);
 
     return (
-        <main className="PopularNow">
-            <h1 className="popular-title">Popular Now</h1>
+        <main className="page page--reading">
+            <div className="page-head">
+                <div className="page-head__main">
+                    <p className="kicker">Browse</p>
+                    <h1 className="page-title">Popular Now</h1>
+                </div>
 
-            <div className="popular-books">
-                {books.length > 0 ? (
-                    books.map((book) => (
-                        <div key={book._id || book.id} className="popular-book">
-                            <img
-                                src={book.cover || '/default-book.png'}
-                                alt="Book Cover"
-                            />
-
-                            <div className="popular-book-text">
-                                <h2>{book.title || "[NO TITLE]"}</h2>
-                                <p>{book.year || "[NO DATE]"}</p>
-                                <p>{book.author || "[NO AUTHOR]"}</p>
-                            </div>
-
-                            <Link to={`/books/${book._id || book.id}`}>
-                                <button className="interest-btn">Show Interest</button>
-                            </Link>
-                        </div>
-                    ))
-                ) : (
-                    <p className="no-books">No popular books found.</p>
-                )}
+                <div className="page-head__aside">
+                    <Link to="/browse" className="textlink-quiet">
+                        <span className="textlink-arrow__mark textlink-arrow__mark--back" aria-hidden="true">&larr;</span>
+                        All of Browse
+                    </Link>
+                </div>
             </div>
+
+            <BookList books={books} emptyLabel="No popular books found." />
         </main>
     );
 };

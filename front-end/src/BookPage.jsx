@@ -1,8 +1,8 @@
-import './BookPage.css';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { FaAngleLeft } from 'react-icons/fa';
 import { authFetch, isSessionExpiredError } from './auth';
+
+const FALLBACK_COVER = 'https://via.placeholder.com/128x192?text=No+Cover';
 
 const BookPage = () => {
   const { id } = useParams();
@@ -10,7 +10,6 @@ const BookPage = () => {
 
   const [isInWishlist, setIsInWishlist] = useState(false);
   const navigate = useNavigate();
-  const userId = localStorage.getItem("userId");
 
   const addToWishlist = () => {
     const bookData = {
@@ -94,61 +93,84 @@ const BookPage = () => {
   }, [book.isbn]);
 
   return (
-    <main className="BookPage page-slide-in">
-      <div className="bookpage-header">
-        <button className="iconButton backButton" onClick={() => navigate(-1)}>
-          <FaAngleLeft />
-        </button>
-      </div>
+    <main className="page page--reading">
+      <button className="back-link" onClick={() => navigate(-1)}>
+        <span className="back-link__mark" aria-hidden="true">&larr;</span>
+        Back
+      </button>
 
-      <div className="book-title-section">
-        <img
-          src={book.cover || 'https://via.placeholder.com/128x192?text=No+Cover'}
-          alt="book"
-        />
-        <div className="book-info-section">
-          <h1 className="book-title">{book.title || "[NO TITLE]"}</h1>
-          <h3 className="book-author">
+      <article className="book">
+        <header className="book__head">
+          <p className="kicker">{book.genre || "[NO GENRE]"}</p>
+
+          <h1 className="book__title">{book.title || "[NO TITLE]"}</h1>
+
+          <p className="book__byline">
             {book.author || "[NO AUTHOR]"}, {book.year || "[NO DATE]"}
-          </h3>
-          <h2 className="book-owner">
-            Offered by:
-            <Link to={`/users/${book.owner?.id}`}>
-              {book.owner?.username || "[NO USER]"}
-            </Link>
-          </h2>
-        </div>
-      </div>
+          </p>
+        </header>
 
-      <div className="book-page-actions">
-        {isInWishlist ? (
-          <div className="wishlist-pill">
-            ✓ In your wishlist
+        <div className="book__body">
+          <div className="book__aside">
+            <div className="cover">
+              <img
+                src={book.cover || FALLBACK_COVER}
+                alt=""
+                className="cover__img"
+              />
+            </div>
+
+            <div className="book__actions">
+              {isInWishlist ? (
+                <p className="notice" role="status">
+                  <span aria-hidden="true">&#10003;</span> In your wishlist
+                </p>
+              ) : (
+                <button className="button button--primary button--block" onClick={addToWishlist}>
+                  Add to Wishlist
+                </button>
+              )}
+
+              <button
+                className="button button--secondary button--block"
+                onClick={openConversationWithOwner}
+              >
+                Contact Owner
+              </button>
+            </div>
           </div>
-        ) : (
-          <button className="book-action-btn wishlist-btn" onClick={addToWishlist}>
-            Add to Wishlist
-          </button>
-        )}
-        <button className="book-action-btn contact-btn" onClick={openConversationWithOwner}>
-          Contact Owner
-        </button>
-      </div>
 
-      <div className="book-description-section">
-        <h1 className="about-this-book">About this book</h1>
-        <p>{book.desc || "[NO DESC]"}</p>
-      </div>
+          <div className="book__main">
+            <section className="book__section">
+              <h2 className="fact__term">Offered by</h2>
+              <p className="fact__value">
+                <Link to={`/users/${book.owner?.id}`} className="textlink">
+                  {book.owner?.username || "[NO USER]"}
+                </Link>
+              </p>
+            </section>
 
-      <div className="isbn-section">
-        <h1 className="isbn-header">ISBN</h1>
-        <h3 className="book-isbn">{book.isbn || "[NO ISBN]"}</h3>
-      </div>
+            <section className="book__section">
+              <h2 className="fact__term">About this book</h2>
+              <p className="prose">{book.desc || "[NO DESC]"}</p>
+            </section>
 
-      <div className="genre-section">
-        <h1 className="genre-header">Genre</h1>
-        <h3 className="book-genre">{book.genre || "[NO GENRE]"}</h3>
-      </div>
+            <section className="book__section">
+              <div className="facts facts--pair">
+                <div>
+                  <h2 className="fact__term">ISBN</h2>
+                  <p className="fact__value">{book.isbn || "[NO ISBN]"}</p>
+                </div>
+
+                <div>
+                  <h2 className="fact__term">Genre</h2>
+                  <p className="fact__value">{book.genre || "[NO GENRE]"}</p>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </article>
     </main>
   );
 };

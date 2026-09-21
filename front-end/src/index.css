@@ -1,29 +1,25 @@
-@tailwind base;
-@tailwind components;
+/*
+ * Stylesheet manifest. CSS requires every @import to precede other rules, so the
+ * cascade order of the design system is expressed here as import order, and each
+ * imported file opens with the Tailwind directive that belongs in front of it:
+ *
+ *   fonts -> tokens -> [preflight + base] -> [tw components + components] -> utilities
+ *
+ * That ordering is what lets base.css override Tailwind's preflight and lets a
+ * Tailwind utility override a component class.
+ */
+
+/* Self-hosted variable fonts - no runtime request to a font CDN. */
+@import '@fontsource-variable/source-serif-4';
+@import '@fontsource-variable/inter';
+
+/* Tokens first: every rule below reads these custom properties. */
+@import './styles/tokens.css';
+
+/* Opens with `@tailwind base` (preflight), then the app's element defaults. */
+@import './styles/base.css';
+
+/* Opens with `@tailwind components`, then the shared interface primitives. */
+@import './styles/components.css';
+
 @tailwind utilities;
-
-html, body, #root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  margin: 0;
-  overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
-}
-
-:root {
-  --brown: #38261e;
-  --bottom-nav-h: 72px;
-}
