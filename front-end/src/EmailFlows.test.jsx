@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ConfirmEmail from './ConfirmEmail';
+import ConfirmEmailChange from './ConfirmEmailChange';
 import ForgotPassword from './ForgotPassword';
 import ResetPassword from './ResetPassword';
 import Signup from './Signup';
@@ -17,6 +18,7 @@ const renderAt = (path) =>
         <Routes>
           <Route path="/signup" element={<Signup />} />
           <Route path="/confirm-email" element={<ConfirmEmail />} />
+          <Route path="/confirm-email-change" element={<ConfirmEmailChange />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
         </Routes>
@@ -116,4 +118,22 @@ test('reset password offers a new link when the token is spent', async () => {
 
   expect(await screen.findByText('This reset link has expired or has already been used.')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Request a new reset link' })).toHaveAttribute('href', '/forgot-password');
+});
+
+test('confirm-email-change spends the token once and reports the new address in effect', async () => {
+  global.fetch.mockResolvedValue(respond(200, { message: 'Email changed. Use your new address to sign in.' }));
+  renderAt('/confirm-email-change?token=xyz');
+
+  expect(await screen.findByRole('heading', { name: 'Email changed' })).toBeInTheDocument();
+  expect(global.fetch).toHaveBeenCalledTimes(1);
+  expect(global.fetch.mock.calls[0][0]).toMatch(/\/auth\/confirm-email-change$/);
+  expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({ token: 'xyz' });
+});
+
+test('confirm-email-change shows why a refused link did not work', async () => {
+  global.fetch.mockResolvedValue(respond(409, { message: 'Email already in use' }));
+  renderAt('/confirm-email-change?token=xyz');
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Email already in use');
+  expect(screen.getByText(/Your email has not changed/)).toBeInTheDocument();
 });

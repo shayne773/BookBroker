@@ -20,6 +20,7 @@ const Profile = () => {
 
   const [showToastWishlist, setShowToastWishlist] = useState(false);
   const [showToastOfferings, setShowToastOfferings] = useState(false);
+  const [editNotice, setEditNotice] = useState(null);
 
   const wishlistSearch = useBookSearch();
   const offerSearch = useBookSearch();
@@ -121,10 +122,13 @@ const Profile = () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     })
-      .then(res => res.json())
-      .then(() => {
+      .then(async res => ({ ok: res.ok, data: await res.json().catch(() => ({})) }))
+      .then(({ ok, data }) => {
         fetchUserData();
         close();
+        if (!ok) setEditNotice({ error: true, message: data.message || 'Your profile could not be updated.' });
+        else if (data.confirmationSentTo) setEditNotice({ error: false, message: data.message });
+        else setEditNotice(null);
       })
       .catch(err => {
         if (isSessionExpiredError(err)) return;
@@ -170,6 +174,15 @@ const Profile = () => {
           Log out
         </button>
       </ProfileHead>
+
+      {editNotice && (
+        <p
+          className={editNotice.error ? 'notice notice--error mt-4' : 'notice mt-4'}
+          role={editNotice.error ? 'alert' : 'status'}
+        >
+          {editNotice.message}
+        </p>
+      )}
 
       <div className="split">
         <ShelfPreview

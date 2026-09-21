@@ -52,7 +52,7 @@ const FRONTEND_BASE_URL = resolveFrontEndBaseUrl();
 
 const HOUR = 60 * 60 * 1000;
 
-// Limits on the two endpoints that send mail on request, so neither can be used
+// Limits on the endpoints that send mail on request, so neither can be used
 // to flood an inbox or to run up the sending quota. Every request counts, per
 // address and per client, whether or not the address has an account.
 const mailThrottles = (endpoint) => ({
@@ -71,6 +71,7 @@ const mailThrottles = (endpoint) => ({
 });
 const resendConfirmationThrottles = mailThrottles("resend-confirmation");
 const forgotPasswordThrottles = mailThrottles("forgot-password");
+const changeEmailThrottles = mailThrottles("change-email");
 
 const MAIL_THROTTLED_MESSAGE = "Too many requests. Please try again later.";
 
@@ -258,6 +259,43 @@ app.post("/auth/confirm-email", async (req, res, next) => {
     }
 
     res.json({ message: "Email confirmed. You can sign in now." });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/auth/confirm-email-change", async (req, res, next) => {
+  try {
+    const userId = await consumeToken(TOKEN_PURPOSES.changeEmail, req.body?.token);
+    const user = userId ? await User.findById(userId) : null;
+
+    if (!user?.pendingEmail) {
+      return res.status(400).json({
+        message: "This confirmation link has expired or has already been used.",
+        code: TOKEN_INVALID,
+      });
+    }
+
+    // Another account may have taken the address since the link was sent.
+    const owner = await findUserByEmail(user.pendingEmail);
+    if (owner && !owner._id.equals(user._id)) {
+      await User.updateOne({ _id: user._id }, { $unset: { pendingEmail: 1 } });
+      return res.status(409).json({ message: "Email already in use" });
+    }
+
+    user.email = user.pendingEmail;
+    user.pendingEmail = undefined;
+    try {
+      await user.save();
+    } catch (err) {
+      if (err?.code !== 11000) throw err;
+      return res.status(409).json({ message: "Email already in use" });
+    }
+
+    // Reset links went to the old address; none of them may outlive the change.
+    await revokeTokens(TOKEN_PURPOSES.resetPassword, user._id);
+
+    res.json({ message: "Email changed. Use your new address to sign in." });
   } catch (err) {
     next(err);
   }
@@ -608,7 +646,7 @@ app.get("/browse", authMiddleware, async (req, res, next) => {
 
 app.get("/user", authMiddleware, async (req, res, next) => {
   try {
-    const me = await User.findById(req.user.userId).select("_id username email location ratings");
+    const me = await User.findById(req.user.userId).select("_id username email pendingEmail location ratings");
     if (!me) return res.status(404).json({ message: "User not found" });
     return res.json(me);
   } catch (err) {
@@ -809,6 +847,9 @@ app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
     if (username?.trim()) update.username = username.trim();
     if (location?.trim()) update.location = location.trim();
 
+    // A new address only becomes the account's email once the link mailed to it
+    // is followed; until then it is held as pending.
+    let pendingEmail = null;
     if (email) {
       // The lookup is case-insensitive, so this also refuses an address that
       // only differs in casing from an account stored before normalization.
@@ -816,14 +857,32 @@ app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
       if (owner && owner._id.toString() !== userId) {
         return res.status(409).json({ message: "Email already in use" });
       }
-      update.email = email;
+      if (!owner) {
+        if (await mailRequestLimited(changeEmailThrottles, req, res, email)) return;
+        pendingEmail = email;
+        update.pendingEmail = email;
+      }
     }
 
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { $set: update },
       { new: true }
-    ).select("_id username email location ratings");
+    ).select("_id username email pendingEmail location ratings");
+
+    if (pendingEmail && updatedUser) {
+      const token = await issueToken(TOKEN_PURPOSES.changeEmail, updatedUser._id);
+      sendInBackground(
+        mail.sendEmailChangeConfirmation(pendingEmail, frontEndLink("/confirm-email-change", token)),
+        "email change confirmation"
+      );
+      return res.json({
+        message: `We sent a confirmation link to ${pendingEmail}. Your email changes once you follow it.`,
+        confirmationSentTo: pendingEmail,
+        user: updatedUser,
+      });
+    }
+
     res.json({ message: "User updated", user: updatedUser });
   } catch (err) {
     console.error("Error updating user:", err);

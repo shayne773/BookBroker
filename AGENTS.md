@@ -67,7 +67,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   Resend and an `EMAIL_FROM` on it. Links are built from `FRONTEND_BASE_URL` (required in
   production), never the request's Host. See `back-end/.env.example`.
 - Emailed-link tokens live in `back-end/lib/authTokens.js`: stored as a SHA-256 hash,
-  single-use, expiring (confirm 24 h, reset 1 h).
+  single-use, expiring (confirm 24 h, reset 1 h, email change 24 h).
+- A profile email change is held in `User.pendingEmail`; `email` stays in effect for sign-in
+  and reset until `/auth/confirm-email-change` switches it and revokes reset links.
 - `User.emailVerified` defaults to `true` so accounts from before confirmation count as
   confirmed with no backfill; sign-up stores `false` and login refuses only an explicit
   `false`. Keep both halves if you touch it.

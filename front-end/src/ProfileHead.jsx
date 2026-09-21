@@ -21,6 +21,9 @@ const ProfileHead = ({ kicker, user, children }) => (
       <div>
         <dt className="fact__term">Email</dt>
         <dd className="fact__value">{user?.email}</dd>
+        {user?.pendingEmail && (
+          <dd className="hint">Waiting for confirmation: {user.pendingEmail}</dd>
+        )}
       </div>
       <div>
         <dt className="fact__term">Location</dt>

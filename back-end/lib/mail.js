@@ -102,6 +102,19 @@ export const mail = {
     });
   },
 
+  sendEmailChangeConfirmation(to, link) {
+    return mail.deliver({
+      to,
+      subject: "Confirm your new email for BookBroker",
+      link,
+      ...renderEmail({
+        sentence: "Confirm this address to make it the email for your BookBroker account.",
+        action: "Confirm new email",
+        link,
+      }),
+    });
+  },
+
   sendPasswordReset(to, link) {
     return mail.deliver({
       to,
