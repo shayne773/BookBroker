@@ -2,7 +2,8 @@
 
 /* Full page */
 .MsgDetail{
-  height: 100vh;
+  /* the site header sits above this screen; the bottom nav bar is gone */
+  height: calc(100vh - var(--header-h));
   background: #0b0f17;
   color: #e9eef7;
   display: flex;
@@ -67,8 +68,8 @@
   overflow: hidden;
   padding: 10px 14px;
 
-  /* leave space for the fixed composer + bottom nav */
-  padding-bottom: calc(16px + 54px + var(--bottom-nav-h));
+  /* leave space for the fixed composer (the bottom nav bar is gone) */
+  padding-bottom: calc(16px + 54px);
 }
 
 .MsgList{
@@ -148,14 +149,14 @@
   margin-left: 4px;
 }
 
-/* Composer fixed ABOVE bottom nav */
+/* Composer fixed to the foot of the window */
 .MsgComposer{
   position: fixed;
   left: 0;
   right: 0;
 
-  /* 👇 this pins the bar above your nav */
-  bottom: var(--bottom-nav-h);
+  /* was pinned above the bottom nav bar, which no longer exists */
+  bottom: 0;
 
   display: flex;
   gap: 10px;

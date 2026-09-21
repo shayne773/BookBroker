@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import "./Browse.css";
 import { authFetch, isSessionExpiredError } from "./auth";
+import BookCover from "./BookCover";
 
 const Browse = () => {
   const [query, setQuery] = useState("");
@@ -35,25 +35,41 @@ const Browse = () => {
   const showSearch = query.trim().length > 0;
 
   return (
-    <main className="BrowseOnePage">
-      <div className="browse-header">
-        <div className="titlebox">
-            <h1 className="title">Browse</h1>
+    <main className="page">
+      <div className="page-head">
+        <div className="page-head__main">
+          <p className="kicker">The marketplace</p>
+          <h1 className="page-title">Browse</h1>
         </div>
-        <input
-          className="browse-search"
-          placeholder="Search title or author..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+
+        <div className="page-head__aside browse-search">
+          <label className="visually-hidden" htmlFor="browse-search">
+            Search title or author
+          </label>
+          <input
+            id="browse-search"
+            type="search"
+            className="input"
+            placeholder="Search title or author"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
       </div>
 
-      {loading && <div className="browse-loading">Loading…</div>}
+      <nav className="browse-links" aria-label="Browse sections">
+        <Link to="/browse/newly-added" className="textlink-quiet">Newly added</Link>
+        <Link to="/browse/popular" className="textlink-quiet">Popular now</Link>
+        <Link to="/browse/by-category" className="textlink-quiet">By category</Link>
+        <Link to="/browse/search" className="textlink-quiet">Advanced search</Link>
+      </nav>
+
+      {loading && <BookRowSkeleton />}
 
       {!loading && data && (
         <>
           {showSearch && (
-            <Section title={`Search results (${data.searchResults.length})`}>
+            <Section title="Search results" count={data.searchResults.length}>
               <BookRow books={data.searchResults} />
             </Section>
           )}
@@ -85,30 +101,57 @@ const Browse = () => {
   );
 };
 
-const Section = ({ title, children }) => (
-  <section className="browse-section">
-    <h3 className="browse-section-title">{title}</h3>
+const Section = ({ title, count, children }) => (
+  <section className="section">
+    <div className="section-head">
+      <h2 className="section-title">{title}</h2>
+      {count !== undefined && (
+        <span className="section-count">
+          {count} {count === 1 ? "book" : "books"}
+        </span>
+      )}
+    </div>
     {children}
   </section>
 );
 
 const BookRow = ({ books }) => {
-  if (!books?.length) return <div className="browse-empty">No books</div>;
+  if (!books?.length) return <div className="empty">No books</div>;
 
   return (
-    <div className="book-row">
+    <div className="book-grid book-grid--compact">
       {books.map((b) => (
-        <Link key={b._id} to={`/books/${b._id}`} className="book-card">
-          <div
-            className="book-cover"
-            style={{
-              backgroundImage: `url(${b.cover || "/default-book.png"})`,
-            }}
-          />
+        <Link key={b._id} to={`/books/${b._id}`} className="book-tile">
+          <span className="cover">
+            <BookCover src={b.cover} />
+          </span>
+
+          <span className="book-tile__title">{b.title || "[NO TITLE]"}</span>
+          <span className="book-tile__meta">{b.author || "[NO AUTHOR]"}</span>
         </Link>
       ))}
     </div>
   );
 };
+
+// Placeholders in the shape of the row that is coming, so the page does not
+// jump when the first payload lands.
+const BookRowSkeleton = () => (
+  <section className="section" aria-hidden="true">
+    <div className="section-head">
+      <span className="skeleton skeleton--line" style={{ width: "12rem" }} />
+    </div>
+
+    <div className="book-grid book-grid--compact">
+      {Array.from({ length: 7 }, (_, i) => (
+        <div key={i} className="stack">
+          <div className="skeleton skeleton--cover" />
+          <div className="skeleton skeleton--line" />
+          <div className="skeleton skeleton--line skeleton--line-short" />
+        </div>
+      ))}
+    </div>
+  </section>
+);
 
 export default Browse;

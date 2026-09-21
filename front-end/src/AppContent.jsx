@@ -26,51 +26,53 @@ import ExchangeDetail from "./ExchangeDetail";
 
 const AppContent = () => {
 
-  //variables for navbar conditionals
+  // The sign-in screens carry no navigation.
   const location = useLocation();
   const hideNavbarRoutes = ['/login', '/signup'];
   const shouldHideNavbar = hideNavbarRoutes.includes(location.pathname);
 
   return (
-    <>
-      <Routes>
-        <Route index element={<Navigate to="login" replace />} />
-        <Route path="login" element={<Login />} />
-        <Route path="signup" element={<Signup />} />
-
-        {/* Everything below needs a signed-in user. */}
-        <Route element={<RequireAuth />}>
-          <Route path="home" element={<Home />} />
-          <Route path="feed" element={<Feed />} />
-          <Route path="browse">
-            <Route index element={<Browse />} />
-            <Route path="newly-added" element={<NewlyAdded />} />
-            <Route path="popular" element={<PopularNow />} />
-            <Route path="search" element={<Search />} />
-            <Route path="by-category">
-              <Route index element={<ByCategory />} />
-              <Route path=":genre" element={<Genre />} />
-            </Route>
-          </Route>
-          <Route path="/exchanges" element={<ExchangesList />} />
-          <Route path="/exchanges/:exchangeId" element={<ExchangeDetail />} />
-          <Route path="profile">
-            <Route index element={<Profile />} />
-            <Route path="edit" element={<EditProfile />} />
-            <Route path="my-books" element={<MyBooks />} />
-            <Route path="my-trades" element={<MyTrades />} />
-          </Route>
-          <Route path="messages" element={<Messages />} />
-          <Route path="messages/:user" element={<MessagesDetail />} />
-          <Route path="books/:id" element={<BookPage />} />
-          <Route path="users/:id" element={<UserPage />} />
-          <Route path="users/:id/wishlist" element={<UserPageWishlist />} />
-          <Route path="users/:id/offered" element={<UserPageOffered />} />
-        </Route>
-      </Routes>
-
+    <div className="app-shell">
       {!shouldHideNavbar && <Navbar />}
-    </>
+
+      <div className="app-main">
+        <Routes>
+          <Route index element={<Navigate to="login" replace />} />
+          <Route path="login" element={<Login />} />
+          <Route path="signup" element={<Signup />} />
+
+          {/* Everything below needs a signed-in user. */}
+          <Route element={<RequireAuth />}>
+            <Route path="home" element={<Home />} />
+            <Route path="feed" element={<Feed />} />
+            <Route path="browse">
+              <Route index element={<Browse />} />
+              <Route path="newly-added" element={<NewlyAdded />} />
+              <Route path="popular" element={<PopularNow />} />
+              <Route path="search" element={<Search />} />
+              <Route path="by-category">
+                <Route index element={<ByCategory />} />
+                <Route path=":genre" element={<Genre />} />
+              </Route>
+            </Route>
+            <Route path="/exchanges" element={<ExchangesList />} />
+            <Route path="/exchanges/:exchangeId" element={<ExchangeDetail />} />
+            <Route path="profile">
+              <Route index element={<Profile />} />
+              <Route path="edit" element={<EditProfile />} />
+              <Route path="my-books" element={<MyBooks />} />
+              <Route path="my-trades" element={<MyTrades />} />
+            </Route>
+            <Route path="messages" element={<Messages />} />
+            <Route path="messages/:user" element={<MessagesDetail />} />
+            <Route path="books/:id" element={<BookPage />} />
+            <Route path="users/:id" element={<UserPage />} />
+            <Route path="users/:id/wishlist" element={<UserPageWishlist />} />
+            <Route path="users/:id/offered" element={<UserPageOffered />} />
+          </Route>
+        </Routes>
+      </div>
+    </div>
   );
 };
 

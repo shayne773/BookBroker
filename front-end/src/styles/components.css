@@ -1,0 +1,1201 @@
+/*
+ * Tailwind's (empty) components layer, then this app's own primitives.
+ * index.css explains why the directive lives here rather than there.
+ */
+@tailwind components;
+
+/*
+ * Shared interface primitives. Screens compose these classes instead of
+ * carrying a stylesheet of their own; every value here comes from tokens.css.
+ */
+
+/* ======================================================================
+   Page shell
+   ====================================================================== */
+
+.app-shell {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  background: var(--color-paper);
+}
+
+.app-main {
+  flex: 1 1 auto;
+}
+
+/*
+ * Every screen's root element. The entry animation plays on mount, which is
+ * exactly once per route change, so route transitions get their fade without
+ * any router plumbing.
+ */
+.page {
+  width: 100%;
+  max-width: var(--measure-page);
+  margin: 0 auto;
+  padding: var(--space-12) var(--gutter) var(--space-24);
+  animation: page-enter var(--duration-slow) var(--ease-out) both;
+}
+
+/* For long-form screens that want a single reading column. */
+.page--reading {
+  max-width: 960px;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ======================================================================
+   Site header (top navigation)
+   ====================================================================== */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--color-paper);
+  border-bottom: var(--border-hairline);
+}
+
+.site-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-10);
+  width: 100%;
+  max-width: var(--measure-page);
+  min-height: var(--header-h);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+.wordmark {
+  font-family: var(--font-serif);
+  font-size: var(--text-h3);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-ink);
+  white-space: nowrap;
+}
+
+.site-nav {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-8);
+}
+
+/*
+ * A nav link is a text label with a rule that grows under it. The rule is drawn
+ * for hover and for the current page alike, so the current page simply looks
+ * like a link that has already arrived.
+ */
+.site-nav__link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--header-h);
+  color: var(--color-ink-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  transition: var(--transition-colors);
+}
+
+.site-nav__link::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -1px; /* sits on the header's own hairline */
+  left: 0;
+  height: 2px;
+  background: var(--color-ink);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.site-nav__link:hover,
+.site-nav__link:focus-visible {
+  color: var(--color-ink);
+}
+
+.site-nav__link:hover::after {
+  transform: scaleX(1);
+}
+
+.site-nav__link.is-current {
+  color: var(--color-ink);
+  font-weight: var(--weight-semibold);
+}
+
+.site-nav__link.is-current::after {
+  transform: scaleX(1);
+}
+
+/* The ring would be clipped by the sticky header's edge without the inset. */
+.site-nav__link:focus-visible {
+  outline-offset: -4px;
+}
+
+/* ======================================================================
+   Masthead / page header
+   ====================================================================== */
+
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding-bottom: var(--space-6);
+  border-bottom: var(--border-rule-thick);
+}
+
+.page-head__main {
+  min-width: 0;
+}
+
+.page-head__aside {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding-bottom: var(--space-1);
+}
+
+/* The small tracked capital line above a headline. */
+.kicker {
+  margin-bottom: var(--space-3);
+  color: var(--color-ink-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.page-title {
+  font-family: var(--font-serif);
+  font-size: var(--text-h1);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+/* ======================================================================
+   Rules and sections
+   ====================================================================== */
+
+.section {
+  padding-top: var(--space-10);
+}
+
+.section + .section {
+  margin-top: var(--space-10);
+  border-top: var(--border-hairline);
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.section-title {
+  font-family: var(--font-serif);
+  font-size: var(--text-h2);
+  font-weight: var(--weight-semibold);
+}
+
+.section-count {
+  color: var(--color-ink-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  letter-spacing: var(--tracking-normal);
+}
+
+/* ======================================================================
+   Links
+   ====================================================================== */
+
+/*
+ * Text link. A monochrome page has no link colour to spend, so the link is
+ * marked at rest by a grey rule under it; on hover an ink rule grows across
+ * that grey one from the left. Removing the resting rule would leave a link
+ * indistinguishable from the text around it.
+ */
+.textlink {
+  position: relative;
+  color: var(--color-ink);
+  font-weight: var(--weight-medium);
+  /* Grey enough to read as a link under near-black text, rather than the
+     hairline grey used for page rules, which all but disappears here. */
+  box-shadow: inset 0 -1px 0 var(--color-ink-muted);
+}
+
+.textlink::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.textlink:hover::after,
+.textlink:focus-visible::after {
+  transform: scaleX(1);
+}
+
+/* Standing link with a permanent rule under it, e.g. a section's "see all". */
+.textlink-quiet {
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  border-bottom: 1px solid var(--color-rule);
+  transition: var(--transition-colors);
+}
+
+.textlink-quiet:hover,
+.textlink-quiet:focus-visible {
+  color: var(--color-ink);
+  border-bottom-color: var(--color-ink);
+}
+
+/* The arrow nudges forward on hover. */
+.textlink-arrow__mark {
+  display: inline-block;
+  margin-left: var(--space-2);
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+/* A back arrow sits before its label, so its space and its nudge both flip.
+   This is an explicit modifier rather than :first-child, because a label that
+   is a bare text node leaves the arrow as the first *element* either way. */
+.textlink-arrow__mark--back {
+  margin-right: var(--space-2);
+  margin-left: 0;
+}
+
+.textlink-quiet:hover .textlink-arrow__mark,
+.textlink-quiet:focus-visible .textlink-arrow__mark,
+.textlink:hover .textlink-arrow__mark,
+.textlink:focus-visible .textlink-arrow__mark {
+  transform: translateX(3px);
+}
+
+.textlink-quiet:hover .textlink-arrow__mark--back,
+.textlink-quiet:focus-visible .textlink-arrow__mark--back {
+  transform: translateX(-3px);
+}
+
+/*
+ * Headline link: a title that is already unmistakably a heading, so it carries
+ * no resting rule - only the ink underline that grows in on hover. Inline links
+ * in running text use .textlink instead, which is marked at rest.
+ */
+.headline-link {
+  position: relative;
+  color: var(--color-ink);
+}
+
+.headline-link::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.headline-link:hover::after,
+.headline-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
+/* Back link that sits above a page title. */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+  padding: var(--space-2) 0;
+  border: 0;
+  background: none;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  transition: var(--transition-colors);
+}
+
+.back-link:hover,
+.back-link:focus-visible {
+  color: var(--color-ink);
+}
+
+.back-link__mark {
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.back-link:hover .back-link__mark,
+.back-link:focus-visible .back-link__mark {
+  transform: translateX(-3px);
+}
+
+/* ======================================================================
+   Buttons
+   ====================================================================== */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border: var(--border-strong);
+  border-radius: var(--radius-none);
+  background: transparent;
+  color: var(--color-ink);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.01em;
+  text-align: center;
+  white-space: nowrap;
+  transition: var(--transition-colors);
+}
+
+.button:disabled {
+  border-color: var(--color-rule);
+  color: var(--color-ink-muted);
+  cursor: not-allowed;
+}
+
+.button--primary {
+  background: var(--color-fill-strong);
+  color: var(--color-ink-inverse);
+}
+
+.button--primary:hover:not(:disabled),
+.button--primary:focus-visible:not(:disabled) {
+  background: var(--color-fill-hover);
+  border-color: var(--color-fill-hover);
+}
+
+.button--primary:disabled {
+  background: var(--color-paper-sunken);
+  border-color: var(--color-rule);
+  color: var(--color-ink-muted);
+}
+
+.button--secondary:hover:not(:disabled),
+.button--secondary:focus-visible:not(:disabled) {
+  background: var(--color-fill-strong);
+  color: var(--color-ink-inverse);
+}
+
+/* Borderless, for tertiary actions like Cancel. */
+.button--quiet {
+  padding-right: var(--space-2);
+  padding-left: var(--space-2);
+  border-color: transparent;
+  color: var(--color-ink-muted);
+}
+
+.button--quiet:hover:not(:disabled),
+.button--quiet:focus-visible:not(:disabled) {
+  color: var(--color-ink);
+}
+
+.button--small {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
+}
+
+.button--block {
+  width: 100%;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* ======================================================================
+   Form controls
+   ====================================================================== */
+
+/*
+ * Inputs are a baseline rule, not a box - the rule thickens to ink on focus.
+ */
+.input {
+  width: 100%;
+  padding: var(--space-3) 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-rule);
+  border-radius: var(--radius-none);
+  background: transparent;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  transition: border-color var(--duration-base) var(--ease-standard);
+}
+
+.input::placeholder {
+  color: var(--color-ink-muted);
+}
+
+.input:hover {
+  border-bottom-color: var(--color-ink-muted);
+}
+
+.input:focus {
+  border-bottom-color: var(--color-ink);
+  outline: none;
+}
+
+/* The ring would sit under the text baseline, so focus shows as an ink rule. */
+.input:focus-visible {
+  outline: none;
+  border-bottom-width: 2px;
+  padding-bottom: calc(var(--space-3) - 1px);
+}
+
+/* Segmented control - one row of choices divided by hairlines. */
+.segmented {
+  display: inline-flex;
+  border: var(--border-strong);
+}
+
+.segmented__option {
+  padding: var(--space-2) var(--space-5);
+  border: 0;
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  transition: var(--transition-colors);
+}
+
+.segmented__option + .segmented__option {
+  border-left: var(--border-strong);
+}
+
+.segmented__option:hover {
+  color: var(--color-ink);
+}
+
+.segmented__option.is-active {
+  background: var(--color-fill-strong);
+  color: var(--color-ink-inverse);
+}
+
+/* ======================================================================
+   Book covers and tiles
+   ====================================================================== */
+
+/*
+ * Fixed 2:3 frame so a ragged set of cover images still lines up on a grid.
+ * The image is the only colour on the screen, so it gets the hairline and the
+ * whitespace rather than a shadow.
+ */
+.cover {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  border: var(--border-hairline);
+  background: var(--color-paper-sunken);
+}
+
+.cover__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--duration-slow) var(--ease-out);
+}
+
+/*
+ * A cover we do not have: the same frame, empty but for a small label, rather
+ * than an image fetched from anywhere. `.cover--thumb` is the thumbnail size,
+ * too narrow for the label, where the bare frame is enough.
+ */
+.cover__fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1);
+  text-align: center;
+}
+
+.cover__fallback-label {
+  min-width: 0;
+  color: var(--color-ink-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  line-height: var(--leading-snug);
+  text-transform: uppercase;
+}
+
+.cover--thumb .cover__fallback-label {
+  display: none;
+}
+
+.book-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  color: var(--color-ink);
+}
+
+.book-tile:hover .cover__img,
+.book-tile:focus-visible .cover__img {
+  transform: scale(1.04);
+}
+
+.book-tile__title {
+  font-family: var(--font-serif);
+  font-size: var(--text-h4);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  /* A long unbroken word wraps inside its column instead of spilling over the next tile. */
+  overflow-wrap: anywhere;
+  /* The underline is drawn on the text box so it tracks the wrapped lines. */
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 1px;
+  transition: background-size var(--duration-base) var(--ease-out);
+}
+
+.book-tile:hover .book-tile__title,
+.book-tile:focus-visible .book-tile__title {
+  background-size: 100% 1px;
+}
+
+.book-tile__meta {
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+}
+
+.book-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: var(--space-8) var(--space-6);
+}
+
+/* A denser grid for rows that sit inside a section. */
+.book-grid--compact {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-6) var(--space-5);
+}
+
+/* ======================================================================
+   Search
+   ====================================================================== */
+
+.search-bar {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  padding-top: var(--space-8);
+}
+
+.search-bar__input {
+  flex: 1 1 auto;
+  font-family: var(--font-serif);
+  font-size: var(--text-h3);
+}
+
+.search-note {
+  padding-top: var(--space-8);
+}
+
+/* Live suggestions, anchored to the field and floating over the page. */
+.suggestions {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  z-index: 30;
+  max-height: 24rem;
+  overflow-y: auto;
+  border: var(--border-strong);
+  background: var(--color-paper);
+  box-shadow: var(--shadow-overlay);
+  animation: suggestions-in var(--duration-fast) var(--ease-out) both;
+}
+
+@keyframes suggestions-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.suggestions li + li .suggestion {
+  border-top: var(--border-hairline-subtle);
+}
+
+.suggestion:hover,
+.suggestion:focus-visible {
+  background: var(--color-paper-sunken);
+}
+
+.suggestion__cover {
+  flex: 0 0 auto;
+  width: 36px;
+}
+
+.suggestion__body {
+  display: grid;
+  min-width: 0;
+}
+
+.suggestion__title {
+  overflow: hidden;
+  font-family: var(--font-serif);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion__meta {
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+}
+
+/* The volume chosen from the suggestions. */
+.selection {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: var(--space-8);
+  align-items: start;
+  margin-top: var(--space-10);
+  padding: var(--space-8);
+  border: var(--border-hairline);
+  background: var(--color-paper-raised);
+  animation: page-enter var(--duration-base) var(--ease-out) both;
+}
+
+.selection__title {
+  margin-bottom: var(--space-3);
+  font-family: var(--font-serif);
+  font-size: var(--text-h2);
+  font-weight: var(--weight-semibold);
+}
+
+.selection__actions {
+  margin-top: var(--space-6);
+}
+
+@media (max-width: 720px) {
+  .search-bar {
+    flex-wrap: wrap;
+  }
+
+  .selection {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .selection__cover {
+    max-width: 160px;
+  }
+}
+
+/* ======================================================================
+   Book page
+   ====================================================================== */
+
+.book__head {
+  padding: var(--space-6) 0 var(--space-8);
+  border-bottom: var(--border-rule-thick);
+}
+
+.book__title {
+  max-width: 20ch;
+  font-family: var(--font-serif);
+  font-size: var(--text-display);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+.book__byline {
+  margin-top: var(--space-4);
+  color: var(--color-ink-muted);
+  font-size: var(--text-h4);
+}
+
+/* Cover and actions hold a fixed column; the article text takes the rest. */
+.book__body {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: var(--space-12);
+  align-items: start;
+  padding-top: var(--space-10);
+}
+
+.book__aside {
+  display: grid;
+  gap: var(--space-5);
+  position: sticky;
+  top: calc(var(--header-h) + var(--space-8));
+}
+
+.book__actions {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.book__section + .book__section {
+  margin-top: var(--space-10);
+  padding-top: var(--space-10);
+  border-top: var(--border-hairline);
+}
+
+.facts--pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 860px) {
+  .book__body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-10);
+  }
+
+  .book__aside {
+    position: static;
+    max-width: 260px;
+  }
+}
+
+/* ======================================================================
+   Browse
+   ====================================================================== */
+
+.browse-search {
+  width: min(360px, 40vw);
+}
+
+/* Standing links to the Browse subsections, set as a rule-separated row. */
+.browse-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  padding: var(--space-5) 0;
+  border-bottom: var(--border-hairline);
+}
+
+/* ======================================================================
+   Lead article
+   ====================================================================== */
+
+/*
+ * The front-page lead: cover on the left at roughly a third of the measure,
+ * headline and standfirst on the right, the way a newspaper leads a section.
+ */
+.lead {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--space-12);
+  align-items: start;
+  padding: var(--space-12) 0;
+  border-bottom: var(--border-hairline);
+}
+
+.lead__cover {
+  max-width: 340px;
+}
+
+.lead__body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.lead__title {
+  font-family: var(--font-serif);
+  font-size: var(--text-display);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+.lead__byline {
+  margin-top: var(--space-4);
+  color: var(--color-ink-muted);
+  font-size: var(--text-body);
+}
+
+.lead__desc {
+  margin-top: var(--space-6);
+  /* Long descriptions should not push the actions off the screen. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+
+.lead__actions {
+  margin-top: var(--space-8);
+}
+
+/*
+ * Grid cells stretch to the tallest in their row, so the tile fills its cell
+ * and the action is pushed to the foot of it. Titles that wrap onto two lines
+ * then no longer knock the buttons out of line with their neighbours.
+ */
+.book-grid > * {
+  display: flex;
+  flex-direction: column;
+}
+
+.tile-action {
+  margin-top: auto;
+  /* padding, not margin, so the gap survives the `auto` above. */
+  padding-top: var(--space-4);
+}
+
+@media (max-width: 900px) {
+  .lead {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-8);
+  }
+
+  .lead__cover {
+    max-width: 240px;
+  }
+}
+
+/* ======================================================================
+   Editorial list rows
+   ====================================================================== */
+
+/* A horizontal record: small cover, metadata, trailing action. */
+.book-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6) 0;
+  border-bottom: var(--border-hairline);
+  transition: background-color var(--duration-base) var(--ease-standard);
+}
+
+.book-row:first-child {
+  border-top: var(--border-hairline);
+}
+
+.book-row:hover {
+  background: var(--color-paper-raised);
+}
+
+.book-row__body {
+  min-width: 0;
+}
+
+.book-row__title {
+  font-family: var(--font-serif);
+  font-size: var(--text-h3);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+}
+
+.book-row__meta {
+  margin-top: var(--space-1);
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+}
+
+/* A run of book-rows under a page header. */
+.book-list {
+  margin-top: var(--space-10);
+}
+
+/* ======================================================================
+   Category index
+   ====================================================================== */
+
+/* A list of genres set as hairline-separated rows, like a contents page. */
+.category-list {
+  margin-top: var(--space-10);
+  border-top: var(--border-hairline);
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-3) var(--space-5) 0;
+  border-bottom: var(--border-hairline);
+  color: var(--color-ink);
+  transition: padding-left var(--duration-base) var(--ease-out),
+    background-color var(--duration-base) var(--ease-standard);
+}
+
+.category-item:hover,
+.category-item:focus-visible {
+  padding-left: var(--space-4);
+  background: var(--color-paper-raised);
+}
+
+.category-item__name {
+  font-family: var(--font-serif);
+  font-size: var(--text-h3);
+  font-weight: var(--weight-semibold);
+}
+
+.category-item .textlink-arrow__mark {
+  color: var(--color-ink-muted);
+}
+
+.category-item:hover .textlink-arrow__mark,
+.category-item:focus-visible .textlink-arrow__mark {
+  color: var(--color-ink);
+  transform: translateX(3px);
+}
+
+/* ======================================================================
+   Definition pairs (ISBN, genre, publisher ...)
+   ====================================================================== */
+
+.facts {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.fact__term {
+  margin-bottom: var(--space-2);
+  color: var(--color-ink-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.fact__value {
+  font-size: var(--text-body);
+  color: var(--color-ink);
+}
+
+/* ======================================================================
+   Prose
+   ====================================================================== */
+
+.prose {
+  max-width: var(--measure-text);
+  color: var(--color-ink-secondary);
+  font-size: 1.0625rem;
+  line-height: var(--leading-relaxed);
+}
+
+/* ======================================================================
+   Status: empty, loading, error, notice
+   ====================================================================== */
+
+.empty,
+.no-books {
+  padding: var(--space-10) 0;
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+}
+
+.hint {
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+}
+
+.notice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-hairline);
+  background: var(--color-paper-sunken);
+  color: var(--color-ink-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.notice--error {
+  border-left: var(--border-rule-thick);
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+.notice__title {
+  font-weight: var(--weight-semibold);
+}
+
+/*
+ * Loading state: grey blocks in the shape of the content that is coming, with a
+ * slow breath so the page reads as working rather than broken.
+ */
+.skeleton {
+  background: var(--color-paper-sunken);
+  animation: skeleton-pulse 1.6s var(--ease-standard) infinite;
+}
+
+.skeleton--cover {
+  aspect-ratio: 2 / 3;
+  border: var(--border-hairline-subtle);
+}
+
+.skeleton--line {
+  height: 0.75rem;
+}
+
+.skeleton--line-short {
+  width: 55%;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+
+/* Toast - the one floating element, so the one shadow token. */
+.toast {
+  position: fixed;
+  bottom: var(--space-8);
+  left: 50%;
+  z-index: 50;
+  /* The keyframes animate translate(-50%, y); this is the resting value. */
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  background: var(--color-fill-strong);
+  box-shadow: var(--shadow-overlay);
+  color: var(--color-ink-inverse);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  animation: toast-in var(--duration-base) var(--ease-out) both;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ======================================================================
+   Scroll reveal (Home's IntersectionObserver)
+   ====================================================================== */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity var(--duration-slow) var(--ease-out),
+    transform var(--duration-slow) var(--ease-out);
+}
+
+.is-revealed {
+  opacity: 1;
+  transform: none;
+}
+
+/*
+ * Without motion the reveal would leave content permanently invisible if the
+ * observer never fired, so opt out of the hidden start entirely.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ======================================================================
+   Utilities
+   ====================================================================== */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-4);
+}

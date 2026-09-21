@@ -1,27 +1,40 @@
-import { NavLink } from 'react-router-dom';
-import './Navbar.css';
-import { FaHome, FaSearch, FaEnvelope, FaUser, FaBook } from 'react-icons/fa';
+import { Link, NavLink } from 'react-router-dom';
 
-const Navbar = () => {
-  return (
-    <nav className="navbar fixed -bottom-0 w-full h-12 flex justify-evenly content-center bg-brown">
-      <NavLink to="/home" className="nav-item">
-        <FaHome className="nav-icon w-8 h-8 my-2" />
-      </NavLink>
-      <NavLink to="/browse" className="nav-item">
-        <FaSearch className="nav-icon w-8 h-8 my-2" />
-      </NavLink>
-      <NavLink to="/exchanges" className="nav-item">
-        <FaBook className="nav-icon w-8 h-8 my-2" />
-      </NavLink>
-      <NavLink to="/messages" className="nav-item">
-        <FaEnvelope className="nav-icon w-8 h-8 my-2" />
-      </NavLink>
-      <NavLink to="/profile" className="nav-item">
-        <FaUser className="nav-icon w-8 h-8 my-2" />
-      </NavLink>
-    </nav>
-  );
-};
+// The top bar: wordmark on the left, text links on the right, a hairline rule
+// beneath. Styling lives in the design system (styles/components.css) rather
+// than in a stylesheet of its own.
+const LINKS = [
+  { to: '/home', label: 'Home' },
+  { to: '/browse', label: 'Browse' },
+  { to: '/exchanges', label: 'Exchanges' },
+  { to: '/messages', label: 'Messages' },
+  { to: '/profile', label: 'Profile' },
+];
+
+// NavLink sets aria-current="page" on the active link itself, so the current
+// page is announced as well as underlined.
+const Navbar = () => (
+  <header className="site-header">
+    <div className="site-header__inner">
+      <Link to="/home" className="wordmark">
+        BookBroker
+      </Link>
+
+      <nav className="site-nav" aria-label="Primary">
+        {LINKS.map(({ to, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              `site-nav__link${isActive ? ' is-current' : ''}`
+            }
+          >
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+    </div>
+  </header>
+);
 
 export default Navbar;
