@@ -446,6 +446,54 @@ describe("changing the account email", () => {
     expect((await User.findById(user._id)).email).to.equal(user.email);
   });
 
+  const profile = (user) => api().get("/user").set(authHeader(user));
+
+  it("stops reporting a change as pending once its link has expired", async () => {
+    const user = await createUser();
+    await requestChange(user);
+    expect((await profile(user)).body.pendingEmail).to.equal(NEW_EMAIL);
+
+    await expireAllTokens();
+
+    const res = await profile(user);
+    expect(res).to.have.status(200);
+    expect(res.body).to.not.have.property("pendingEmail");
+    expect((await User.findById(user._id)).pendingEmail).to.equal(undefined);
+  });
+
+  it("drops an expired pending change on the next edit", async () => {
+    const user = await createUser();
+    await requestChange(user);
+    await expireAllTokens();
+
+    const res = await api()
+      .post("/user/edit")
+      .set(authHeader(user))
+      .send({ user: { username: "renamed", email: user.email } });
+
+    expect(res).to.have.status(200);
+    expect(res.body.user).to.not.have.property("pendingEmail");
+    expect((await User.findById(user._id)).pendingEmail).to.equal(undefined);
+  });
+
+  it("keeps a live pending change through a username or location edit", async () => {
+    const user = await createUser();
+    await requestChange(user);
+
+    const res = await api()
+      .post("/user/edit")
+      .set(authHeader(user))
+      .send({ user: { username: "renamed", location: "Queens", email: user.email } });
+
+    expect(res).to.have.status(200);
+    expect(res.body.user.pendingEmail).to.equal(NEW_EMAIL);
+    expect((await profile(user)).body.pendingEmail).to.equal(NEW_EMAIL);
+
+    const confirmed = await confirmChange(emailedToken(NEW_EMAIL, "/confirm-email-change"));
+    expect(confirmed).to.have.status(200);
+    expect((await User.findById(user._id)).email).to.equal(NEW_EMAIL);
+  });
+
   it("limits change requests for one address", async () => {
     const user = await createUser();
     for (let i = 0; i < 3; i += 1) expect(await requestChange(user)).to.have.status(200);

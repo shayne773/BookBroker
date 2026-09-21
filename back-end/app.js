@@ -9,7 +9,7 @@ import { body, matchedData, validationResult } from "express-validator";
 import exchangesRouter from "./routes/exchanges.js";
 import { buildCorsOptions } from "./lib/cors.js";
 import { LOGIN_THROTTLED_MESSAGE, LoginThrottle } from "./lib/loginThrottle.js";
-import { consumeToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/authTokens.js";
+import { consumeToken, hasLiveToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/authTokens.js";
 import { mail, resolveFrontEndBaseUrl } from "./lib/mail.js";
 import {
   emailOnlyValidators,
@@ -119,6 +119,21 @@ const CASE_INSENSITIVE = { locale: "en", strength: 2 };
 // backfill) and is tracked separately.
 function findUserByEmail(email) {
   return User.findOne({ email }).collation(CASE_INSENSITIVE);
+}
+
+// A pending email counts only while the link mailed to it can still be used.
+// Once that token has expired or been spent, the stale address is dropped; the
+// filter on its value keeps a newer request made meanwhile.
+async function withLivePendingEmail(user) {
+  if (!user?.pendingEmail) return user;
+  if (await hasLiveToken(TOKEN_PURPOSES.changeEmail, user._id)) return user;
+
+  await User.updateOne(
+    { _id: user._id, pendingEmail: user.pendingEmail },
+    { $unset: { pendingEmail: 1 } }
+  );
+  user.pendingEmail = undefined;
+  return user;
 }
 
 // --------------------
@@ -646,7 +661,9 @@ app.get("/browse", authMiddleware, async (req, res, next) => {
 
 app.get("/user", authMiddleware, async (req, res, next) => {
   try {
-    const me = await User.findById(req.user.userId).select("_id username email pendingEmail location ratings");
+    const me = await withLivePendingEmail(
+      await User.findById(req.user.userId).select("_id username email pendingEmail location ratings")
+    );
     if (!me) return res.status(404).json({ message: "User not found" });
     return res.json(me);
   } catch (err) {
@@ -883,7 +900,7 @@ app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
       });
     }
 
-    res.json({ message: "User updated", user: updatedUser });
+    res.json({ message: "User updated", user: await withLivePendingEmail(updatedUser) });
   } catch (err) {
     console.error("Error updating user:", err);
     res.status(500).json({ message: "Internal server error" });

@@ -74,6 +74,16 @@ export async function consumeToken(purpose, raw, now = Date.now()) {
   return token.user;
 }
 
+/** Whether the user holds an unused, unexpired token of `purpose`. */
+export async function hasLiveToken(purpose, userId, now = Date.now()) {
+  const live = await AuthToken.exists({
+    user: userId,
+    purpose: purpose.name,
+    expiresAt: { $gt: new Date(now) },
+  });
+  return Boolean(live);
+}
+
 /** Drop every outstanding token of `purpose` for a user. */
 export function revokeTokens(purpose, userId) {
   return AuthToken.deleteMany({ user: userId, purpose: purpose.name });
