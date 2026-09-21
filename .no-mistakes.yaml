@@ -1,0 +1,15 @@
+# Per-repo no-mistakes configuration: https://github.com/kunchenguid/no-mistakes
+# (docs: reference/repo-config). The daemon reads `commands` from the default
+# branch, so edits here take effect for validation runs once merged.
+#
+# These are the project's canonical checks. .github/workflows/ci.yml runs the
+# same commands - it was generated from this file with `no-mistakes ci-workflow`
+# and then given Node setup and the install step - so a pull-request check and a
+# pipeline run agree on what a passing build is. Change a command here and in
+# ci.yml together.
+commands:
+  # Neither package commits a lockfile (.gitignore), so this is `npm install`, not `npm ci`.
+  prepare: "npm --prefix front-end install && npm --prefix back-end install"
+  lint: "npm --prefix front-end run lint"
+  # Front-end build and tests, then the back-end suite (in-process MongoDB, no network database).
+  test: "npm --prefix front-end run build && npm --prefix front-end test && npm --prefix back-end test"
