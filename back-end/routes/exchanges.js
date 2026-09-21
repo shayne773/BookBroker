@@ -18,6 +18,20 @@ function isRequester(exchange, userId) {
   return String(exchange.requester) === String(userId);
 }
 
+function httpError(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
+// The side that made the offer currently on the table: whoever sent the invite
+// or the latest counter. Exchanges saved before proposedBy existed fall back to
+// the requester while still PENDING; a legacy counter's author is unknown.
+function proposerOf(exchange) {
+  if (exchange.proposedBy) return String(exchange.proposedBy);
+  return exchange.status === "PENDING" ? String(exchange.requester) : null;
+}
+
 // --------------------
 // POST /exchanges  (create + send invite)
 // body: { responderId, requesterBooks: [], responderBooks: [], message, expiresInHours }
@@ -51,6 +65,7 @@ router.post("/", async (req, res) => {
       responderBooks,
       message,
       status: "PENDING",
+      proposedBy: userId,
       expiresAt,
     });
 
@@ -148,6 +163,7 @@ router.post("/:id/counter", async (req, res) => {
     ex.responderBooks = responderBooks;
     ex.message = message;
     ex.status = "COUNTERED";
+    ex.proposedBy = userId;
     ex.requesterConfirmedComplete = false;
     ex.responderConfirmedComplete = false;
 
@@ -161,6 +177,7 @@ router.post("/:id/counter", async (req, res) => {
 
 // --------------------
 // POST /exchanges/:id/accept  (locks books)
+// Only the side that received the current offer may accept it.
 // --------------------
 router.post("/:id/accept", async (req, res) => {
   const userId = req.user.userId;
@@ -170,11 +187,15 @@ router.post("/:id/accept", async (req, res) => {
 
   try {
     const ex = await Exchange.findById(req.params.id).session(session);
-    if (!ex) return res.status(404).json({ message: "Exchange not found" });
+    if (!ex) throw httpError(404, "Exchange not found");
     assertParticipant(ex, userId);
 
     if (!["PENDING", "COUNTERED"].includes(ex.status)) {
-      return res.status(400).json({ message: "Cannot accept in current status" });
+      throw httpError(400, "Cannot accept in current status");
+    }
+
+    if (proposerOf(ex) === String(userId)) {
+      throw httpError(403, "You cannot accept your own offer; the other side must accept it");
     }
 
     // lock both sides' books if still unlocked
@@ -185,7 +206,7 @@ router.post("/:id/accept", async (req, res) => {
     // ensure none is locked by another exchange
     for (const b of books) {
       if (b.locked && String(b.lockedByExchange) !== String(ex._id)) {
-        return res.status(409).json({ message: "One of the books is already locked in another exchange." });
+        throw httpError(409, "One of the books is already locked in another exchange.");
       }
     }
 
@@ -202,7 +223,7 @@ router.post("/:id/accept", async (req, res) => {
     res.json({ message: "Exchange accepted", exchangeId: ex._id });
   } catch (err) {
     await session.abortTransaction();
-    console.error("ACCEPT error:", err);
+    if (!err.status) console.error("ACCEPT error:", err);
     res.status(err.status || 500).json({ message: err.message });
   } finally {
     session.endSession();
@@ -233,25 +254,51 @@ router.post("/:id/decline", async (req, res) => {
 });
 
 // --------------------
-// POST /exchanges/:id/cancel  (requester can cancel before accepted)
+// POST /exchanges/:id/cancel
+// Either participant can cancel an offer, or an ACCEPTED trade the other side
+// has not yet confirmed complete; cancelling an accepted trade unlocks both
+// sides' books with it.
 // --------------------
 router.post("/:id/cancel", async (req, res) => {
   const userId = req.user.userId;
 
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    const ex = await Exchange.findById(req.params.id);
-    if (!ex) return res.status(404).json({ message: "Exchange not found" });
+    const ex = await Exchange.findById(req.params.id).session(session);
+    if (!ex) throw httpError(404, "Exchange not found");
     assertParticipant(ex, userId);
 
-    if (!["PENDING", "COUNTERED"].includes(ex.status)) {
-      return res.status(400).json({ message: "Cannot cancel in current status" });
+    if (!["PENDING", "COUNTERED", "ACCEPTED"].includes(ex.status)) {
+      throw httpError(400, "Cannot cancel in current status");
+    }
+
+    if (ex.status === "ACCEPTED") {
+      const otherConfirmed = isRequester(ex, userId)
+        ? ex.responderConfirmedComplete
+        : ex.requesterConfirmedComplete;
+      if (otherConfirmed) {
+        throw httpError(409, "The other participant has already confirmed completion");
+      }
+
+      await OfferedBook.updateMany(
+        { lockedByExchange: ex._id },
+        { $set: { locked: false, lockedByExchange: null } },
+        { session }
+      );
     }
 
     ex.status = "CANCELLED";
-    await ex.save();
+    await ex.save({ session });
+
+    await session.commitTransaction();
     res.json({ message: "Exchange cancelled" });
   } catch (err) {
+    await session.abortTransaction();
     res.status(err.status || 500).json({ message: err.message });
+  } finally {
+    session.endSession();
   }
 });
 
@@ -267,11 +314,11 @@ router.post("/:id/confirm-complete", async (req, res) => {
 
   try {
     const ex = await Exchange.findById(req.params.id).session(session);
-    if (!ex) return res.status(404).json({ message: "Exchange not found" });
+    if (!ex) throw httpError(404, "Exchange not found");
     assertParticipant(ex, userId);
 
     if (ex.status !== "ACCEPTED") {
-      return res.status(400).json({ message: "Exchange must be ACCEPTED to complete" });
+      throw httpError(400, "Exchange must be ACCEPTED to complete");
     }
 
     if (isRequester(ex, userId)) ex.requesterConfirmedComplete = true;
@@ -300,7 +347,7 @@ router.post("/:id/confirm-complete", async (req, res) => {
     res.json({ message: "Completion recorded", status: ex.status });
   } catch (err) {
     await session.abortTransaction();
-    console.error("CONFIRM COMPLETE error:", err);
+    if (!err.status) console.error("CONFIRM COMPLETE error:", err);
     res.status(err.status || 500).json({ message: err.message });
   } finally {
     session.endSession();

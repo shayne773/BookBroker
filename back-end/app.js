@@ -166,7 +166,8 @@ app.get("/feed", authMiddleware, async (req, res) => {
   const userId = req.user.userId;
 
   const books = await OfferedBook.find({
-    owner: { $ne: userId }
+    owner: { $ne: userId },
+    locked: false,
   })
     .sort({ createdAt: -1 })
     .limit(20);
@@ -180,7 +181,8 @@ app.get("/books", authMiddleware, async (req, res) => {
 
   try {
     const books = await OfferedBook.find({
-      owner: { $ne: userId }
+      owner: { $ne: userId },
+      locked: false,
     });
 
     const filtered = books.filter(
@@ -205,12 +207,13 @@ app.get("/browse", authMiddleware, async (req, res) => {
   const GENRE_COUNT = 8;
 
   try {
-    const notMine = { owner: { $ne: new mongoose.Types.ObjectId(userId) } };
+    // Books committed to an accepted trade are off the market until it ends.
+    const onMarket = { owner: { $ne: new mongoose.Types.ObjectId(userId) }, locked: false };
 
     /* ---------------- SEARCH ---------------- */
     const searchResults = q
       ? await OfferedBook.find({
-          ...notMine,
+          ...onMarket,
           $or: [
             { title: { $regex: q, $options: "i" } },
             { author: { $regex: q, $options: "i" } },
@@ -222,12 +225,12 @@ app.get("/browse", authMiddleware, async (req, res) => {
 
     /* ---------------- POPULAR ---------------- */
     const popular = await OfferedBook.aggregate([
-      { $match: notMine },
+      { $match: onMarket },
       { $sample: { size: LIMIT_SECTION } },
     ]);
 
     /* ---------------- NEW ---------------- */
-    const newlyAdded = await OfferedBook.find(notMine)
+    const newlyAdded = await OfferedBook.find(onMarket)
       .sort({ createdAt: -1 })
       .limit(LIMIT_SECTION);
 
@@ -237,7 +240,7 @@ app.get("/browse", authMiddleware, async (req, res) => {
 
     if (user?.location) {
       recommended = await OfferedBook.aggregate([
-        { $match: notMine },
+        { $match: onMarket },
         {
           $lookup: {
             from: "users",
@@ -260,7 +263,7 @@ app.get("/browse", authMiddleware, async (req, res) => {
     /* ---------------- GENRES ---------------- */
     const genres = (
       await OfferedBook.distinct("genre", {
-        ...notMine,
+        ...onMarket,
         genre: { $ne: null },
       })
     )
@@ -270,7 +273,7 @@ app.get("/browse", authMiddleware, async (req, res) => {
     const genreRows = {};
     for (const genre of genres) {
       genreRows[genre] = await OfferedBook.find({
-        ...notMine,
+        ...onMarket,
         genre,
       })
         .sort({ createdAt: -1 })

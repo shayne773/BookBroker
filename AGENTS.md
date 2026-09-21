@@ -42,6 +42,14 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `tokens.css` collapses those durations under `prefers-reduced-motion: reduce`, so a
   component honours the preference by using the tokens rather than by opting in.
 
+## Back-end trades
+
+- A route in `back-end/routes/exchanges.js` that opens a transaction signals every early
+  exit by throwing `httpError(status, message)`, never `return res.status(...)`, so the
+  shared `catch` aborts the transaction and `finally` ends the session.
+- An ACCEPTED exchange holds its books via `locked` / `lockedByExchange`; anything that lists
+  books as available to trade must filter `locked: false`.
+
 ## Front-end build (Vite)
 
 - The front end is a Vite app, not Create React App: `npm run dev`, `npm run build` (into
@@ -74,7 +82,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   watches. Tests use `vi` from `vitest` for mocks; other globals come from `globals: true` in
   `front-end/vite.config.js`.
 - `cd back-end && npm test` runs Mocha against an in-process MongoDB started as a one-node
-  replica set (the exchange accept and complete routes use transactions, which a standalone
+  replica set (several exchange routes use transactions, which a standalone
   mongod rejects). `back-end/test/setup.js` is the root hook: it sets `JWT_SECRET`, connects
   Mongoose and empties every collection after each test. `back-end/test/helpers.js` signs users
   up through the real auth routes, so protected routes get a genuine token.
