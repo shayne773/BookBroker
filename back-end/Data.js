@@ -22,6 +22,9 @@ const userSchema = new Schema({
   password: { type: String, required: true },
   location: String,
   ratings: Number,
+  // Running totals kept by POST /exchanges/:id/rate; a user who predates them reads as unrated.
+  ratingsCount: { type: Number, default: 0 },
+  ratingsAvg:   { type: Number, default: 0 },
 
   // Optional arrays if you want them (not required to make wishlist/offered work)
   wishlist: [{ type: Schema.Types.ObjectId, ref: "WishlistBook" }],

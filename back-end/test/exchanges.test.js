@@ -110,17 +110,21 @@ describe("exchanges", () => {
       expect(ex.body.requesterRating).to.equal(4);
     });
 
-    // Known API bug, kept as a pending test until it is fixed: the route writes
-    // ratingsCount and ratingsAvg to the rated user, but the User schema declares
-    // neither, so Mongoose's strict mode drops both and the rating never reaches
-    // the user's profile.
-    it.skip("POST /exchanges/:id/rate updates the rated user's average", async () => {
-      const id = await complete();
+    it("POST /exchanges/:id/rate accumulates the rated user's average", async () => {
+      const first = await complete();
+      await api(requester.token).post(`/exchanges/${first}/rate`).send({ rating: 4 });
 
-      await api(requester.token).post(`/exchanges/${id}/rate`).send({ rating: 4 });
-
-      const rated = await User.findById(responder.id).lean();
+      let rated = await User.findById(responder.id).lean();
       expect(rated).to.include({ ratingsCount: 1, ratingsAvg: 4 });
+
+      // The first trade took both books off the market, so a second trade needs new ones.
+      requesterBook = await offerBook(requester, { title: "Second from requester" });
+      responderBook = await offerBook(responder, { title: "Second from responder" });
+      const second = await complete();
+      await api(requester.token).post(`/exchanges/${second}/rate`).send({ rating: 1 });
+
+      rated = await User.findById(responder.id).lean();
+      expect(rated).to.include({ ratingsCount: 2, ratingsAvg: 2.5 });
     });
   });
 

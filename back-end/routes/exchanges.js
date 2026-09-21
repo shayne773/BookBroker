@@ -349,8 +349,6 @@ router.post("/:id/rate", async (req, res) => {
     const target = await User.findById(targetUserId).session(session);
     if (!target) return res.status(404).json({ message: "Target user not found" });
 
-    // If you don't have these fields, add them:
-    // ratingsAvg (Number), ratingsCount (Number)
     const prevCount = target.ratingsCount || 0;
     const prevAvg = target.ratingsAvg || 0;
 
