@@ -49,7 +49,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Configuration is environment-driven. `back-end/.env.example` is the authoritative
   list of variables and their defaults; `back-end/.env` is gitignored.
 - Security helpers used by `app.js` live in `back-end/lib/`: the CORS allowlist,
-  the in-process login throttle, and the input validation / regex-escaping
+  the MongoDB-backed per-email login throttle, and the input validation / regex-escaping
   helpers. Any user input that reaches a Mongo `$regex` must go through
   `safeRegex` from `lib/validation.js`.
 - Client responses never carry `err.message` or a stack trace for an unexpected failure.

@@ -26,9 +26,9 @@ JWT_SECRET="MYSECRET"
 ```
 
 See [back-end/.env.example](./back-end/.env.example) for the full list of back-end
-environment variables, including the CORS allowlist (`CORS_ALLOWED_ORIGINS`) and the
-login rate-limiting settings. Every optional variable has a working local default, so
-the two lines above are still enough for development.
+environment variables, including the CORS allowlist (`CORS_ALLOWED_ORIGINS`). Every
+optional variable has a working local default, so the two lines above are still enough
+for development.
 
 ### Frontend
 Navigate to the frontend directory and run the react app

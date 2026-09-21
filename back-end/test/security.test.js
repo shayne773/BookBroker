@@ -2,9 +2,9 @@ import { expect, use } from "chai";
 import { default as chaiHttp, request } from "chai-http";
 import mongoose from "mongoose";
 
-import app, { loginThrottle } from "../app.js";
+import app from "../app.js";
 import { resolveAllowedOrigins } from "../lib/cors.js";
-import { DEFAULT_OPTIONS, LoginThrottle, SLOT_COUNT } from "../lib/loginThrottle.js";
+import { DEFAULT_OPTIONS, LoginAttempt, LoginThrottle } from "../lib/loginThrottle.js";
 import { User } from "../Data.js";
 import {
   authHeader,
@@ -20,10 +20,10 @@ const ALLOWED_ORIGIN = "http://localhost:3000";
 const DISALLOWED_ORIGIN = "https://evil.example.com";
 
 // Scoped to each describe rather than declared at the root: a root-level hook
-// in one spec file also runs for every other spec file.
+// in one spec file also runs for every other spec file. Login throttle counters
+// are stored in Mongo, so clearing the database resets them too.
 async function resetState() {
   await clearDatabase();
-  loginThrottle.reset();
 }
 
 // ---------------------------------------------------------------------------
@@ -662,88 +662,160 @@ describe("POST /user/edit email changes", () => {
 });
 
 // ---------------------------------------------------------------------------
-// LoginThrottle - counters survive pressure from other addresses
+// LoginThrottle - one Mongo document per address
 // ---------------------------------------------------------------------------
-// Finds an address sharing a slot with `target`, using only the public
-// interface: locking the target makes every address in its slot report limited.
-function findCollidingAddress(target) {
-  const probe = new LoginThrottle();
-  for (let i = 0; i < DEFAULT_OPTIONS.accountMaxAttempts; i += 1) {
-    probe.recordFailure(target);
-  }
+describe("LoginThrottle", () => {
+  beforeEach(resetState);
 
-  for (let i = 0; i < SLOT_COUNT * 20; i += 1) {
-    const candidate = `collide-${i}@example.com`;
-    if (probe.check(candidate).limited) return candidate;
-  }
+  const failTimes = async (throttle, address, times, now) => {
+    for (let i = 0; i < times; i += 1) {
+      await throttle.recordFailure(address, now);
+    }
+  };
 
-  throw new Error("no colliding address found");
-}
+  it("locks only the address that failed", async () => {
+    const throttle = new LoginThrottle();
+    const now = Date.now();
 
-describe("LoginThrottle under pressure from other addresses", () => {
-  it("keeps a locked account locked while many other addresses fail", () => {
+    await failTimes(throttle, "victim@example.com", DEFAULT_OPTIONS.accountMaxAttempts, now);
+
+    expect((await throttle.check("victim@example.com", now)).limited).to.equal(true);
+    expect((await throttle.check("bystander@example.com", now)).limited).to.equal(false);
+  });
+
+  it("keeps a locked account locked while many other addresses fail", async () => {
     const throttle = new LoginThrottle();
     const now = Date.now();
     const victim = "victim@example.com";
 
-    for (let i = 0; i < DEFAULT_OPTIONS.accountMaxAttempts; i += 1) {
-      throttle.recordFailure(victim, now);
-    }
-    expect(throttle.check(victim, now).limited, "locked out to begin with").to.equal(true);
-
-    for (let i = 0; i <= SLOT_COUNT; i += 1) {
-      throttle.recordFailure(`spray-${i}@example.com`, now);
+    await failTimes(throttle, victim, DEFAULT_OPTIONS.accountMaxAttempts, now);
+    for (let i = 0; i < 50; i += 1) {
+      await failTimes(throttle, `spray-${i}@example.com`, DEFAULT_OPTIONS.accountMaxAttempts, now);
     }
 
-    expect(throttle.check(victim, now).limited, "still locked out after the spray").to.equal(
-      true
-    );
+    expect((await throttle.check(victim, now)).limited).to.equal(true);
   });
 
-  it("still locks an address that is guessed in rotation with many others", () => {
+  it("does not let failures on other addresses lock an address", async () => {
     const throttle = new LoginThrottle();
     const now = Date.now();
-    // More distinct addresses than there are slots, so any structure that drops
-    // a counter to make room loses the first address's failures before the
-    // rotation comes back around to it.
-    const addresses = Array.from(
-      { length: SLOT_COUNT + 1 },
-      (_, i) => `rotate-${i}@example.com`
-    );
 
-    expect(throttle.check(addresses[0], now).limited, "not locked yet").to.equal(false);
-
-    for (let round = 0; round < DEFAULT_OPTIONS.accountMaxAttempts; round += 1) {
-      for (const address of addresses) {
-        throttle.recordFailure(address, now);
-      }
+    for (let i = 0; i < 50; i += 1) {
+      await failTimes(throttle, `spray-${i}@example.com`, DEFAULT_OPTIONS.accountMaxAttempts, now);
     }
 
-    expect(
-      throttle.check(addresses[0], now).limited,
-      "the rotation still reaches the lockout"
-    ).to.equal(true);
+    expect((await throttle.check("victim@example.com", now)).limited).to.equal(false);
   });
 
-  it("does not let one address clear another address's failures", () => {
+  it("does not let one address clear another address's failures", async () => {
     const throttle = new LoginThrottle();
     const now = Date.now();
-    // Two addresses that land in the same slot: a success on one must not
-    // discard failures counted for the other.
     const victim = "victim@example.com";
-    const collider = findCollidingAddress(victim);
 
-    throttle.recordFailure(collider, now);
-    for (let i = 0; i < DEFAULT_OPTIONS.accountMaxAttempts - 2; i += 1) {
-      throttle.recordFailure(victim, now);
+    await failTimes(throttle, victim, DEFAULT_OPTIONS.accountMaxAttempts - 1, now);
+    await throttle.recordFailure("other@example.com", now);
+    await throttle.recordSuccess("other@example.com");
+    await throttle.recordFailure(victim, now);
+
+    expect((await throttle.check(victim, now)).limited).to.equal(true);
+  });
+
+  it("clears an address's failures on success", async () => {
+    const throttle = new LoginThrottle();
+    const now = Date.now();
+    const address = "reader@example.com";
+
+    await failTimes(throttle, address, DEFAULT_OPTIONS.accountMaxAttempts - 1, now);
+    await throttle.recordSuccess(address);
+    await throttle.recordFailure(address, now);
+
+    expect((await throttle.check(address, now)).limited).to.equal(false);
+  });
+
+  it("counts every one of a burst of concurrent failures", async () => {
+    const throttle = new LoginThrottle();
+    const now = Date.now();
+    const address = "burst@example.com";
+
+    await Promise.all(
+      Array.from({ length: DEFAULT_OPTIONS.accountMaxAttempts }, () =>
+        throttle.recordFailure(address, now)
+      )
+    );
+
+    expect((await throttle.check(address, now)).limited).to.equal(true);
+  });
+
+  it("treats differently cased addresses as the same key", async () => {
+    const throttle = new LoginThrottle();
+    const now = Date.now();
+
+    await failTimes(throttle, "Reader@Example.com", DEFAULT_OPTIONS.accountMaxAttempts, now);
+
+    expect((await throttle.check("reader@example.com", now)).limited).to.equal(true);
+  });
+
+  it("starts a fresh window once the old one has passed", async () => {
+    const throttle = new LoginThrottle();
+    const start = Date.now();
+    const address = "slow@example.com";
+
+    await failTimes(throttle, address, DEFAULT_OPTIONS.accountMaxAttempts - 1, start);
+    const later = start + DEFAULT_OPTIONS.windowMs;
+    await throttle.recordFailure(address, later);
+
+    expect((await throttle.check(address, later)).limited).to.equal(false);
+  });
+
+  it("lifts the lockout once it has run its course", async () => {
+    const throttle = new LoginThrottle();
+    const now = Date.now();
+    const address = "locked@example.com";
+
+    await failTimes(throttle, address, DEFAULT_OPTIONS.accountMaxAttempts, now);
+    const locked = await throttle.check(address, now);
+    expect(locked.retryAfterSeconds).to.equal(DEFAULT_OPTIONS.lockoutMs / 1000);
+
+    const after = now + DEFAULT_OPTIONS.lockoutMs;
+    expect((await throttle.check(address, after)).limited).to.equal(false);
+  });
+
+  it("sets each document to expire once its window and lockout have passed", async () => {
+    const throttle = new LoginThrottle();
+    const now = Date.now();
+
+    await throttle.recordFailure("once@example.com", now);
+    await failTimes(throttle, "locked@example.com", DEFAULT_OPTIONS.accountMaxAttempts, now);
+
+    const once = await LoginAttempt.findById("once@example.com").lean();
+    const locked = await LoginAttempt.findById("locked@example.com").lean();
+    expect(once.expiresAt.getTime()).to.equal(now + DEFAULT_OPTIONS.windowMs);
+    expect(locked.expiresAt.getTime()).to.equal(now + DEFAULT_OPTIONS.lockoutMs);
+
+    await LoginAttempt.init();
+    const indexes = await LoginAttempt.collection.indexes();
+    expect(indexes.find((index) => index.key.expiresAt === 1)).to.include({
+      expireAfterSeconds: 0,
+    });
+  });
+
+  it("fails the login rather than skipping the throttle when the store is down", async () => {
+    const user = await createUser();
+    const original = LoginAttempt.findById;
+    LoginAttempt.findById = () => {
+      throw new Error("store unavailable");
+    };
+
+    try {
+      const res = await request
+        .execute(app)
+        .post("/auth/login")
+        .send({ email: user.email, password: TEST_PASSWORD });
+
+      expect(res).to.have.status(500);
+      expect(res.body).to.not.have.property("token");
+    } finally {
+      LoginAttempt.findById = original;
     }
-
-    throttle.recordSuccess(collider, now);
-
-    throttle.recordFailure(victim, now);
-    expect(
-      throttle.check(victim, now).limited,
-      "the victim's failures were not wiped by the collider"
-    ).to.equal(true);
   });
 });

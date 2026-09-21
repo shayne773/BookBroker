@@ -126,13 +126,13 @@ app.post("/auth/login", loginValidators, async (req, res, next) => {
 
   const { email, password } = matchedData(req);
 
-  const limit = loginThrottle.check(email);
-  if (limit.limited) {
-    res.set("Retry-After", String(limit.retryAfterSeconds));
-    return res.status(429).json({ message: LOGIN_THROTTLED_MESSAGE });
-  }
-
   try {
+    const limit = await loginThrottle.check(email);
+    if (limit.limited) {
+      res.set("Retry-After", String(limit.retryAfterSeconds));
+      return res.status(429).json({ message: LOGIN_THROTTLED_MESSAGE });
+    }
+
     const user = (await User.findOne({ email })) ?? (await findUserByEmail(email));
 
     const isMatch = user?.password
@@ -142,11 +142,11 @@ app.post("/auth/login", loginValidators, async (req, res, next) => {
     if (!isMatch) {
       // Failures are recorded for unknown emails too, so lockout behaviour is
       // identical whether or not the account exists.
-      loginThrottle.recordFailure(email);
+      await loginThrottle.recordFailure(email);
       return res.status(400).json({ message: INVALID_CREDENTIALS_MESSAGE });
     }
 
-    loginThrottle.recordSuccess(email);
+    await loginThrottle.recordSuccess(email);
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "2h" });
 
@@ -845,5 +845,4 @@ app.use((err, req, res, next) => {
   });
 });
 
-export { loginThrottle };
 export default app;
