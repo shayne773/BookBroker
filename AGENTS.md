@@ -26,13 +26,18 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   imports before other rules, so `base.css` and `components.css` each open with the
   Tailwind directive that belongs in front of them. Putting `@tailwind` back in
   `index.css` between imports silently drops those files from the bundle.
-- The redesign ships in two passes. Pass 1 covers the shell, navigation, Home, Browse
-  and the book page; the other screens still carry their original dark stylesheets.
-- Those remaining per-page stylesheets are global, not scoped, and load after the
-  design system, so a page's class can silently restyle another page. Before adding a
-  class to the system, check it is not already taken:
-  `grep -rn "\.<name>[ ,{:]" front-end/src --include=*.css`. `textlink`, `button`,
-  `reveal` and `is-revealed` are named the way they are for exactly this reason.
+- Every screen is on the system; there are no per-page stylesheets. Do not add one: a
+  need the system does not meet is a new class in `components.css`, so every screen
+  gains it. For one-off spacing, use a Tailwind utility (`mt-4`), which reads the tokens.
+- `.cover` is a CSS size container, which is how the missing-cover label decides from the
+  frame's own width whether it fits. A size container takes no width from its content, so
+  every `.cover` needs one from its layout (grid track, stretched flex item or width), or
+  it collapses to nothing.
+- Dialogs use `.dialog-overlay` / `.dialog-content`, the names reactjs-popup generates
+  from `<Popup className="dialog">`, so hand-built modals and Popup share one style.
+- `.page` runs its entry animation with fill-mode `backwards`, not `both`: a transform
+  left in effect makes the page the containing block for its `position: fixed` children
+  (toasts, dialog overlays).
 - Motion is tokenised (`--duration-fast|base|slow`, `--ease-out|standard`) and
   `tokens.css` collapses those durations under `prefers-reduced-motion: reduce`, so a
   component honours the preference by using the tokens rather than by opting in.
