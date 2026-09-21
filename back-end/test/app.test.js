@@ -1,202 +1,214 @@
-import { use, expect, should, assert } from 'chai'
-import { default as chaiHttp, request } from 'chai-http'
-import app from '../app.js' 
+import { expect } from "chai";
+import mongoose from "mongoose";
+import { api, signUp, offerBook } from "./helpers.js";
+import { WishlistBook } from "../Data.js";
 
-use(chaiHttp)
+describe("auth", () => {
+  it("POST /auth/register then /auth/login returns a token for the user", async () => {
+    const user = await signUp({ username: "ada" });
 
-it('GET /books should return an array of books', (done) => {
-  request
-    .agent(app)
-    .get('/books')
-    .end((err, res) => {
-      expect(err).to.be.null;
-      expect(res).to.have.status(200);
-      expect(res).to.be.json;
-      expect(res.body).to.be.an('array');
-      expect(res.body[0]).to.have.property('title');
-      done();
-    });
+    expect(user.token).to.be.a("string").that.is.not.empty;
+    expect(user.username).to.equal("ada");
+  });
+
+  it("POST /auth/register rejects an email that is already registered", async () => {
+    const user = await signUp();
+
+    const res = await api()
+      .post("/auth/register")
+      .send({ username: "again", email: user.email, password: "whatever" });
+
+    expect(res).to.have.status(400);
+  });
+
+  it("POST /auth/login rejects a wrong password", async () => {
+    const user = await signUp();
+
+    const res = await api().post("/auth/login").send({ email: user.email, password: "wrong" });
+
+    expect(res).to.have.status(400);
+    expect(res.body).to.not.have.property("token");
+  });
+
+  it("a protected route answers 401 without a token", async () => {
+    const res = await api().get("/books");
+
+    expect(res).to.have.status(401);
+  });
+
+  it("a protected route answers 401 for a token it did not sign", async () => {
+    const res = await api("not-a-real-token").get("/books");
+
+    expect(res).to.have.status(401);
+  });
 });
 
-it('GET /books/:id should return a book object', (done) => {
-  request
-    .agent(app)
-    .get('/books/1')
-    .end((err, res) => {
-      expect(err).to.be.null;
-      expect(res).to.have.status(200);
-      expect(res).to.be.json;
-      expect(res.body).to.have.property('id');
-      expect(res.body).to.have.property('title');
-      done();
-    });
+describe("books", () => {
+  let me;
+  let other;
+
+  beforeEach(async () => {
+    me = await signUp();
+    other = await signUp();
+  });
+
+  it("GET /books returns other users' books, not my own", async () => {
+    await offerBook(me, { title: "Mine" });
+    await offerBook(other, { title: "Theirs" });
+
+    const res = await api(me.token).get("/books");
+
+    expect(res).to.have.status(200);
+    expect(res).to.be.json;
+    expect(res.body.map((b) => b.title)).to.deep.equal(["Theirs"]);
+  });
+
+  it("GET /books?query= filters by title or author", async () => {
+    await offerBook(other, { title: "Dune", author: "Frank Herbert" });
+    await offerBook(other, { title: "Emma", author: "Jane Austen" });
+
+    const res = await api(me.token).get("/books?query=austen");
+
+    expect(res).to.have.status(200);
+    expect(res.body.map((b) => b.title)).to.deep.equal(["Emma"]);
+  });
+
+  it("GET /books/:id returns the book with its owner", async () => {
+    const book = await offerBook(other);
+
+    const res = await api().get(`/books/${book.id}`);
+
+    expect(res).to.have.status(200);
+    expect(res).to.be.json;
+    expect(res.body).to.include({ _id: book.id, title: "The Hobbit" });
+    expect(res.body.owner).to.deep.equal({ id: other.id, username: other.username });
+  });
+
+  it("GET /books/:id answers 404 for an id that matches no book", async () => {
+    const res = await api().get(`/books/${new mongoose.Types.ObjectId()}`);
+
+    expect(res).to.have.status(404);
+  });
+
+  it("GET /genres lists the distinct genres on offer", async () => {
+    await offerBook(other, { genre: "Adventure" });
+    await offerBook(other, { genre: "Adventure" });
+    await offerBook(other, { genre: "Mystery" });
+
+    const res = await api().get("/genres");
+
+    expect(res).to.have.status(200);
+    expect(res.body).to.have.members(["Adventure", "Mystery"]);
+  });
+
+  it("GET /genres/:genre returns only books of that genre, case-insensitively", async () => {
+    await offerBook(other, { title: "Treasure Island", genre: "Adventure" });
+    await offerBook(other, { title: "Gaudy Night", genre: "Mystery" });
+
+    const res = await api().get("/genres/adventure");
+
+    expect(res).to.have.status(200);
+    expect(res.body.map((b) => b.title)).to.deep.equal(["Treasure Island"]);
+  });
+
+  it("GET /feed returns the newest books from other users", async () => {
+    await offerBook(me, { title: "Mine" });
+    await offerBook(other, { title: "Older", createdAt: new Date("2020-01-01") });
+    await offerBook(other, { title: "Newer", createdAt: new Date("2024-01-01") });
+
+    const res = await api(me.token).get("/feed");
+
+    expect(res).to.have.status(200);
+    expect(res.body.map((b) => b.title)).to.deep.equal(["Newer", "Older"]);
+    expect(res.body[0]).to.include.keys("title", "author", "owner", "isbn");
+  });
 });
 
-it('GET /genres should return a list of genres', (done) => {
-  request
-    .agent(app)
-    .get('/genres')
-    .end((err, res) => {
-      expect(err).to.be.null;
-      expect(res).to.have.status(200);
-      expect(res).to.be.json;
-      expect(res.body).to.be.an('array');
-      done();
-    });
+describe("user shelves", () => {
+  let me;
+  let other;
+
+  beforeEach(async () => {
+    me = await signUp();
+    other = await signUp();
+  });
+
+  it("POST /user/add-wishlist-book adds to my wishlist, read back by GET /user/wishlist", async () => {
+    const add = await api(me.token)
+      .post("/user/add-wishlist-book")
+      .send({ title: "Middlemarch", author: "George Eliot", isbn: "9780141439549" });
+
+    expect(add).to.have.status(201);
+    expect(add.body).to.have.property("message", "successfully added wishlist book");
+
+    const list = await api(me.token).get("/user/wishlist");
+
+    expect(list).to.have.status(200);
+    expect(list.body).to.have.lengthOf(1);
+    expect(list.body[0]).to.include({ title: "Middlemarch", userId: me.id });
+  });
+
+  it("POST /user/add-wishlist-book rejects a book without an isbn", async () => {
+    const res = await api(me.token)
+      .post("/user/add-wishlist-book")
+      .send({ title: "Middlemarch", author: "George Eliot" });
+
+    expect(res).to.have.status(400);
+    expect(await WishlistBook.countDocuments()).to.equal(0);
+  });
+
+  it("POST /user/add-offered-book adds to my offered shelf, read back by GET /user/offered", async () => {
+    const add = await api(me.token)
+      .post("/user/add-offered-book")
+      .send({ title: "Beloved", author: "Toni Morrison", isbn: "9781400033416" });
+
+    expect(add).to.have.status(201);
+    expect(add.body).to.have.property("message", "successfully added offered book");
+
+    const list = await api(me.token).get("/user/offered");
+
+    expect(list).to.have.status(200);
+    expect(list.body).to.have.lengthOf(1);
+    expect(list.body[0]).to.include({ title: "Beloved", owner: me.id });
+  });
+
+  it("GET /users/:id/wishlist returns that user's wishlist", async () => {
+    await WishlistBook.create({ userId: other.id, title: "Persuasion", isbn: "1" });
+    await WishlistBook.create({ userId: me.id, title: "Not theirs", isbn: "2" });
+
+    const res = await api(me.token).get(`/users/${other.id}/wishlist`);
+
+    expect(res).to.have.status(200);
+    expect(res.body.map((b) => b.title)).to.deep.equal(["Persuasion"]);
+  });
+
+  it("GET /users/:id/offered returns that user's books that are not locked in a trade", async () => {
+    await offerBook(other, { title: "Available" });
+    await offerBook(other, { title: "Locked", locked: true });
+
+    const res = await api(me.token).get(`/users/${other.id}/offered`);
+
+    expect(res).to.have.status(200);
+    expect(res.body.map((b) => b.title)).to.deep.equal(["Available"]);
+  });
+
+  it("DELETE /user/offered/:id removes my own book", async () => {
+    const book = await offerBook(me);
+
+    const res = await api(me.token).delete(`/user/offered/${book.id}`);
+
+    expect(res).to.have.status(200);
+    const list = await api(me.token).get("/user/offered");
+    expect(list.body).to.be.empty;
+  });
+
+  it("DELETE /user/offered/:id will not remove someone else's book", async () => {
+    const book = await offerBook(other);
+
+    const res = await api(me.token).delete(`/user/offered/${book.id}`);
+
+    expect(res).to.have.status(404);
+    const list = await api(other.token).get("/user/offered");
+    expect(list.body).to.have.lengthOf(1);
+  });
 });
-
-it('GET /genres/:genre should return filtered books', (done) => {
-  request
-    .agent(app)
-    .get('/genres/adventure') 
-    .end((err, res) => {
-      expect(err).to.be.null;
-      expect(res).to.have.status(200);
-      expect(res).to.be.json;
-      expect(res.body).to.be.an('array');
-      // Expect genre of all requested books to match requested genre
-      res.body.forEach(book => expect(book.genre).to.equal('Adventure'))
-      done();
-    });
-});
-
-it('GET /feed should return a nonempty array of book objects', (done) => {
-  request
-    .agent(app)
-    .get('/feed')
-    .end((err, res) => {
-      expect(err).to.be.null;
-      expect(res).to.have.status(200);
-      expect(res).to.be.json;
-      expect(res.body).to.be.an('array');
-      expect(res.body[0]).to.have.property('title');
-      expect(res.body[0]).to.have.property('author');
-      expect(res.body[0]).to.have.property('userid');
-      expect(res.body[0]).to.have.property('isbn');
-      done();
-    });
-});
-
-it('GET /users/:id/wishlist should return an array of book objects', (done) => {
-  request
-    .agent(app)
-    .get('/users/1/wishlist')
-    .end((err, res) => {
-      expect(err).to.be.null
-      expect(res).to.have.status(200)
-      expect(res).to.be.json
-      expect(res.body).to.be.an('array')
-      // Make sure each returned item is a proper book
-      res.body.forEach(book => {
-        expect(book).to.have.property('title')
-        expect(book).to.have.property('author')
-        expect(book).to.have.property('isbn')
-      })
-      done()
-    })
-})
-
-it('GET /users/:id/offered should return an array of book objects', (done) => {
-  request
-    .agent(app)
-    .get('/users/1/offered')
-    .end((err, res) => {
-      expect(err).to.be.null
-      expect(res).to.have.status(200)
-      expect(res).to.be.json
-      expect(res.body).to.be.an('array')
-      // Make sure each returned item is a proper book
-      res.body.forEach(book => {
-        // Will need to make sure the requested user's id matches the book's userid,
-        // but there is not a mechanism for that at this point
-        expect(book).to.have.property('title')
-        expect(book).to.have.property('author')
-        expect(book).to.have.property('isbn')
-      })
-      done()
-    })
-})
-
-it("GET /user/wishlist should return the current user's wishlist", (done) => [
-  request
-    .agent(app)
-    .get('/user/wishlist')
-    .end((err, res) => {
-      expect(err).to.be.null
-      expect(res).to.have.status(200)
-      expect(res).to.be.json
-      expect(res.body).to.be.an('array')
-      // Make sure each returned item is a proper book
-      res.body.forEach(book => {
-        expect(book).to.have.property('title')
-        expect(book).to.have.property('author')
-        expect(book).to.have.property('isbn')
-      })
-      done()
-    })
-])
-
-it("GET /user/offered should return the current user's wishlist", (done) => [
-  request
-    .agent(app)
-    .get('/user/offered')
-    .end((err, res) => {
-      expect(err).to.be.null
-      expect(res).to.have.status(200)
-      expect(res).to.be.json
-      expect(res.body).to.be.an('array')
-      // Make sure each returned item is a proper book
-      res.body.forEach(book => {
-        // Will need to make sure that the book's userid matches the current user,
-        // But still waiting on login for that
-        expect(book).to.have.property('title')
-        expect(book).to.have.property('author')
-        expect(book).to.have.property('isbn')
-      })
-      done()
-    })
-])
-
-it("POST /user/add-wishlist-book should return a success message", (done) => {
-
-  const data = {
-    title: "book-title",
-    author: "book-author",
-    publisher: "book-publisher"
-  };
-
-  request
-    .agent(app)
-    .post('/user/add-wishlist-book')
-    .send(data)
-    .end((err, res)=> {
-      expect(err).to.be.null
-      expect(res).to.have.status(200)
-      expect(res.body).to.be.an('object')
-      expect(res.body).to.have.property('message', 'successfully added wishlist book')
-      done()
-    })
-})
-
-
-it("POST /user/add-offered-book should return a success message", (done) => {
-
-  const data = {
-    title: "book-title",
-    author: "book-author",
-    publisher: "book-publisher"
-  };
-  
-  request
-    .agent(app)
-    .post('/user/add-offered-book')
-    .send(data)
-    .end((err, res)=> {
-      expect(err).to.be.null
-      expect(res).to.have.status(200)
-      expect(res.body).to.be.an('object')
-      expect(res.body).to.have.property('message', 'successfully added offered book')
-      done()
-    })
-})
-
