@@ -1,33 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import "./ExchangesList.css";
+import BookCover from "./BookCover";
+import { statusClass, statusLabel } from "./exchangeStatus";
 import { authFetch, isSessionExpiredError } from "./auth";
 
 function formatWhen(d) {
   if (!d) return "";
   const dt = new Date(d);
   return dt.toLocaleString([], { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
-
-function statusLabel(s) {
-  const map = {
-    DRAFT: "Draft",
-    PENDING: "Pending",
-    COUNTERED: "Countered",
-    ACCEPTED: "Accepted",
-    DECLINED: "Declined",
-    CANCELLED: "Cancelled",
-    COMPLETED: "Completed",
-    EXPIRED: "Expired",
-  };
-  return map[s] || s;
-}
-
-function statusClass(s) {
-  if (s === "ACCEPTED") return "ok";
-  if (s === "PENDING" || s === "COUNTERED") return "warn";
-  if (s === "COMPLETED") return "done";
-  return "muted";
 }
 
 export default function ExchangesList() {
@@ -83,121 +63,108 @@ export default function ExchangesList() {
     return String(ex.requester?._id) === String(userId) ? ex.responder : ex.requester;
   }
 
-  function coverOf(book) {
-    return book?.cover || "/default-book.png";
-  }
-
   return (
-    <main className="ExchangesPage">
-      <div className="titlebox">
-            <h1 className="title">Exchanges</h1>
+    <main className="page page--reading">
+      <div className="page-head">
+        <div className="page-head__main">
+          <p className="kicker">Your trades</p>
+          <h1 className="page-title">Exchanges</h1>
+          <p className="page-lede">Track offers, confirm trades, and rate users.</p>
+        </div>
       </div>
-      <div className="ex-subtitle">Track offers, confirm trades, and rate users.</div>
 
-      {loading && <div className="ex-loading">Loading…</div>}
-      {!!err && <div className="ex-error">{err}</div>}
+      {loading && <p className="empty" role="status">Loading…</p>}
+      {!!err && (
+        <div className="section">
+          <p className="notice notice--error" role="alert">{err}</p>
+        </div>
+      )}
 
       {!loading && !items.length && !err && (
-        <div className="ex-empty">
+        <div className="empty">
           <p>No exchanges yet.</p>
-          <p className="muted">You’ll see them here after you propose a trade.</p>
+          <p>You’ll see them here after you propose a trade.</p>
         </div>
       )}
 
       {!!active.length && (
-        <section className="ex-section">
-          <h3 className="ex-section-title">Active</h3>
-          <div className="ex-grid">
-            {active.map((ex) => {
-              const ou = otherUser(ex);
-              const thumbs = [
-                ...(ex.requesterBooks || []),
-                ...(ex.responderBooks || []),
-              ].slice(0, 6);
-
-              return (
-                <Link key={ex._id} to={`/exchanges/${ex._id}`} className="ex-card">
-                  <div className="ex-card-top">
-                    <div className="ex-user">
-                      <div className="ex-user-name">{ou?.username || "Unknown"}</div>
-                      <div className="ex-user-meta">
-                        {ou?.location ? ou.location : "No location"} ·{" "}
-                        {ou?.ratingsAvg ? ou.ratingsAvg.toFixed(1) : (ou?.ratings ?? 0)}
-                      </div>
-                    </div>
-
-                    <div className={`ex-status ${statusClass(ex.status)}`}>
-                      {statusLabel(ex.status)}
-                    </div>
-                  </div>
-
-                  <div className="ex-thumbs">
-                    {thumbs.map((b) => (
-                      <div
-                        key={b._id}
-                        className="ex-thumb"
-                        style={{ backgroundImage: `url(${coverOf(b)})` }}
-                      />
-                    ))}
-                    {thumbs.length === 0 && <div className="ex-thumbs-empty">No books selected</div>}
-                  </div>
-
-                  <div className="ex-card-bottom">
-                    <div className="ex-updated">Updated {formatWhen(ex.updatedAt)}</div>
-                    <div className="ex-cta">View / Respond →</div>
-                  </div>
-                </Link>
-              );
-            })}
+        <section className="section">
+          <div className="section-head">
+            <h2 className="section-title">Active</h2>
+            <span className="section-count">{active.length}</span>
           </div>
+          <ul className="list">
+            {active.map((ex) => (
+              <li key={ex._id}>
+                <ExchangeRow ex={ex} other={otherUser(ex)} />
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
       {!!completed.length && (
-        <section className="ex-section">
-          <h3 className="ex-section-title">Completed</h3>
-          <div className="ex-grid">
-            {completed.map((ex) => {
-              const ou = otherUser(ex);
-              const thumbs = [
-                ...(ex.requesterBooks || []),
-                ...(ex.responderBooks || []),
-              ].slice(0, 6);
-
-              return (
-                <Link key={ex._id} to={`/exchanges/${ex._id}`} className="ex-card">
-                  <div className="ex-card-top">
-                    <div className="ex-user">
-                      <div className="ex-user-name">{ou?.username || "Unknown"}</div>
-                      <div className="ex-user-meta">
-                        {ou?.location ? ou.location : "No location"} ·{" "}
-                        {ou?.ratingsAvg ? ou.ratingsAvg.toFixed(1) : (ou?.ratings ?? 0)}
-                      </div>
-                    </div>
-
-                    <div className="ex-status done">Completed</div>
-                  </div>
-
-                  <div className="ex-thumbs">
-                    {thumbs.map((b) => (
-                      <div
-                        key={b._id}
-                        className="ex-thumb"
-                        style={{ backgroundImage: `url(${coverOf(b)})` }}
-                      />
-                    ))}
-                  </div>
-
-                  <div className="ex-card-bottom">
-                    <div className="ex-updated">Completed {formatWhen(ex.updatedAt)}</div>
-                    <div className="ex-cta">View →</div>
-                  </div>
-                </Link>
-              );
-            })}
+        <section className="section">
+          <div className="section-head">
+            <h2 className="section-title">Completed</h2>
+            <span className="section-count">{completed.length}</span>
           </div>
+          <ul className="list">
+            {completed.map((ex) => (
+              <li key={ex._id}>
+                <ExchangeRow ex={ex} other={otherUser(ex)} completed />
+              </li>
+            ))}
+          </ul>
         </section>
       )}
     </main>
+  );
+}
+
+// One exchange: who it is with, the books on the table, and where it stands.
+function ExchangeRow({ ex, other, completed = false }) {
+  const thumbs = [
+    ...(ex.requesterBooks || []),
+    ...(ex.responderBooks || []),
+  ].slice(0, 6);
+
+  return (
+    <Link to={`/exchanges/${ex._id}`} className="list-row">
+      <span className="avatar" aria-hidden="true">
+        {(other?.username || "?").slice(0, 1)}
+      </span>
+
+      <div className="list-row__body">
+        <h3 className="list-row__title">{other?.username || "Unknown"}</h3>
+        <p className="list-row__meta">
+          {other?.location ? other.location : "No location"} ·{" "}
+          {other?.ratingsAvg ? other.ratingsAvg.toFixed(1) : (other?.ratings ?? 0)}
+        </p>
+
+        <div className="cover-strip list-row__extra">
+          {thumbs.map((b) => (
+            <span key={b._id} className="cover">
+              <BookCover src={b.cover} />
+            </span>
+          ))}
+          {!completed && thumbs.length === 0 && <span className="hint">No books selected</span>}
+        </div>
+      </div>
+
+      <div className="list-row__trail">
+        <span className="list-row__status">
+          <span className={completed ? "status status--done" : statusClass(ex.status)}>
+            {completed ? "Completed" : statusLabel(ex.status)}
+          </span>
+          <span>{completed ? "Completed" : "Updated"} {formatWhen(ex.updatedAt)}</span>
+        </span>
+
+        <span>
+          {completed ? "View" : "View / Respond"}
+          <span className="textlink-arrow__mark" aria-hidden="true">&rarr;</span>
+        </span>
+      </div>
+    </Link>
   );
 }

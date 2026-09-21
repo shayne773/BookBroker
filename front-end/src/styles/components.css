@@ -582,6 +582,9 @@
   container-type: inline-size;
 }
 
+/* A size container takes no width from its content, so every .cover must be
+   given one by its layout: a grid track, a stretched flex item, or a width. */
+
 .cover__img {
   width: 100%;
   height: 100%;
@@ -1673,6 +1676,18 @@ a.list-row:focus-visible .textlink-arrow__mark {
   transform: translateX(3px);
 }
 
+/* Anything set under a row's meta line, e.g. the covers in an exchange. */
+.list-row__extra {
+  margin-top: var(--space-3);
+}
+
+/* A status tag with its timestamp beneath, aligned to the row's end. */
+.list-row__status {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-2);
+}
+
 /* Small covers side by side, e.g. the books in an exchange. */
 .cover-strip {
   display: flex;
@@ -1761,6 +1776,9 @@ a.list-row:focus-visible .textlink-arrow__mark {
   position: relative;
   display: flex;
   flex-direction: column;
+  /* Stated, because a button does not stretch its children by default, and a
+     .cover (a size container) has no width of its own to fall back on. */
+  align-items: stretch;
   gap: var(--space-2);
   padding: 0;
   border: 0;
@@ -1794,6 +1812,8 @@ a.list-row:focus-visible .textlink-arrow__mark {
   height: 24px;
   border-radius: var(--radius-full);
   background: var(--color-fill-strong);
+  /* A paper ring keeps the check legible on a dark jacket. */
+  box-shadow: 0 0 0 2px var(--color-paper);
   color: var(--color-ink-inverse);
   font-size: var(--text-xs);
   opacity: 0;
