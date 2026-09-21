@@ -42,6 +42,21 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `tokens.css` collapses those durations under `prefers-reduced-motion: reduce`, so a
   component honours the preference by using the tokens rather than by opting in.
 
+## Back end
+
+- Two independent services: `front-end/` (React, Vite) deployed on Vercel and `back-end/`
+  (Express + Mongoose) deployed on AWS. They share nothing but the HTTP contract.
+- Configuration is environment-driven. `back-end/.env.example` is the authoritative
+  list of variables and their defaults; `back-end/.env` is gitignored.
+- Security helpers used by `app.js` live in `back-end/lib/`: the CORS allowlist,
+  the MongoDB-backed per-email login throttle, and the input validation / regex-escaping
+  helpers. Any user input that reaches a Mongo `$regex` must go through
+  `safeRegex` from `lib/validation.js`.
+- Client responses never carry `err.message` or a stack trace for an unexpected failure.
+  Route handlers log in full with `console.error` and hand unexpected failures to the
+  generic error handler at the bottom of `app.js` via `next(err)`. Express 4 does not
+  forward rejections automatically, so every `await` in a handler needs a `try`/`catch`.
+
 ## Back-end trades
 
 - A route in `back-end/routes/exchanges.js` that opens a transaction signals every early
@@ -85,7 +100,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   replica set (several exchange routes use transactions, which a standalone
   mongod rejects). `back-end/test/setup.js` is the root hook: it sets `JWT_SECRET`, connects
   Mongoose and empties every collection after each test. `back-end/test/helpers.js` signs users
-  up through the real auth routes, so protected routes get a genuine token.
+  up through the real auth routes, so protected routes get a genuine token; its direct
+  fixtures (`createUser`, `authHeader`, ...) write to the database for states the routes
+  cannot produce.
 
 ## Maintaining this file
 

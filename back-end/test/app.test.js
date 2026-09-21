@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import mongoose from "mongoose";
-import { api, signUp, offerBook } from "./helpers.js";
+import { api, signUp, offerBook, TEST_PASSWORD } from "./helpers.js";
 import { WishlistBook } from "../Data.js";
 
 describe("auth", () => {
@@ -16,7 +16,7 @@ describe("auth", () => {
 
     const res = await api()
       .post("/auth/register")
-      .send({ username: "again", email: user.email, password: "whatever" });
+      .send({ username: "again", email: user.email, password: TEST_PASSWORD, location: "Queens" });
 
     expect(res).to.have.status(400);
   });

@@ -5,8 +5,17 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { body, validationResult } from "express-validator";
+import { body, matchedData, validationResult } from "express-validator";
 import exchangesRouter from "./routes/exchanges.js";
+import { buildCorsOptions } from "./lib/cors.js";
+import { LOGIN_THROTTLED_MESSAGE, LoginThrottle } from "./lib/loginThrottle.js";
+import {
+  loginValidators,
+  registerValidators,
+  safeRegex,
+  userEditValidators,
+  validationProblem,
+} from "./lib/validation.js";
 
 dotenv.config();
 
@@ -21,11 +30,30 @@ import {
 
 const app = express();
 
+const loginThrottle = new LoginThrottle();
+
+const INVALID_CREDENTIALS_MESSAGE = "Invalid credentials";
+
+// New emails are stored normalized, but accounts created before that still hold
+// whatever casing the user typed. A strength-2 collation compares case- and
+// accent-insensitively inside Mongo, so those accounts stay reachable without
+// rewriting them and without building a regex out of an address.
+const CASE_INSENSITIVE = { locale: "en", strength: 2 };
+
+// The unique index on `email` uses the simple collation, so this lookup cannot
+// use it and scans the collection. Deliberate for now: every alternative is a
+// live-database operation (a collation index, or a normalized field plus a
+// backfill) and is tracked separately.
+function findUserByEmail(email) {
+  return User.findOne({ email }).collation(CASE_INSENSITIVE);
+}
+
 // --------------------
 // Middleware
 // --------------------
-app.use(cors());
-app.options("*", cors()); // allow preflight
+const corsOptions = buildCorsOptions();
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // allow preflight
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -57,38 +85,74 @@ app.use("/exchanges", authMiddleware, exchangesRouter);
 // PUBLIC ROUTES
 // --------------------
 
-app.post("/auth/register", async (req, res) => {
-  const { username, email, password } = req.body;
+app.post("/auth/register", registerValidators, async (req, res, next) => {
+  const problem = validationProblem(req);
+  if (problem) return res.status(400).json(problem);
+
+  // matchedData returns only the validated + sanitized fields: the email is
+  // already normalized and the strings are trimmed.
+  const { username, email, password, location } = matchedData(req);
 
   try {
-    const existingUser = await User.findOne({ email });
+    const existingUser = await findUserByEmail(email);
     if (existingUser) return res.status(400).json({ message: "User already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ username, email, password: hashedPassword, location: null, ratings: 5 });
+    const user = new User({
+      username,
+      email,
+      password: hashedPassword,
+      location,
+      ratings: 5,
+    });
     await user.save();
 
     res.status(201).json({ message: "User registered successfully" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // The unique index on email catches a signup that lost the race above.
+    if (err?.code === 11000) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+    next(err);
   }
 });
 
-app.post("/auth/login", async (req, res) => {
-  const { email, password } = req.body;
+app.post("/auth/login", loginValidators, async (req, res, next) => {
+  // A malformed body is answered exactly like a wrong password, so the caller
+  // learns nothing from the shape of the response.
+  if (validationProblem(req)) {
+    return res.status(400).json({ message: INVALID_CREDENTIALS_MESSAGE });
+  }
+
+  const { email, password } = matchedData(req);
 
   try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: "Invalid credentials" });
+    const limit = await loginThrottle.check(email);
+    if (limit.limited) {
+      res.set("Retry-After", String(limit.retryAfterSeconds));
+      return res.status(429).json({ message: LOGIN_THROTTLED_MESSAGE });
+    }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+    const user = (await User.findOne({ email })) ?? (await findUserByEmail(email));
+
+    const isMatch = user?.password
+      ? await bcrypt.compare(password, user.password)
+      : false;
+
+    if (!isMatch) {
+      // Failures are recorded for unknown emails too, so lockout behaviour is
+      // identical whether or not the account exists.
+      await loginThrottle.recordFailure(email);
+      return res.status(400).json({ message: INVALID_CREDENTIALS_MESSAGE });
+    }
+
+    await loginThrottle.recordSuccess(email);
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "2h" });
 
     res.json({ token, user: { id: user._id, username: user.username } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -96,10 +160,10 @@ app.post("/logout", async (req, res) => {
   return res.status(200).json({ message: "Logged out successfully" });
 })
 
-app.get("/books/:id", async (req, res) => {
+app.get("/books/:id", async (req, res, next) => {
   try {
     const book = await OfferedBook.findById(req.params.id);
-    if (!book) return res.status(404).json({ error: "Book not found" });
+    if (!book) return res.status(404).json({ message: "Book not found" });
 
     const owner = await User.findById(book.owner);
     const result = { ...book["_doc"] };
@@ -107,35 +171,41 @@ app.get("/books/:id", async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    res.status(404).json({ error: "Book not found: " + err.message });
+    // A malformed id is simply "no such book" as far as the caller is
+    // concerned; anything else is a real failure for the error handler.
+    if (err?.name === "CastError") {
+      return res.status(404).json({ message: "Book not found" });
+    }
+    next(err);
   }
 });
 
-app.get("/genres", async (req, res) => {
+app.get("/genres", async (req, res, next) => {
   try {
     const genres = await OfferedBook.distinct("genre");
     res.json(genres);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.get("/genres/:genre", async (req, res) => {
+app.get("/genres/:genre", async (req, res, next) => {
   try {
-    const genre = req.params.genre.toLowerCase();
-    const books = await OfferedBook.find({ genre: { $regex: new RegExp(genre, "i") } });
+    // Escaped before it reaches the regex engine: raw user text here would
+    // otherwise be interpreted as a regex pattern.
+    const books = await OfferedBook.find({ genre: safeRegex(req.params.genre) });
     res.json(books);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.get("/new", async (req, res) => {
+app.get("/new", async (req, res, next) => {
   try {
     const books = await OfferedBook.find().sort({ createdAt: -1 }).limit(20);
     res.json(books);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -195,22 +265,12 @@ function mostWanted(match, limit) {
   ]);
 }
 
-app.get("/popular", async (req, res) => {
+app.get("/popular", async (req, res, next) => {
   try {
     const books = await mostWanted({ locked: false }, 20);
     res.json(books);
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// public user profile lookup (optional; keep public if you want)
-app.get("/users/:id", async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ error: "Error fetching user" });
+    next(err);
   }
 });
 
@@ -218,21 +278,25 @@ app.get("/users/:id", async (req, res) => {
 // PROTECTED ROUTES
 // --------------------
 
-app.get("/feed", authMiddleware, async (req, res) => {
-  const userId = req.user.userId;
+app.get("/feed", authMiddleware, async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
 
-  const books = await OfferedBook.find({
-    owner: { $ne: userId },
-    locked: false,
-  })
-    .sort({ createdAt: -1 })
-    .limit(20);
+    const books = await OfferedBook.find({
+      owner: { $ne: userId },
+      locked: false,
+    })
+      .sort({ createdAt: -1 })
+      .limit(20);
 
-  res.json(books);
+    res.json(books);
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.get("/books", authMiddleware, async (req, res) => {
-  const query = req.query.query?.toLowerCase() || "";
+app.get("/books", authMiddleware, async (req, res, next) => {
+  const query = String(req.query.query ?? "").toLowerCase();
   const userId = req.user.userId;
 
   try {
@@ -249,13 +313,13 @@ app.get("/books", authMiddleware, async (req, res) => {
 
     res.json(filtered);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /browse?q=optionalSearch
-app.get("/browse", authMiddleware, async (req, res) => {
-  const q = (req.query.q || "").trim();
+app.get("/browse", authMiddleware, async (req, res, next) => {
+  const q = String(req.query.q ?? "").trim();
   const userId = req.user.userId;
 
   const LIMIT_SECTION = 20;
@@ -267,13 +331,13 @@ app.get("/browse", authMiddleware, async (req, res) => {
     const onMarket = { owner: { $ne: new mongoose.Types.ObjectId(userId) }, locked: false };
 
     /* ---------------- SEARCH ---------------- */
-    const searchResults = q
+    // Escaped before it reaches the regex engine: raw input here would allow
+    // regex injection and a pattern that backtracks catastrophically.
+    const searchPattern = q ? safeRegex(q) : null;
+    const searchResults = searchPattern
       ? await OfferedBook.find({
           ...onMarket,
-          $or: [
-            { title: { $regex: q, $options: "i" } },
-            { author: { $regex: q, $options: "i" } },
-          ],
+          $or: [{ title: searchPattern }, { author: searchPattern }],
         })
           .sort({ createdAt: -1 })
           .limit(40)
@@ -308,6 +372,8 @@ app.get("/browse", authMiddleware, async (req, res) => {
             "ownerDetails.location": user.location,
           },
         },
+        // The joined owner document is only a filter; it never reaches the client.
+        { $project: { ownerDetails: 0 } },
         { $sort: { createdAt: -1 } },
         { $limit: LIMIT_SECTION },
       ]);
@@ -345,36 +411,53 @@ app.get("/browse", authMiddleware, async (req, res) => {
     });
   } catch (err) {
     console.error("BROWSE ERROR:", err);
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 
-app.get("/user", authMiddleware, async (req, res) => {
+app.get("/user", authMiddleware, async (req, res, next) => {
   try {
     const me = await User.findById(req.user.userId).select("_id username email location ratings");
     if (!me) return res.status(404).json({ message: "User not found" });
     return res.json(me);
   } catch (err) {
-    return res.status(500).json({ message: "Failed to fetch current user", error: err.message });
+    return next(err);
   }
 });
 
-app.get("/user/wishlist", authMiddleware, async (req, res) => {
+// Public profile of another user. Requires a token, and returns only the
+// fields the app renders - never the password hash or the email address.
+app.get("/users/:id", authMiddleware, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
+
+    const user = await User.findById(req.params.id).select("_id username location ratings");
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    res.json(user);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/user/wishlist", authMiddleware, async (req, res, next) => {
   try {
     const books = await WishlistBook.find({ userId: req.user.userId });
     res.json(books);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.get("/user/offered", authMiddleware, async (req, res) => {
+app.get("/user/offered", authMiddleware, async (req, res, next) => {
   try {
     const books = await OfferedBook.find({ owner: req.user.userId });
     res.json(books);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -436,7 +519,6 @@ app.post(
       console.error("STACK:", err?.stack);
       return res.status(500).json({
         message: "Internal server error while adding wishlist book",
-        error: err?.message,
       });
     }
   }
@@ -473,28 +555,28 @@ app.post(
       console.error("ADD OFFERED ERROR:", err);
       return res.status(500).json({
         message: "Internal server error while adding offered book",
-        error: err?.message,
       });
     }
   }
 );
 
-app.get("/user/wishlist/:isbn", authMiddleware, async (req, res) => {
+app.get("/user/wishlist/:isbn", authMiddleware, async (req, res, next) => {
   const { isbn } = req.params;
   try {
     const book = await WishlistBook.findOne({ userId: req.user.userId, isbn });
     res.json({ exists: !!book });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.get("/user/get-recommended-books", authMiddleware, async (req, res) => {
+app.get("/user/get-recommended-books", authMiddleware, async (req, res, next) => {
   const userId = req.user.userId;
-  const user = await User.findById(userId);
-  if (!user) return res.status(404).json({ error: "User not found" });
 
   try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
     const userLocation = user.location;
 
     const books = await OfferedBook.aggregate([
@@ -513,26 +595,45 @@ app.get("/user/get-recommended-books", authMiddleware, async (req, res) => {
           owner: { $ne: new mongoose.Types.ObjectId(userId) },
         },
       },
+      // The joined owner document is only a filter; it never reaches the client.
+      { $project: { ownerDetails: 0 } },
       { $sort: { createdAt: -1 } },
     ]);
 
     res.json(books);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.post("/user/edit", authMiddleware, async (req, res) => {
+app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
+  const problem = validationProblem(req);
+  if (problem) return res.status(400).json({ message: problem.message });
+
   try {
     const userId = req.user.userId;
-    const { username, email, location } = req.body.user;
+    const { username, location } = req.body.user;
+    const email = matchedData(req).user?.email;
 
     const update = {};
     if (username?.trim()) update.username = username.trim();
-    if (email?.trim()) update.email = email.trim();
     if (location?.trim()) update.location = location.trim();
 
-    const updatedUser = await User.findByIdAndUpdate(userId, { $set: update }, { new: true });
+    if (email) {
+      // The lookup is case-insensitive, so this also refuses an address that
+      // only differs in casing from an account stored before normalization.
+      const owner = await findUserByEmail(email);
+      if (owner && owner._id.toString() !== userId) {
+        return res.status(409).json({ message: "Email already in use" });
+      }
+      update.email = email;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: update },
+      { new: true }
+    ).select("_id username email location ratings");
     res.json({ message: "User updated", user: updatedUser });
   } catch (err) {
     console.error("Error updating user:", err);
@@ -625,7 +726,6 @@ app.get("/messages", authMiddleware, async (req, res) => {
     console.error("Error fetching conversations: ", err);
     res.status(500).json({
       message: "Internal server error while fetching conversations",
-      error: err?.message,
     });
   }
 });
@@ -678,7 +778,6 @@ app.get("/messages/:user", authMiddleware, async (req, res) => {
     console.error("Error fetching messages:", err);
     return res.status(500).json({
       message: "Internal server error while fetching messages",
-      error: err?.message,
     });
   }
 });
@@ -722,5 +821,28 @@ app.post("/messages/:user", authMiddleware, async (req, res) => {
     res.status(500).json({ message: "Internal server error while sending message" })
   }
 })
+
+// --------------------
+// Error handling
+// --------------------
+
+// Final error handler. Everything that reaches here is logged in full on the
+// server and answered with a generic message: `err.message` and stack traces
+// routinely carry query fragments, schema details and connection information,
+// none of which belong in a client response.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
+
+  if (res.headersSent) return next(err);
+
+  const status =
+    Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+
+  res.status(status).json({
+    // Only a deliberate 4xx carries its own message; a 500 never does.
+    message: status === 500 ? "Internal server error" : err.message || "Request failed",
+  });
+});
 
 export default app;
