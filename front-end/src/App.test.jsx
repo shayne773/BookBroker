@@ -13,7 +13,7 @@ test.each(['/home', '/profile', '/messages', '/exchanges', '/browse'])(
 
     render(<App />);
 
-    expect(await screen.findByText('Sign in to continue')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/login');
   }
 );
