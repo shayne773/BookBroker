@@ -82,7 +82,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   watches. Tests use `vi` from `vitest` for mocks; other globals come from `globals: true` in
   `front-end/vite.config.js`.
 - `cd back-end && npm test` runs Mocha against an in-process MongoDB started as a one-node
-  replica set (the exchange accept and complete routes use transactions, which a standalone
+  replica set (several exchange routes use transactions, which a standalone
   mongod rejects). `back-end/test/setup.js` is the root hook: it sets `JWT_SECRET`, connects
   Mongoose and empties every collection after each test. `back-end/test/helpers.js` signs users
   up through the real auth routes, so protected routes get a genuine token.
