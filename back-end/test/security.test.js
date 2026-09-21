@@ -4,7 +4,12 @@ import mongoose from "mongoose";
 
 import app from "../app.js";
 import { resolveAllowedOrigins } from "../lib/cors.js";
-import { DEFAULT_OPTIONS, LoginAttempt, LoginThrottle } from "../lib/loginThrottle.js";
+import {
+  DEFAULT_OPTIONS,
+  LoginAttempt,
+  LoginThrottle,
+  throttleKey,
+} from "../lib/loginThrottle.js";
 import { User } from "../Data.js";
 import {
   authHeader,
@@ -787,8 +792,8 @@ describe("LoginThrottle", () => {
     await throttle.recordFailure("once@example.com", now);
     await failTimes(throttle, "locked@example.com", DEFAULT_OPTIONS.accountMaxAttempts, now);
 
-    const once = await LoginAttempt.findById("once@example.com").lean();
-    const locked = await LoginAttempt.findById("locked@example.com").lean();
+    const once = await LoginAttempt.findById(throttleKey("once@example.com")).lean();
+    const locked = await LoginAttempt.findById(throttleKey("locked@example.com")).lean();
     expect(once.expiresAt.getTime()).to.equal(now + DEFAULT_OPTIONS.windowMs);
     expect(locked.expiresAt.getTime()).to.equal(now + DEFAULT_OPTIONS.lockoutMs);
 
@@ -797,6 +802,28 @@ describe("LoginThrottle", () => {
     expect(indexes.find((index) => index.key.expiresAt === 1)).to.include({
       expireAfterSeconds: 0,
     });
+  });
+
+  it("stores a fixed-size digest rather than the address itself", async () => {
+    const throttle = new LoginThrottle();
+    const address = "Reader@Example.com";
+
+    await throttle.recordFailure(address);
+
+    const [attempt] = await LoginAttempt.find().lean();
+    expect(attempt._id).to.match(/^[0-9a-f]{64}$/);
+    expect(attempt._id).to.not.include("reader");
+  });
+
+  it("rejects an oversized login email before recording anything", async () => {
+    const res = await request
+      .execute(app)
+      .post("/auth/login")
+      .send({ email: `${"a".repeat(250)}@example.com`, password: "WrongPassw0rd" });
+
+    expect(res).to.have.status(400);
+    expect(res.body).to.deep.equal({ message: "Invalid credentials" });
+    expect(await LoginAttempt.countDocuments()).to.equal(0);
   });
 
   it("fails the login rather than skipping the throttle when the store is down", async () => {

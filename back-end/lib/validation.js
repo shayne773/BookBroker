@@ -116,7 +116,9 @@ export const loginValidators = [
     .isString()
     .withMessage("Email is required.")
     .bail()
-    .customSanitizer(normalizeEmail),
+    .customSanitizer(normalizeEmail)
+    .isLength({ max: 254 })
+    .withMessage("Please enter a valid email address."),
 
   body("password")
     .exists({ values: "falsy" })

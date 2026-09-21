@@ -1,7 +1,8 @@
 // Brute-force protection for POST /auth/login.
 //
 // Counters live in MongoDB, one document per normalized email, so they are
-// shared by every API instance and survive a restart. Each address has its own
+// shared by every API instance and survive a restart. A document's _id is the
+// SHA-256 digest of the address, so every key is the same small size. Each address has its own
 // document matched by exact key: no volume of failures against other addresses
 // can reset, shorten or trigger another address's lockout. A TTL index removes
 // a document once its window and any lockout have both passed.
@@ -15,6 +16,7 @@
 // Store errors propagate to the caller: the login route fails rather than
 // letting an attempt through unthrottled.
 
+import { createHash } from "node:crypto";
 import mongoose from "mongoose";
 import { normalizeEmail } from "./validation.js";
 
@@ -44,6 +46,11 @@ export const LoginAttempt =
 
 const EPOCH = new Date(0);
 
+export function throttleKey(account) {
+  const email = normalizeEmail(account);
+  return email ? createHash("sha256").update(email).digest("hex") : null;
+}
+
 export class LoginThrottle {
   constructor() {
     this.options = DEFAULT_OPTIONS;
@@ -51,7 +58,7 @@ export class LoginThrottle {
 
   /** @returns {Promise<{ limited: boolean, retryAfterSeconds: number }>} */
   async check(account, now = Date.now()) {
-    const key = this.#keyOf(account);
+    const key = throttleKey(account);
     if (!key) return { limited: false, retryAfterSeconds: 0 };
 
     const attempt = await LoginAttempt.findById(key).select("lockedUntil").lean();
@@ -67,7 +74,7 @@ export class LoginThrottle {
   }
 
   async recordFailure(account, now = Date.now()) {
-    const key = this.#keyOf(account);
+    const key = throttleKey(account);
     if (!key) return;
 
     const { windowMs, lockoutMs, accountMaxAttempts } = this.options;
@@ -112,14 +119,10 @@ export class LoginThrottle {
 
   /** Clear the account's counters after a successful sign-in. */
   async recordSuccess(account) {
-    const key = this.#keyOf(account);
+    const key = throttleKey(account);
     if (!key) return;
 
     await LoginAttempt.deleteOne({ _id: key });
-  }
-
-  #keyOf(account) {
-    return normalizeEmail(account) || null;
   }
 }
 
