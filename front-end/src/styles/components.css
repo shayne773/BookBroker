@@ -692,6 +692,13 @@ a.book-tile:focus-visible .book-tile__title {
   gap: var(--space-6) var(--space-5);
 }
 
+/* Small covers that keep their size however few there are, e.g. the books
+   on one side of an exchange. */
+.book-grid--small {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--space-6) var(--space-4);
+}
+
 /* A four-up preview, for a grid that shares its row with another. */
 .book-grid--four {
   grid-template-columns: repeat(4, minmax(0, 1fr));

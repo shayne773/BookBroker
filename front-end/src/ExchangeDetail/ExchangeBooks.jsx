@@ -27,7 +27,7 @@ function Side({ name, books }) {
       <p className="fact__term">{name} gives</p>
 
       {books.length ? (
-        <div className="book-grid book-grid--four">
+        <div className="book-grid book-grid--small">
           {books.map((b) => (
             <Link key={b._id} to={`/books/${b._id}`} className="book-tile">
               <span className="cover">
