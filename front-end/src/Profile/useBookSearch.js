@@ -1,29 +1,6 @@
 import { useEffect, useState } from 'react';
-
-const fetchBooksFromGoogle = async (query) => {
-  const response = await fetch(
-    `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}`
-  );
-
-  // If rate limited etc, throw so UI shows message
-  if (!response.ok) {
-    throw new Error(`Google Books HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  const items = data.items || [];
-
-  return items.map(item => ({
-    title: item.volumeInfo?.title || '',
-    author: item.volumeInfo?.authors?.join(', ') || 'Unknown',
-    publisher: item.volumeInfo?.publisher || 'Unknown',
-    year: item.volumeInfo?.publishedDate?.substring(0, 4) || '',
-    cover: item.volumeInfo?.imageLinks?.thumbnail || '',
-    isbn: item.volumeInfo?.industryIdentifiers?.[0]?.identifier || '',
-    genre: item.volumeInfo?.categories?.[0] || 'Unknown',
-    desc: item.volumeInfo?.description || ''
-  }));
-};
+import { isSessionExpiredError } from '../auth';
+import { searchGoogleBooks } from '../googleBooks';
 
 // The Google Books lookup behind one "add a book" dialog: debounced search as
 // the reader types, and the volume they picked. Profile keeps one per dialog,
@@ -45,16 +22,14 @@ const useBookSearch = () => {
     const t = setTimeout(async () => {
       try {
         setSearching(true);
-        setResults(await fetchBooksFromGoogle(q));
+        setResults(await searchGoogleBooks(q));
       } catch (err) {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(err)) return;
+
         console.error(err);
         setResults([]);
-        const msg = String(err.message || '');
-        setError(
-          msg.includes('429')
-            ? 'Google Books rate limit hit. Please wait ~1–2 minutes and try again.'
-            : 'Google Books search failed.'
-        );
+        setError(err.message);
       } finally {
         setSearching(false);
       }

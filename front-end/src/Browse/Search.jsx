@@ -3,23 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GoogleSuggestions, GoogleSelection, MarketResults } from "./SearchResults";
 import { authFetch, isSessionExpiredError } from "../auth";
-
-const fetchBooksFromGoogle = async (query) => {
-  const response = await fetch(
-    `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}`
-  );
-  const data = await response.json();
-  return (data.items || []).map((item) => ({
-    title: item.volumeInfo.title,
-    author: item.volumeInfo.authors?.join(", ") || "Unknown",
-    publisher: item.volumeInfo.publisher || "Unknown",
-    year: item.volumeInfo.publishedDate?.substring(0, 4),
-    cover: item.volumeInfo.imageLinks?.thumbnail,
-    isbn: item.volumeInfo.industryIdentifiers?.[0]?.identifier || "",
-    genre: item.volumeInfo.categories?.[0] || "Unknown",
-    desc: item.volumeInfo.description || "",
-  }));
-};
+import { searchGoogleBooks } from "../googleBooks";
 
 export default function Search() {
   const navigate = useNavigate();
@@ -82,16 +66,19 @@ export default function Search() {
 
       try {
         setLoading(true);
-        const results = await fetchBooksFromGoogle(query);
+        const results = await searchGoogleBooks(query);
         setGoogleResults(results.slice(0, 8));
 
         // Only show dropdown if user is actively searching (not after selection)
         if (!selectedGoogleBook) setShowDropdown(true);
       } catch (e) {
+        // RequireAuth is already redirecting to the login page.
+        if (isSessionExpiredError(e)) return;
+
         console.error(e);
         setGoogleResults([]);
         setShowDropdown(false);
-        setError("Failed to search Google Books.");
+        setError(e.message);
       } finally {
         setLoading(false);
       }

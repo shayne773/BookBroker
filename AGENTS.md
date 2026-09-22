@@ -58,6 +58,20 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   generic error handler at the bottom of `app.js` via `next(err)`. Express 4 does not
   forward rejections automatically, so every `await` in a handler needs a `try`/`catch`.
 
+## Google Books and covers
+
+- The browser never calls Google Books. The API proxies it (`/google-books/*` in `app.js`:
+  signed-in only, per-user `LoginThrottle`) through `back-end/lib/googleBooks.js`, the one
+  client, which sends the server-side `GOOGLE_BOOKS_API_KEY` and caches responses briefly.
+  Keyless calls share Google's global quota (often zero), so a missing key or any Google
+  refusal raises `GoogleBooksUnavailableError`, answered 503 `BOOK_SEARCH_UNAVAILABLE`.
+- Stored covers go through `back-end/lib/covers.js`: always https; when Google has no image,
+  Open Library's stable `/b/id/<cover_id>-M.jpg` (never `/b/isbn/`, which is rate limited).
+- `seed.js` (`npm run seed`, see the README) fetches everything before it deletes and
+  refuses to start without the key; `seed()` is exported so tests run it in-process.
+- Tests never reach the network: `test/setup.js` makes `http.get` (`lib/http.js`) throw,
+  and `mockHttp` in `test/helpers.js` answers it for one test.
+
 ## Email, confirmation and password reset
 
 - All mail goes through `mail` in `back-end/lib/mail.js` (Resend SDK). Without

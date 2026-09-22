@@ -1,73 +1,28 @@
-// seed_real_books.js
+// Replaces the demo data: 10 users (seed_user_N@example.com) offering 100 real
+// books from Google Books. Run with `npm run seed`; it needs MONGODB_URI and
+// GOOGLE_BOOKS_API_KEY (see .env.example).
+//
+// Every book, cover included, is fetched BEFORE anything is deleted, so a
+// Google failure leaves the previous seed in place instead of wiping it.
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
-import axios from "axios";
-
-dotenv.config();
+import { OfferedBook, User } from "./Data.js";
+import { hasGoogleBooksKey, mapVolume, searchVolumes } from "./lib/googleBooks.js";
+import { captureCover } from "./lib/covers.js";
+import { pause } from "./lib/http.js";
 
 const DB_NAME = "bookbroker";
-const GOOGLE_KEY = process.env.GOOGLE_BOOKS_API_KEY || null;
-
-// ---- Schemas (keep consistent with your app) ----
-const { Schema } = mongoose;
-
-const userSchema = new Schema({
-  username: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  location: String,
-  ratings: Number,
-});
-
-const offeredBookSchema = new Schema({
-  owner: { type: Schema.Types.ObjectId, ref: "User", required: true },
-  title: String,
-  author: String,
-  publisher: String,
-  year: String,
-  cover: String,
-  isbn: String,
-  genre: String,
-  desc: String,
-  createdAt: { type: Date, default: Date.now },
-});
-
-const User = mongoose.models.User || mongoose.model("User", userSchema);
-const OfferedBook =
-  mongoose.models.OfferedBook || mongoose.model("OfferedBook", offeredBookSchema);
-
-// ---- Utilities ----
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function requestWithRetry(fn, { retries = 6, baseDelayMs = 500 } = {}) {
-  let lastErr;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastErr = err;
-      const status = err?.response?.status;
-
-      // Only backoff on rate limit / transient failures
-      const shouldRetry = status === 429 || status === 503 || status === 500 || !status;
-      if (!shouldRetry || attempt === retries) break;
-
-      const jitter = Math.floor(Math.random() * 250);
-      const delay = baseDelayMs * Math.pow(2, attempt) + jitter;
-
-      // If Google returns Retry-After, prefer that
-      const retryAfter = err?.response?.headers?.["retry-after"];
-      const retryAfterMs = retryAfter ? Number(retryAfter) * 1000 : null;
-
-      await sleep(retryAfterMs ?? delay);
-    }
-  }
-  throw lastErr;
-}
+const SEED_PREFIX = "seed_user_";
+const USER_COUNT = 10;
+const BOOKS_PER_USER = 10;
+const SHARED_PASSWORD = "Password123!";
+const LOCATIONS = ["NYC", "Champaign", "Chicago", "Taipei", "Hsinchu"];
 
 // Use a mix of queries to get varied, real books
-const QUERIES = [
+export const QUERIES = [
   "subject:computer science",
   "subject:artificial intelligence",
   "subject:machine learning",
@@ -85,166 +40,114 @@ const QUERIES = [
   "introduction to algorithms",
 ];
 
-// Normalize Google Books item into your schema
-function mapGoogleItemToOfferedBook(item, ownerId) {
-  const v = item.volumeInfo || {};
-  const identifiers = v.industryIdentifiers || [];
-
-  // Prefer ISBN_13 then ISBN_10, else fallback to Google ID
-  const isbn13 = identifiers.find((x) => x.type === "ISBN_13")?.identifier;
-  const isbn10 = identifiers.find((x) => x.type === "ISBN_10")?.identifier;
-  const isbn = isbn13 || isbn10 || item.id || "";
-
-  const year = v.publishedDate ? String(v.publishedDate).slice(0, 4) : "";
-
-  return {
-    owner: ownerId,
-    title: v.title || "Untitled",
-    author: (v.authors && v.authors.join(", ")) || "Unknown",
-    publisher: v.publisher || "Unknown",
-    year,
-    cover:
-      v.imageLinks?.thumbnail ||
-      v.imageLinks?.smallThumbnail ||
-      "",
-
-    isbn,
-    genre: (v.categories && v.categories[0]) || "Unknown",
-    desc: v.description || "",
-    createdAt: new Date(),
-  };
-}
-
-async function fetchGoogleBooks(query, { maxResults = 40, startIndex = 0 } = {}) {
-  // Google Books maxResults <= 40
-  const params = {
-    q: query,
-    maxResults,
-    startIndex,
-  };
-  if (GOOGLE_KEY) params.key = GOOGLE_KEY;
-
-  const url = "https://www.googleapis.com/books/v1/volumes";
-
-  const res = await requestWithRetry(() => axios.get(url, { params }), {
-    retries: 6,
-    baseDelayMs: 700,
-  });
-
-  const items = res.data?.items || [];
-  return items;
-}
-
-// Pick N unique books by ISBN/ID from multiple queries
-async function collectUniqueBooks(n) {
+// Pick n unique volumes (by ISBN, else volume id) across the queries.
+async function collectUniqueVolumes(n, { pauseMs }) {
   const chosen = [];
   const seen = new Set();
+  // Enough rounds for any realistic corpus; a Google answering with almost
+  // nothing ends the seed instead of looping forever.
+  const maxRequests = QUERIES.length * 4;
 
-  // rotate through queries with randomness
-  let qIndex = 0;
-
-  while (chosen.length < n) {
-    const query = QUERIES[qIndex % QUERIES.length];
-    qIndex++;
+  for (let i = 0; chosen.length < n; i++) {
+    if (i >= maxRequests) {
+      throw new Error(`Only ${chosen.length} of ${n} usable books found in ${maxRequests} searches.`);
+    }
 
     // random startIndex to reduce repeats
-    const startIndex = Math.floor(Math.random() * 60); // a few pages in
-    const items = await fetchGoogleBooks(query, { maxResults: 40, startIndex });
+    const startIndex = Math.floor(Math.random() * 60);
+    const items = await searchVolumes(QUERIES[i % QUERIES.length], { maxResults: 40, startIndex });
 
     for (const item of items) {
       const v = item.volumeInfo || {};
-      const identifiers = v.industryIdentifiers || [];
-      const isbn13 = identifiers.find((x) => x.type === "ISBN_13")?.identifier;
-      const isbn10 = identifiers.find((x) => x.type === "ISBN_10")?.identifier;
-      const key = isbn13 || isbn10 || item.id;
-
-      if (!key) continue;
-      if (seen.has(key)) continue;
-
       // filter out very incomplete entries
       if (!v.title || !v.authors?.length) continue;
+
+      const key = mapVolume(item).isbn;
+      if (!key || seen.has(key)) continue;
 
       seen.add(key);
       chosen.push(item);
       if (chosen.length >= n) break;
     }
 
-    // polite throttle so you don’t get 429
-    await sleep(250);
+    await pause(pauseMs);
   }
 
-  return chosen.slice(0, n);
+  return chosen;
 }
 
-async function main() {
-  if (!process.env.MONGODB_URI) {
-    throw new Error("Missing MONGODB_URI in .env");
+/**
+ * Fetch the books, then replace the previously seeded users and their books.
+ * Expects an open Mongoose connection. Throws, having deleted nothing, when
+ * the key is missing or any fetch fails.
+ */
+export async function seed({ pauseMs = 250, log = console.log } = {}) {
+  if (!hasGoogleBooksKey()) {
+    throw new Error("GOOGLE_BOOKS_API_KEY is not set; the seed needs it to fetch books.");
   }
 
-  await mongoose.connect(process.env.MONGODB_URI, {
-    dbName: DB_NAME,
-  });
-  console.log(`✅ Connected to MongoDB (dbName=${DB_NAME})`);
+  // ---- 1. Fetch every book and cover first ----
+  const total = USER_COUNT * BOOKS_PER_USER;
+  log(`📚 Fetching ${total} real books from Google Books...`);
+  const books = [];
+  for (const item of await collectUniqueVolumes(total, { pauseMs })) {
+    const book = mapVolume(item);
+    if (!book.cover) {
+      book.cover = await captureCover(book);
+      await pause(pauseMs);
+    }
+    books.push(book);
+  }
+  log(`✅ Collected ${books.length} unique books (${books.filter((b) => !b.cover).length} without a cover)`);
 
-  // ---- Remove previously seeded data (safe delete) ----
-  const seedPrefix = "seed_user_";
-  const oldUsers = await User.find({ email: { $regex: `^${seedPrefix}` } }, { _id: 1 });
+  // ---- 2. Only now remove the previous seed ----
+  const oldUsers = await User.find({ email: { $regex: `^${SEED_PREFIX}` } }, { _id: 1 });
   const oldIds = oldUsers.map((u) => u._id);
-
   if (oldIds.length) {
     await OfferedBook.deleteMany({ owner: { $in: oldIds } });
     await User.deleteMany({ _id: { $in: oldIds } });
-    console.log(`🧹 Removed old seeded data (${oldIds.length} users)`);
+    log(`🧹 Removed old seeded data (${oldIds.length} users)`);
   }
 
-  // ---- Create 10 users ----
-  const sharedPassword = "Password123!";
-  const hashed = await bcrypt.hash(sharedPassword, 10);
-  const locations = ["NYC", "Champaign", "Chicago", "Taipei", "Hsinchu"];
+  // ---- 3. Create the users and give each their share of the books ----
+  const hashed = await bcrypt.hash(SHARED_PASSWORD, 10);
+  const createdUsers = await User.insertMany(
+    Array.from({ length: USER_COUNT }, (_, i) => ({
+      username: `${SEED_PREFIX}${i + 1}`,
+      email: `${SEED_PREFIX}${i + 1}@example.com`,
+      password: hashed,
+      location: LOCATIONS[i % LOCATIONS.length],
+      ratings: Math.floor(Math.random() * 6),
+    }))
+  );
+  log(`👤 Created ${createdUsers.length} users (password: ${SHARED_PASSWORD})`);
 
-  const users = Array.from({ length: 10 }, (_, i) => ({
-    username: `seed_user_${i + 1}`,
-    email: `seed_user_${i + 1}@example.com`,
-    password: hashed,
-    location: locations[i % locations.length],
-    ratings: Math.floor(Math.random() * 6),
+  const offeredDocs = books.map(({ volumeId, ...book }, i) => ({
+    ...book,
+    owner: createdUsers[Math.floor(i / BOOKS_PER_USER)]._id,
   }));
-
-  const createdUsers = await User.insertMany(users);
-  console.log(`👤 Created ${createdUsers.length} users`);
-  console.log(`🔐 Seed user password: ${sharedPassword}`);
-  console.log(`🔑 Google Books key: ${GOOGLE_KEY ? "YES" : "NO (may 429 more)"}`);
-
-  // ---- Fetch 100 real books total, then assign 10 per user ----
-  console.log("📚 Fetching 100 real books from Google Books (with throttling)...");
-  const items = await collectUniqueBooks(100);
-  console.log(`✅ Collected ${items.length} unique books`);
-
-  const offeredDocs = [];
-  for (let u = 0; u < createdUsers.length; u++) {
-    const ownerId = createdUsers[u]._id;
-
-    for (let j = 0; j < 10; j++) {
-      const item = items[u * 10 + j];
-      offeredDocs.push(mapGoogleItemToOfferedBook(item, ownerId));
-    }
-  }
-
   await OfferedBook.insertMany(offeredDocs);
-  console.log(`✅ Inserted ${offeredDocs.length} offered books linked to users`);
-
-  await mongoose.disconnect();
-  console.log("✅ Done.");
-  process.exit(0);
+  log(`✅ Inserted ${offeredDocs.length} offered books linked to users`);
 }
 
-main().catch(async (err) => {
-  const status = err?.response?.status;
-  console.error("❌ Seed failed:", status ? `(HTTP ${status})` : "", err?.message || err);
+async function main() {
+  dotenv.config();
+  if (!process.env.MONGODB_URI) throw new Error("Missing MONGODB_URI in .env");
+  if (!hasGoogleBooksKey()) throw new Error("Missing GOOGLE_BOOKS_API_KEY in .env");
 
+  await mongoose.connect(process.env.MONGODB_URI, { dbName: DB_NAME });
+  console.log(`✅ Connected to MongoDB (dbName=${DB_NAME})`);
   try {
+    await seed();
+  } finally {
     await mongoose.disconnect();
-  } catch {}
+  }
+  console.log("✅ Done.");
+}
 
-  process.exit(1);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error("❌ Seed failed:", err?.message || err);
+    process.exit(1);
+  });
+}
