@@ -1,6 +1,7 @@
-// The frame both sign-in screens share: an ink panel with the wordmark and one
-// line of copy, and the form on paper beside it. The screens carry no top
-// navigation (AppContent hides it on these routes), so the wordmark lives here.
+// The frame every signed-out screen shares (sign in, sign up, confirm email,
+// password reset): an ink panel with the wordmark and one line of copy, and the
+// form on paper beside it. The screens carry no top navigation (AppContent hides
+// it on these routes), so the wordmark lives here.
 const AuthShell = ({ kicker, title, children }) => (
   <div className="auth">
     <aside className="auth__aside">

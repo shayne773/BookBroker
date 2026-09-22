@@ -1,19 +1,25 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import AuthShell from "./AuthShell";
+import ResendConfirmation from "./ResendConfirmation";
+import { postPublic } from "./publicApi";
 
 export default function Signup() {
   const [error, setError] = useState("");
   const [location, setLocation] = useState("");
   const [customLocation, setCustomLocation] = useState("");
+  // The address the confirmation email went to, once the account exists.
+  const [sentTo, setSentTo] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
-    const password = e.target.password.value;
-    const confirmPassword = e.target.confirm.value;
-    const email = e.target.email.value;
-    const username = e.target.username.value;
+    const { elements } = e.target;
+    const password = elements.password.value;
+    const confirmPassword = elements.confirm.value;
+    const email = elements.email.value;
+    const username = elements.username.value;
 
     const finalLocation = location === "Other" ? customLocation.trim() : location;
 
@@ -27,25 +33,46 @@ export default function Signup() {
     }
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, username, password, location: finalLocation }),
+      const { ok, data } = await postPublic("/auth/register", {
+        email,
+        username,
+        password,
+        location: finalLocation,
       });
 
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
+      if (!ok) {
         setError(data.message || "Signup failed!");
         return;
       }
 
-      window.location.href = "/";
+      setSentTo(email.trim());
     } catch (err) {
       console.error("Error during signup:", err);
       setError("An error occurred. Please try again.");
     }
   };
+
+  if (sentTo) {
+    return (
+      <AuthShell kicker="One more step" title="Check your email">
+        <div className="stack">
+          <p className="prose">
+            We sent a link to <strong>{sentTo}</strong>. Open it to confirm your address, then
+            sign in.
+          </p>
+          <p className="hint">Nothing arrived? Check your spam folder, or send it again.</p>
+          <ResendConfirmation email={sentTo} />
+        </div>
+
+        <p className="auth__switch">
+          <span>Confirmed already?</span>
+          <Link className="textlink" to="/login">
+            Log in
+          </Link>
+        </p>
+      </AuthShell>
+    );
+  }
 
   return (
     <AuthShell kicker="Join BookBroker" title="Create your account">

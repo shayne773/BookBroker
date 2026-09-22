@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import app from "../app.js";
 import { OfferedBook, User } from "../Data.js";
+import { outbox } from "./setup.js";
 
 use(chaiHttp);
 
@@ -25,7 +26,27 @@ export const TEST_PASSWORD = "Str0ngPassw0rd";
 
 let userCount = 0;
 
-// Registers and signs in a user through the real auth routes.
+export { outbox };
+
+// The token in the most recent link emailed to `email`, optionally only from
+// messages whose link goes to `path` (e.g. "/reset-password").
+export function emailedToken(email, path = "") {
+  const message = outbox.findLast(
+    (m) => m.to === email && new URL(m.link).pathname.startsWith(path)
+  );
+  if (!message) throw new Error(`no email with a ${path || "link"} was sent to ${email}`);
+  return new URL(message.link).searchParams.get("token");
+}
+
+// Confirms `email` through the real route, with the link it was sent.
+export async function confirmEmail(email) {
+  const res = await api()
+    .post("/auth/confirm-email")
+    .send({ token: emailedToken(email, "/confirm-email") });
+  if (res.status !== 200) throw new Error(`confirm-email failed: ${res.status}`);
+}
+
+// Registers, confirms and signs in a user through the real auth routes.
 // Returns { id, username, email, token }.
 export async function signUp(overrides = {}) {
   userCount += 1;
@@ -39,6 +60,7 @@ export async function signUp(overrides = {}) {
 
   const registered = await api().post("/auth/register").send(credentials);
   if (registered.status !== 201) throw new Error(`register failed: ${registered.status}`);
+  await confirmEmail(credentials.email);
 
   const login = await api()
     .post("/auth/login")

@@ -1,0 +1,549 @@
+import { expect } from "chai";
+import { AuthToken, hashToken } from "../lib/authTokens.js";
+import { renderEmail, resolveFrontEndBaseUrl } from "../lib/mail.js";
+import { User } from "../Data.js";
+import {
+  api,
+  authHeader,
+  clearDatabase,
+  createUser,
+  emailedToken,
+  outbox,
+  TEST_PASSWORD,
+} from "./helpers.js";
+import { unmockedDeliver } from "./setup.js";
+
+const EMAIL = "new.reader@example.com";
+const NEW_PASSWORD = "N3wPassw0rdToo";
+
+const register = (overrides = {}) =>
+  api()
+    .post("/auth/register")
+    .send({
+      username: "newreader",
+      email: EMAIL,
+      password: TEST_PASSWORD,
+      location: "Brooklyn",
+      ...overrides,
+    });
+
+const login = (email = EMAIL, password = TEST_PASSWORD) =>
+  api().post("/auth/login").send({ email, password });
+
+const confirm = (token) => api().post("/auth/confirm-email").send({ token });
+const resend = (email) => api().post("/auth/resend-confirmation").send({ email });
+const forgot = (email) => api().post("/auth/forgot-password").send({ email });
+const reset = (token, password = NEW_PASSWORD) =>
+  api().post("/auth/reset-password").send({ token, password });
+
+// Moves every stored token's expiry into the past, as if its lifetime had run out.
+const expireAllTokens = () =>
+  AuthToken.updateMany({}, { $set: { expiresAt: new Date(Date.now() - 1000) } });
+
+describe("email confirmation", () => {
+  beforeEach(clearDatabase);
+
+  it("creates the account unconfirmed and emails a confirmation link", async () => {
+    const res = await register();
+
+    expect(res).to.have.status(201);
+    const stored = await User.findOne({ email: EMAIL });
+    expect(stored.emailVerified).to.equal(false);
+
+    expect(outbox).to.have.length(1);
+    expect(outbox[0].to).to.equal(EMAIL);
+    expect(outbox[0].link).to.match(/^http:\/\/localhost:3000\/confirm-email\?token=/);
+  });
+
+  it("builds the link from the configured front end, not the request's Host", async () => {
+    await api().post("/auth/register").set("Host", "evil.example.com").send({
+      username: "newreader",
+      email: EMAIL,
+      password: TEST_PASSWORD,
+      location: "Brooklyn",
+    });
+
+    expect(outbox[0].link).to.not.include("evil.example.com");
+  });
+
+  it("stores only a hash of the token", async () => {
+    await register();
+    const token = emailedToken(EMAIL);
+
+    const [stored] = await AuthToken.find().lean();
+    expect(stored._id).to.equal(hashToken(token));
+    expect(JSON.stringify(stored)).to.not.include(token);
+  });
+
+  it("refuses to sign in an unconfirmed account and says why", async () => {
+    await register();
+
+    const res = await login();
+
+    expect(res).to.have.status(403);
+    expect(res.body.code).to.equal("EMAIL_NOT_CONFIRMED");
+    expect(res.body.message).to.match(/confirm your email/i);
+    expect(res.body).to.not.have.property("token");
+  });
+
+  it("does not reveal an unconfirmed account to a wrong password", async () => {
+    await register();
+
+    const res = await login(EMAIL, "WrongPassw0rd");
+
+    expect(res).to.have.status(400);
+    expect(res.body).to.deep.equal({ message: "Invalid credentials" });
+  });
+
+  it("signs in normally once the link is used", async () => {
+    await register();
+
+    const confirmed = await confirm(emailedToken(EMAIL));
+    expect(confirmed).to.have.status(200);
+
+    const res = await login();
+    expect(res).to.have.status(200);
+    expect(res.body).to.have.property("token");
+  });
+
+  it("accepts a confirmation link only once", async () => {
+    await register();
+    const token = emailedToken(EMAIL);
+
+    expect(await confirm(token)).to.have.status(200);
+
+    const again = await confirm(token);
+    expect(again).to.have.status(400);
+    expect(again.body.code).to.equal("TOKEN_INVALID");
+  });
+
+  it("refuses an expired confirmation link", async () => {
+    await register();
+    await expireAllTokens();
+
+    const res = await confirm(emailedToken(EMAIL));
+
+    expect(res).to.have.status(400);
+    expect(res.body.code).to.equal("TOKEN_INVALID");
+    expect((await User.findOne({ email: EMAIL })).emailVerified).to.equal(false);
+  });
+
+  it("refuses a made-up or missing token", async () => {
+    expect(await confirm("not-a-real-token")).to.have.status(400);
+    expect(await api().post("/auth/confirm-email").send({})).to.have.status(400);
+    expect(await confirm({ $ne: null })).to.have.status(400);
+  });
+
+  it("does not accept a password reset token as a confirmation", async () => {
+    await register();
+    await forgot(EMAIL);
+
+    const res = await confirm(emailedToken(EMAIL, "/reset-password"));
+
+    expect(res).to.have.status(400);
+    expect((await User.findOne({ email: EMAIL })).emailVerified).to.equal(false);
+  });
+});
+
+describe("accounts from before email confirmation", () => {
+  beforeEach(clearDatabase);
+
+  it("count as confirmed and sign in without a database change", async () => {
+    const user = await createUser();
+    // Written as an account created before the flag existed.
+    await User.collection.updateOne({ _id: user._id }, { $unset: { emailVerified: "" } });
+    const raw = await User.collection.findOne({ _id: user._id });
+    expect(raw).to.not.have.property("emailVerified");
+
+    expect((await User.findById(user._id)).emailVerified).to.equal(true);
+
+    const res = await login(user.email);
+    expect(res).to.have.status(200);
+    expect(res.body).to.have.property("token");
+  });
+});
+
+describe("POST /auth/resend-confirmation", () => {
+  beforeEach(clearDatabase);
+
+  it("sends a fresh link and retires the old one", async () => {
+    await register();
+    const first = emailedToken(EMAIL);
+
+    const res = await resend(EMAIL);
+    expect(res).to.have.status(200);
+    const second = emailedToken(EMAIL);
+    expect(second).to.not.equal(first);
+
+    expect(await confirm(first)).to.have.status(400);
+    expect(await confirm(second)).to.have.status(200);
+  });
+
+  it("finds the account whatever the casing of the address", async () => {
+    await register();
+
+    await resend("  New.Reader@EXAMPLE.com ");
+
+    expect(outbox).to.have.length(2);
+  });
+
+  it("answers the same for an unknown or already confirmed address and sends nothing", async () => {
+    await register();
+    const pending = await resend(EMAIL);
+
+    const confirmedUser = await createUser();
+    const sentBefore = outbox.length;
+    const confirmed = await resend(confirmedUser.email);
+    const unknown = await resend("nobody@example.com");
+
+    expect(outbox).to.have.length(sentBefore);
+    for (const res of [confirmed, unknown]) {
+      expect(res.status).to.equal(pending.status);
+      expect(res.body).to.deep.equal(pending.body);
+    }
+  });
+
+  it("limits requests for one address", async () => {
+    for (let i = 0; i < 3; i += 1) {
+      expect(await resend("nobody@example.com")).to.have.status(200);
+    }
+
+    const limited = await resend("nobody@example.com");
+    expect(limited).to.have.status(429);
+    expect(limited).to.have.header("retry-after");
+    expect(await resend("somebody@example.com")).to.have.status(200);
+  });
+
+  it("limits requests from one client across addresses", async () => {
+    for (let i = 0; i < 10; i += 1) {
+      expect(await resend(`reader${i}@example.com`)).to.have.status(200);
+    }
+
+    expect(await resend("one-more@example.com")).to.have.status(429);
+  });
+
+  it("rejects an address that is not an email", async () => {
+    expect(await resend("not-an-email")).to.have.status(400);
+  });
+});
+
+describe("password reset", () => {
+  beforeEach(clearDatabase);
+
+  it("answers identically for known and unknown addresses", async () => {
+    const user = await createUser();
+
+    const known = await forgot(user.email);
+    const unknown = await forgot("nobody@example.com");
+
+    expect(known.status).to.equal(200);
+    expect(unknown.status).to.equal(known.status);
+    expect(unknown.body).to.deep.equal(known.body);
+
+    expect(outbox).to.have.length(1);
+    expect(outbox[0].to).to.equal(user.email);
+    expect(outbox[0].link).to.match(/^http:\/\/localhost:3000\/reset-password\?token=/);
+  });
+
+  it("sets a new password that works, and the old one stops working", async () => {
+    const user = await createUser();
+    await forgot(user.email);
+
+    const res = await reset(emailedToken(user.email, "/reset-password"));
+    expect(res).to.have.status(200);
+
+    expect(await login(user.email, NEW_PASSWORD)).to.have.status(200);
+    expect(await login(user.email, TEST_PASSWORD)).to.have.status(400);
+  });
+
+  it("accepts a reset link only once", async () => {
+    const user = await createUser();
+    await forgot(user.email);
+    const token = emailedToken(user.email, "/reset-password");
+
+    expect(await reset(token)).to.have.status(200);
+
+    const again = await reset(token, "An0therPassw0rd");
+    expect(again).to.have.status(400);
+    expect(again.body.code).to.equal("TOKEN_INVALID");
+    expect(await login(user.email, NEW_PASSWORD)).to.have.status(200);
+  });
+
+  it("refuses an expired reset link", async () => {
+    const user = await createUser();
+    await forgot(user.email);
+    await expireAllTokens();
+
+    const res = await reset(emailedToken(user.email, "/reset-password"));
+
+    expect(res).to.have.status(400);
+    expect(res.body.code).to.equal("TOKEN_INVALID");
+    expect(await login(user.email, TEST_PASSWORD)).to.have.status(200);
+  });
+
+  it("enforces the sign-up password rules and keeps the link usable", async () => {
+    const user = await createUser();
+    await forgot(user.email);
+    const token = emailedToken(user.email, "/reset-password");
+
+    const weak = await reset(token, "weakpass");
+    expect(weak).to.have.status(400);
+    expect(weak.body.message).to.match(/uppercase letter/);
+
+    expect(await reset(token)).to.have.status(200);
+  });
+
+  it("works only with the newest link", async () => {
+    const user = await createUser();
+    await forgot(user.email);
+    const first = emailedToken(user.email, "/reset-password");
+    await forgot(user.email);
+
+    expect(await reset(first)).to.have.status(400);
+    expect(await reset(emailedToken(user.email, "/reset-password"))).to.have.status(200);
+  });
+
+  it("confirms an unconfirmed address, since the link proves it", async () => {
+    await register();
+    await forgot(EMAIL);
+
+    expect(await reset(emailedToken(EMAIL, "/reset-password"))).to.have.status(200);
+
+    expect(await login(EMAIL, NEW_PASSWORD)).to.have.status(200);
+  });
+
+  it("does not accept a confirmation token as a reset", async () => {
+    await register();
+
+    expect(await reset(emailedToken(EMAIL, "/confirm-email"))).to.have.status(400);
+  });
+
+  it("limits requests for one address", async () => {
+    for (let i = 0; i < 3; i += 1) {
+      expect(await forgot("nobody@example.com")).to.have.status(200);
+    }
+
+    expect(await forgot("nobody@example.com")).to.have.status(429);
+  });
+});
+
+describe("changing the account email", () => {
+  beforeEach(clearDatabase);
+
+  const NEW_EMAIL = "moved@example.com";
+  const requestChange = (user, email = NEW_EMAIL) =>
+    api().post("/user/edit").set(authHeader(user)).send({ user: { email } });
+  const confirmChange = (token) => api().post("/auth/confirm-email-change").send({ token });
+
+  it("mails a link to the new address and keeps the current email in effect", async () => {
+    const user = await createUser();
+
+    const res = await requestChange(user);
+
+    expect(res).to.have.status(200);
+    expect(res.body.confirmationSentTo).to.equal(NEW_EMAIL);
+    expect(res.body.user.email).to.equal(user.email);
+    expect(res.body.user.pendingEmail).to.equal(NEW_EMAIL);
+    expect(outbox.map((m) => m.to)).to.deep.equal([NEW_EMAIL]);
+    expect(outbox[0].link).to.match(/^http:\/\/localhost:3000\/confirm-email-change\?token=/);
+
+    const stored = await User.findById(user._id);
+    expect(stored.email).to.equal(user.email);
+    expect(stored.emailVerified).to.equal(true);
+
+    expect(await login(user.email)).to.have.status(200);
+    expect(await login(NEW_EMAIL)).to.have.status(400);
+
+    await forgot(user.email);
+    expect(outbox.at(-1).to).to.equal(user.email);
+    await forgot(NEW_EMAIL);
+    expect(outbox.at(-1).to).to.equal(user.email);
+  });
+
+  it("switches the email when the link is followed", async () => {
+    const user = await createUser();
+    await requestChange(user);
+
+    const res = await confirmChange(emailedToken(NEW_EMAIL, "/confirm-email-change"));
+
+    expect(res).to.have.status(200);
+    const stored = await User.findById(user._id);
+    expect(stored.email).to.equal(NEW_EMAIL);
+    expect(stored.pendingEmail).to.equal(undefined);
+    expect(stored.emailVerified).to.equal(true);
+    expect(await login(NEW_EMAIL)).to.have.status(200);
+    expect(await login(user.email)).to.have.status(400);
+  });
+
+  it("revokes reset links sent to the old address", async () => {
+    const user = await createUser();
+    await forgot(user.email);
+    const resetToken = emailedToken(user.email, "/reset-password");
+
+    await requestChange(user);
+    await confirmChange(emailedToken(NEW_EMAIL, "/confirm-email-change"));
+
+    const res = await reset(resetToken);
+    expect(res).to.have.status(400);
+    expect(res.body.code).to.equal("TOKEN_INVALID");
+  });
+
+  it("accepts the link only once", async () => {
+    const user = await createUser();
+    await requestChange(user);
+    const token = emailedToken(NEW_EMAIL, "/confirm-email-change");
+
+    expect(await confirmChange(token)).to.have.status(200);
+    const again = await confirmChange(token);
+    expect(again).to.have.status(400);
+    expect(again.body.code).to.equal("TOKEN_INVALID");
+  });
+
+  it("refuses an expired link and leaves the email alone", async () => {
+    const user = await createUser();
+    await requestChange(user);
+    await expireAllTokens();
+
+    const res = await confirmChange(emailedToken(NEW_EMAIL, "/confirm-email-change"));
+
+    expect(res).to.have.status(400);
+    expect((await User.findById(user._id)).email).to.equal(user.email);
+  });
+
+  it("refuses an address another account already holds, whatever its casing", async () => {
+    await createUser({ email: "Taken@Example.com" });
+    const user = await createUser();
+
+    const res = await requestChange(user, "taken@example.com");
+
+    expect(res).to.have.status(409);
+    expect(outbox).to.have.length(0);
+    expect((await User.findById(user._id)).pendingEmail).to.equal(undefined);
+  });
+
+  it("refuses at confirmation an address another account took in the meantime", async () => {
+    const user = await createUser();
+    await requestChange(user);
+    const token = emailedToken(NEW_EMAIL, "/confirm-email-change");
+    await createUser({ email: "Moved@Example.com" });
+
+    const res = await confirmChange(token);
+
+    expect(res).to.have.status(409);
+    const stored = await User.findById(user._id);
+    expect(stored.email).to.equal(user.email);
+    expect(await login(user.email)).to.have.status(200);
+  });
+
+  it("does not accept another purpose's token", async () => {
+    const user = await createUser();
+    await requestChange(user);
+    await forgot(user.email);
+
+    const res = await confirmChange(emailedToken(user.email, "/reset-password"));
+
+    expect(res).to.have.status(400);
+    expect((await User.findById(user._id)).email).to.equal(user.email);
+  });
+
+  const profile = (user) => api().get("/user").set(authHeader(user));
+
+  it("stops reporting a change as pending once its link has expired", async () => {
+    const user = await createUser();
+    await requestChange(user);
+    expect((await profile(user)).body.pendingEmail).to.equal(NEW_EMAIL);
+
+    await expireAllTokens();
+
+    const res = await profile(user);
+    expect(res).to.have.status(200);
+    expect(res.body).to.not.have.property("pendingEmail");
+    expect((await User.findById(user._id)).pendingEmail).to.equal(undefined);
+  });
+
+  it("drops an expired pending change on the next edit", async () => {
+    const user = await createUser();
+    await requestChange(user);
+    await expireAllTokens();
+
+    const res = await api()
+      .post("/user/edit")
+      .set(authHeader(user))
+      .send({ user: { username: "renamed", email: user.email } });
+
+    expect(res).to.have.status(200);
+    expect(res.body.user).to.not.have.property("pendingEmail");
+    expect((await User.findById(user._id)).pendingEmail).to.equal(undefined);
+  });
+
+  it("keeps a live pending change through a username or location edit", async () => {
+    const user = await createUser();
+    await requestChange(user);
+
+    const res = await api()
+      .post("/user/edit")
+      .set(authHeader(user))
+      .send({ user: { username: "renamed", location: "Queens", email: user.email } });
+
+    expect(res).to.have.status(200);
+    expect(res.body.user.pendingEmail).to.equal(NEW_EMAIL);
+    expect((await profile(user)).body.pendingEmail).to.equal(NEW_EMAIL);
+
+    const confirmed = await confirmChange(emailedToken(NEW_EMAIL, "/confirm-email-change"));
+    expect(confirmed).to.have.status(200);
+    expect((await User.findById(user._id)).email).to.equal(NEW_EMAIL);
+  });
+
+  it("limits change requests for one address", async () => {
+    const user = await createUser();
+    for (let i = 0; i < 3; i += 1) expect(await requestChange(user)).to.have.status(200);
+
+    const res = await requestChange(user);
+
+    expect(res).to.have.status(429);
+    expect(outbox).to.have.length(3);
+  });
+});
+
+describe("mail module", () => {
+  it("keeps the email to the wordmark, one sentence, one link and an ignore line", () => {
+    const link = "https://app.example.test/confirm-email?token=abc";
+    const { text, html } = renderEmail({ sentence: "Confirm it.", action: "Confirm email", link });
+
+    expect(text).to.include("BookBroker");
+    expect(text).to.include(link);
+    expect(text).to.match(/did not ask for this/);
+    expect(html).to.include(link);
+    expect(html.match(/<a /g)).to.have.length(1);
+  });
+
+  it("logs the message instead of sending when RESEND_API_KEY is not set", async () => {
+    const logged = [];
+    const original = console.log;
+    console.log = (...args) => logged.push(args.join(" "));
+    try {
+      await unmockedDeliver({
+        to: "reader@example.com",
+        subject: "Confirm your email",
+        text: "",
+        html: "",
+        link: "http://localhost:3000/confirm-email?token=abc",
+      }, {});
+    } finally {
+      console.log = original;
+    }
+
+    expect(logged.join("\n")).to.include("reader@example.com");
+    expect(logged.join("\n")).to.include("Confirm your email");
+    expect(logged.join("\n")).to.include("http://localhost:3000/confirm-email?token=abc");
+  });
+
+  it("requires FRONTEND_BASE_URL in production", () => {
+    expect(() => resolveFrontEndBaseUrl({ NODE_ENV: "production" })).to.throw(/FRONTEND_BASE_URL/);
+    expect(
+      resolveFrontEndBaseUrl({ NODE_ENV: "production", FRONTEND_BASE_URL: "https://app.example.test/" })
+    ).to.equal("https://app.example.test");
+    expect(resolveFrontEndBaseUrl({})).to.equal("http://localhost:3000");
+  });
+});
+

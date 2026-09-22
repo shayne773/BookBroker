@@ -53,23 +53,9 @@ const emailChain = (field) =>
     .isLength({ max: 254 })
     .withMessage("Please enter a valid email address.");
 
-export const registerValidators = [
-  body("username")
-    .exists({ values: "falsy" })
-    .withMessage("Username is required.")
-    .bail()
-    .isString()
-    .withMessage("Username is required.")
-    .bail()
-    .trim()
-    .isLength({ min: USERNAME_MIN_LENGTH, max: USERNAME_MAX_LENGTH })
-    .withMessage(
-      `Username must be between ${USERNAME_MIN_LENGTH} and ${USERNAME_MAX_LENGTH} characters.`
-    ),
-
-  emailChain("email"),
-
-  body("password")
+// The rules for choosing a password, shared by sign-up and password reset.
+const newPasswordChain = (field) =>
+  body(field)
     .exists({ values: "falsy" })
     .withMessage("Password is required.")
     .bail()
@@ -86,7 +72,25 @@ export const registerValidators = [
     .withMessage(PASSWORD_REQUIREMENTS_MESSAGE)
     .bail()
     .matches(/[0-9]/)
-    .withMessage(PASSWORD_REQUIREMENTS_MESSAGE),
+    .withMessage(PASSWORD_REQUIREMENTS_MESSAGE);
+
+export const registerValidators = [
+  body("username")
+    .exists({ values: "falsy" })
+    .withMessage("Username is required.")
+    .bail()
+    .isString()
+    .withMessage("Username is required.")
+    .bail()
+    .trim()
+    .isLength({ min: USERNAME_MIN_LENGTH, max: USERNAME_MAX_LENGTH })
+    .withMessage(
+      `Username must be between ${USERNAME_MIN_LENGTH} and ${USERNAME_MAX_LENGTH} characters.`
+    ),
+
+  emailChain("email"),
+
+  newPasswordChain("password"),
 
   // The signup form always collects a city and the location-based
   // recommendations are useless without one, so it is required here too.
@@ -126,6 +130,22 @@ export const loginValidators = [
     .bail()
     .isString()
     .withMessage("Password is required."),
+];
+
+// Resend confirmation and forgot password take only an address.
+export const emailOnlyValidators = [emailChain("email")];
+
+export const resetPasswordValidators = [
+  body("token")
+    .exists({ values: "falsy" })
+    .withMessage("This link is missing its token.")
+    .bail()
+    .isString()
+    .withMessage("This link is missing its token.")
+    .bail()
+    .isLength({ max: 256 })
+    .withMessage("This link is missing its token."),
+  newPasswordChain("password"),
 ];
 
 /**

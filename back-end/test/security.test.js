@@ -14,6 +14,7 @@ import { User } from "../Data.js";
 import {
   authHeader,
   clearDatabase,
+  confirmEmail,
   createOfferedBook,
   createUser,
   TEST_PASSWORD,
@@ -299,6 +300,7 @@ describe("POST /auth/register", () => {
 
   it("round-trips the city through login and GET /user", async () => {
     await request.execute(app).post("/auth/register").send(validBody());
+    await confirmEmail("new.reader@example.com");
 
     const login = await request
       .execute(app)
@@ -330,6 +332,7 @@ describe("POST /auth/register", () => {
 
   it("lets a user sign in with a different email casing", async () => {
     await request.execute(app).post("/auth/register").send(validBody());
+    await confirmEmail("new.reader@example.com");
 
     const login = await request
       .execute(app)
@@ -633,7 +636,7 @@ describe("POST /user/edit email changes", () => {
     expect(unchanged.email).to.equal(user.email);
   });
 
-  it("stores a changed address normalized", async () => {
+  it("holds a changed address normalized, pending confirmation", async () => {
     const user = await createUser();
 
     const res = await request
@@ -644,8 +647,9 @@ describe("POST /user/edit email changes", () => {
 
     expect(res).to.have.status(200);
 
-    const updated = await User.findById(user._id).select("email");
-    expect(updated.email).to.equal("renamed@example.com");
+    const updated = await User.findById(user._id).select("email pendingEmail");
+    expect(updated.pendingEmail).to.equal("renamed@example.com");
+    expect(updated.email).to.equal(user.email);
   });
 
   it("still allows an edit that leaves the address alone", async () => {
