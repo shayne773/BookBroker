@@ -5,6 +5,8 @@
 import mongoose from "mongoose";
 import { MongoMemoryReplSet } from "mongodb-memory-server";
 import { mail } from "../lib/mail.js";
+import { http } from "../lib/http.js";
+import { clearGoogleBooksCache } from "../lib/googleBooks.js";
 
 // app.js reads the secret at request time; set it before any token is signed.
 process.env.JWT_SECRET = "bookbroker-test-secret";
@@ -21,6 +23,15 @@ mail.deliver = async (message) => {
   outbox.push(message);
 };
 
+// No test may reach Google Books or Open Library either: every external GET
+// fails unless a test installs its own `http.get` (see mockHttp in helpers.js).
+// The key is cleared before each test because app.js loads back-end/.env, which
+// may hold a real one; a test that needs a key sets a fake one.
+const refuseNetwork = async (url) => {
+  throw new Error(`test tried to reach ${url}`);
+};
+http.get = refuseNetwork;
+
 let replSet;
 
 export const mochaHooks = {
@@ -31,8 +42,14 @@ export const mochaHooks = {
     await mongoose.connect(replSet.getUri(), { dbName: "bookbroker-test" });
   },
 
+  beforeEach() {
+    delete process.env.GOOGLE_BOOKS_API_KEY;
+  },
+
   async afterEach() {
     outbox.length = 0;
+    http.get = refuseNetwork;
+    clearGoogleBooksCache();
     const { collections } = mongoose.connection;
     await Promise.all(Object.values(collections).map((c) => c.deleteMany({})));
   },

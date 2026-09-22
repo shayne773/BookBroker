@@ -1,5 +1,4 @@
 // src/Data.js
-import axios from "axios";
 import mongoose from "mongoose";
 
 const { Schema } = mongoose;
@@ -95,26 +94,6 @@ const Message =
   mongoose.models.Message || mongoose.model("Message", messageSchema);
 
 // --------------------
-// Google Books API Search
-// --------------------
-async function searchGoogleBooks(query) {
-  const response = await axios.get(
-    `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}`
-  );
-
-  return (response.data.items || []).map((item) => ({
-    title: item.volumeInfo.title,
-    author: item.volumeInfo.authors?.join(", ") || "Unknown",
-    publisher: item.volumeInfo.publisher || "Unknown",
-    year: item.volumeInfo.publishedDate?.substring(0, 4),
-    cover: item.volumeInfo.imageLinks?.thumbnail,
-    isbn: item.volumeInfo.industryIdentifiers?.[0]?.identifier || "",
-    genre: item.volumeInfo.categories?.[0] || "Unknown",
-    desc: item.volumeInfo.description || "",
-  }));
-}
-
-// --------------------
 // (Optional) Legacy inject model helper
 // --------------------
 let BookModel = null;
@@ -145,8 +124,6 @@ export {
   OfferedBook,
   Conversation,
   Message,
-
-  searchGoogleBooks,
 
   // optional legacy exports
   injectBookModel,

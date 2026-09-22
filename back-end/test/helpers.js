@@ -6,6 +6,7 @@ import mongoose from "mongoose";
 import app from "../app.js";
 import { OfferedBook, User } from "../Data.js";
 import { outbox } from "./setup.js";
+import { http } from "../lib/http.js";
 
 use(chaiHttp);
 
@@ -132,4 +133,43 @@ export async function createOfferedBook(owner, overrides = {}) {
     desc: "There and back again.",
     ...overrides,
   });
+}
+
+// Answers every external GET (Google Books, Open Library) with
+// `handler(url, params)`, whose return value is the response body; throw
+// httpFailure(...) from it for an error response. Returns the list of calls.
+// test/setup.js restores the refusing default after each test.
+export function mockHttp(handler) {
+  const calls = [];
+  http.get = async (url, config = {}) => {
+    const params = config.params || {};
+    calls.push({ url, params });
+    return { data: await handler(url, params) };
+  };
+  return calls;
+}
+
+// An error shaped like the HTTP client's for a response with `status`.
+export function httpFailure(status, message = `HTTP ${status}`) {
+  const err = new Error(`Request failed with status code ${status}`);
+  err.response = { status, data: { error: { code: status, message } } };
+  return err;
+}
+
+// A Google Books volume with an ISBN-13 and, unless `thumbnail` is null, an
+// http:// thumbnail as Google returns them.
+export function googleVolume(id, { isbn, title = `Book ${id}`, thumbnail = `http://books.google.com/books/content?id=${id}&img=1` } = {}) {
+  return {
+    id,
+    volumeInfo: {
+      title,
+      authors: ["An Author"],
+      publisher: "A Publisher",
+      publishedDate: "2001-02-03",
+      industryIdentifiers: isbn ? [{ type: "ISBN_13", identifier: isbn }] : [],
+      categories: ["Fiction"],
+      description: "A description.",
+      ...(thumbnail ? { imageLinks: { thumbnail, smallThumbnail: thumbnail } } : {}),
+    },
+  };
 }

@@ -11,6 +11,13 @@ import { buildCorsOptions } from "./lib/cors.js";
 import { LOGIN_THROTTLED_MESSAGE, LoginThrottle } from "./lib/loginThrottle.js";
 import { consumeToken, hasLiveToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/authTokens.js";
 import { mail, resolveFrontEndBaseUrl } from "./lib/mail.js";
+import { captureCover } from "./lib/covers.js";
+import {
+  BOOK_SEARCH_UNAVAILABLE,
+  BOOK_SEARCH_UNAVAILABLE_MESSAGE,
+  GoogleBooksUnavailableError,
+  searchGoogleBooks,
+} from "./lib/googleBooks.js";
 import {
   emailOnlyValidators,
   loginValidators,
@@ -29,7 +36,6 @@ import {
   OfferedBook,
   Conversation,
   Message,
-  searchGoogleBooks,
 } from "./Data.js";
 
 const app = express();
@@ -74,6 +80,18 @@ const forgotPasswordThrottles = mailThrottles("forgot-password");
 const changeEmailThrottles = mailThrottles("change-email");
 
 const MAIL_THROTTLED_MESSAGE = "Too many requests. Please try again later.";
+
+// Every Google Books call spends one of the key's shared daily requests, so
+// each signed-in reader gets a budget of lookups; identical queries are also
+// cached in lib/googleBooks.js.
+const googleBooksThrottle = new LoginThrottle({
+  scope: "google-books",
+  windowMs: HOUR / 4,
+  lockoutMs: HOUR / 4,
+  accountMaxAttempts: 60,
+});
+const GOOGLE_BOOKS_THROTTLED_MESSAGE =
+  "Too many book searches. Please try again in a few minutes.";
 
 // Answers 429 and returns true when the caller or the address is over its limit.
 async function mailRequestLimited(throttles, req, res, email) {
@@ -730,6 +748,49 @@ app.get("/users/:id/offered", authMiddleware, async (req, res) => {
   }
 });
 
+// --------------------
+// GOOGLE BOOKS PROXY
+// --------------------
+// The browser never calls Google Books: these routes do, with the server-side
+// key. A refusal from Google (quota spent, key missing or rejected) answers 503
+// with BOOK_SEARCH_UNAVAILABLE rather than an empty result.
+
+async function googleBooksLimit(req, res, next) {
+  try {
+    const limit = await googleBooksThrottle.hit(req.user.userId);
+    if (!limit.limited) return next();
+
+    res.set("Retry-After", String(limit.retryAfterSeconds));
+    res.status(429).json({ message: GOOGLE_BOOKS_THROTTLED_MESSAGE });
+  } catch (err) {
+    next(err);
+  }
+}
+
+function googleBooksFailure(err, res, next) {
+  if (!(err instanceof GoogleBooksUnavailableError)) return next(err);
+
+  console.error("Google Books lookup failed:", err.reason);
+  res.status(503).json({ message: BOOK_SEARCH_UNAVAILABLE_MESSAGE, code: BOOK_SEARCH_UNAVAILABLE });
+}
+
+const GOOGLE_QUERY_MAX_LENGTH = 200;
+
+app.get("/google-books/search", authMiddleware, googleBooksLimit, async (req, res, next) => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if (q.length < 2 || q.length > GOOGLE_QUERY_MAX_LENGTH) {
+    return res
+      .status(400)
+      .json({ message: `Search for 2 to ${GOOGLE_QUERY_MAX_LENGTH} characters.` });
+  }
+
+  try {
+    res.json({ books: await searchGoogleBooks(q) });
+  } catch (err) {
+    googleBooksFailure(err, res, next);
+  }
+});
+
 app.post(
   "/user/add-wishlist-book",
   authMiddleware,
@@ -749,7 +810,7 @@ app.post(
         author,
         publisher,
         year,
-        cover,
+        cover: await captureCover({ cover, isbn }),
         isbn,
         genre,
         desc,
@@ -788,7 +849,7 @@ app.post(
         author,
         publisher,
         year,
-        cover,
+        cover: await captureCover({ cover, isbn }),
         isbn,
         genre,
         desc,

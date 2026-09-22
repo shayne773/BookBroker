@@ -31,6 +31,8 @@ optional variable has a working local default, so the two lines above are still 
 for development.
 Without `RESEND_API_KEY` the API sends no email: sign-up confirmation, password reset
 and email change links are printed to the back-end console instead, so you can follow them locally.
+Book search (adding a book from Google Books) needs `GOOGLE_BOOKS_API_KEY` in `back-end/.env`;
+without it the search says it is temporarily unavailable.
 
 ### Frontend
 Navigate to the frontend directory and run the react app
@@ -49,3 +51,13 @@ cd back-end
 npm install
 npm start
 ```
+
+### Demo data
+The seed needs `MONGODB_URI` and `GOOGLE_BOOKS_API_KEY` in `back-end/.env`.
+```
+cd back-end
+npm run seed   # replace the seed_user_* demo users and their 100 books
+```
+It fetches every book, cover included, before it deletes the previous seed, so a Google
+failure leaves the old data in place. Covers are stored as https; a book Google has no
+image for gets Open Library's cover by ISBN when there is one.
