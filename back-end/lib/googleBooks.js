@@ -53,8 +53,8 @@ function remember(key, value) {
   cache.set(key, { value, expires: Date.now() + CACHE_TTL_MS });
 }
 
-// GET `path` under the API with the key. Resolves to the JSON body, or null for
-// a 404; anything else Google does not answer becomes GoogleBooksUnavailableError.
+// GET `path` under the API with the key. Resolves to the JSON body; anything
+// Google does not answer becomes GoogleBooksUnavailableError.
 async function googleGet(path, params = {}) {
   const key = process.env.GOOGLE_BOOKS_API_KEY;
   if (!key) throw new GoogleBooksUnavailableError("GOOGLE_BOOKS_API_KEY is not set");
@@ -71,12 +71,8 @@ async function googleGet(path, params = {}) {
     }));
   } catch (err) {
     const status = err?.response?.status;
-    if (status === 404) {
-      data = null;
-    } else {
-      const detail = err?.response?.data?.error?.message || err?.code || "no response";
-      throw new GoogleBooksUnavailableError(`HTTP ${status ?? "-"}: ${detail}`);
-    }
+    const detail = err?.response?.data?.error?.message || err?.code || "no response";
+    throw new GoogleBooksUnavailableError(`HTTP ${status ?? "-"}: ${detail}`);
   }
 
   remember(cacheKey, data);
@@ -102,7 +98,6 @@ export function mapVolume(item) {
     "";
 
   return {
-    volumeId: item?.id || "",
     title: v.title || "",
     author: v.authors?.join(", ") || "Unknown",
     publisher: v.publisher || "Unknown",

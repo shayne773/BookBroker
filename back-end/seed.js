@@ -122,7 +122,7 @@ export async function seed({ pauseMs = 250, log = console.log } = {}) {
   );
   log(`👤 Created ${createdUsers.length} users (password: ${SHARED_PASSWORD})`);
 
-  const offeredDocs = books.map(({ volumeId, ...book }, i) => ({
+  const offeredDocs = books.map((book, i) => ({
     ...book,
     owner: createdUsers[Math.floor(i / BOOKS_PER_USER)]._id,
   }));
