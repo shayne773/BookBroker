@@ -10,7 +10,8 @@ export const SESSION_EXPIRED_EVENT = 'bookbroker:session-expired';
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 
-// Stores the session exactly as it was stored before; token lifetime is unchanged.
+// The token names a session the server tracks; it stays valid while it is used
+// at least once every 30 days, and the server ends it on logout or password reset.
 export const saveSession = ({ token, userId, username }) => {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_ID_KEY, userId);
@@ -33,6 +34,23 @@ export class SessionExpiredError extends Error {
 }
 
 export const isSessionExpiredError = (err) => err instanceof SessionExpiredError;
+
+// Signs this browser out: the server ends the session, and the stored values go
+// whether or not that call succeeds. Uses fetch, not authFetch, so a token the
+// server has already dropped does not announce an expired session.
+export const logout = async () => {
+  const token = getToken();
+  try {
+    await fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/logout`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch (err) {
+    console.error('Logout error:', err);
+  } finally {
+    clearSession();
+  }
+};
 
 // Ends the session and tells RequireAuth to redirect to the login page.
 export const expireSession = () => {

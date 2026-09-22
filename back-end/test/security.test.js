@@ -53,7 +53,7 @@ describe("GET /users/:id", () => {
     const res = await request
       .execute(app)
       .get(`/users/${user._id}`)
-      .set(authHeader(viewer));
+      .set(await authHeader(viewer));
 
     expect(res).to.have.status(200);
     expect(res.body).to.include({
@@ -70,7 +70,7 @@ describe("GET /users/:id", () => {
   it("rejects an id that is not an ObjectId", async () => {
     const viewer = await createUser();
 
-    const res = await request.execute(app).get("/users/1").set(authHeader(viewer));
+    const res = await request.execute(app).get("/users/1").set(await authHeader(viewer));
 
     expect(res).to.have.status(400);
   });
@@ -79,7 +79,7 @@ describe("GET /users/:id", () => {
     const viewer = await createUser();
     const missing = new mongoose.Types.ObjectId();
 
-    const res = await request.execute(app).get(`/users/${missing}`).set(authHeader(viewer));
+    const res = await request.execute(app).get(`/users/${missing}`).set(await authHeader(viewer));
 
     expect(res).to.have.status(404);
   });
@@ -135,7 +135,7 @@ describe("regex handling in genre and search", () => {
       .execute(app)
       .get("/browse")
       .query({ q: ".*" })
-      .set(authHeader(viewer));
+      .set(await authHeader(viewer));
 
     expect(res).to.have.status(200);
     expect(res.body.searchResults).to.be.an("array").that.is.empty;
@@ -153,7 +153,7 @@ describe("regex handling in genre and search", () => {
       .execute(app)
       .get("/browse")
       .query({ q: evil })
-      .set(authHeader(viewer));
+      .set(await authHeader(viewer));
 
     expect(res).to.have.status(200);
     expect(res.body.searchResults).to.be.an("array").that.is.empty;
@@ -170,7 +170,7 @@ describe("regex handling in genre and search", () => {
       .execute(app)
       .get("/browse")
       .query({ q: "hobb" })
-      .set(authHeader(viewer));
+      .set(await authHeader(viewer));
 
     expect(res).to.have.status(200);
     expect(res.body.searchResults).to.have.lengthOf(1);
@@ -550,7 +550,7 @@ describe("owner lookups in the recommendation pipelines", () => {
       const owner = await createUser({ location: "Brooklyn" });
       await createOfferedBook(owner);
 
-      const res = await request.execute(app).get(path).set(authHeader(viewer));
+      const res = await request.execute(app).get(path).set(await authHeader(viewer));
 
       expect(res).to.have.status(200);
 
@@ -575,7 +575,7 @@ describe("POST /user/edit", () => {
     const res = await request
       .execute(app)
       .post("/user/edit")
-      .set(authHeader(user))
+      .set(await authHeader(user))
       .send({ user: { username: "renamed" } });
 
     expect(res).to.have.status(200);
@@ -598,7 +598,7 @@ describe("POST /user/edit email changes", () => {
     const res = await request
       .execute(app)
       .post("/user/edit")
-      .set(authHeader(attacker))
+      .set(await authHeader(attacker))
       .send({ user: { email: "bob@x.com" } });
 
     expect(res.status, "the edit is rejected").to.be.within(400, 499);
@@ -614,11 +614,7 @@ describe("POST /user/edit email changes", () => {
 
     expect(signIn).to.have.status(200);
     expect(signIn.body).to.have.property("token");
-    expect(legacy._id.toString()).to.equal(
-      JSON.parse(
-        Buffer.from(signIn.body.token.split(".")[1], "base64").toString()
-      ).userId
-    );
+    expect(signIn.body.user.id).to.equal(legacy._id.toString());
   });
 
   it("rejects an address that is not a valid email", async () => {
@@ -627,7 +623,7 @@ describe("POST /user/edit email changes", () => {
     const res = await request
       .execute(app)
       .post("/user/edit")
-      .set(authHeader(user))
+      .set(await authHeader(user))
       .send({ user: { email: "not-an-address" } });
 
     expect(res).to.have.status(400);
@@ -642,7 +638,7 @@ describe("POST /user/edit email changes", () => {
     const res = await request
       .execute(app)
       .post("/user/edit")
-      .set(authHeader(user))
+      .set(await authHeader(user))
       .send({ user: { email: "  Renamed@Example.COM " } });
 
     expect(res).to.have.status(200);
@@ -658,7 +654,7 @@ describe("POST /user/edit email changes", () => {
     const res = await request
       .execute(app)
       .post("/user/edit")
-      .set(authHeader(user))
+      .set(await authHeader(user))
       .send({ user: { username: "renamed", location: "Queens" } });
 
     expect(res).to.have.status(200);

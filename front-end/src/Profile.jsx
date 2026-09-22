@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authFetch, clearSession, isSessionExpiredError } from './auth';
+import { authFetch, isSessionExpiredError, logout } from './auth';
 import ProfileHead from './ProfileHead';
 import ShelfPreview from './ShelfPreview';
 import AddBookDialog from './Profile/AddBookDialog';
@@ -136,17 +136,9 @@ const Profile = () => {
       });
   };
 
-  const handleLogout = () => {
-    fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/logout`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    })
-      .catch(err => console.error("Logout error:", err))
-      .finally(() => {
-        // The local session goes either way; the server call is best effort.
-        clearSession();
-        navigate('/login', { replace: true });
-      });
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
   };
 
   const closeWishlistModal = () => {

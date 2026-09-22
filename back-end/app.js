@@ -4,13 +4,13 @@ import bodyParser from "body-parser";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import { body, matchedData, validationResult } from "express-validator";
 import exchangesRouter from "./routes/exchanges.js";
 import { buildCorsOptions } from "./lib/cors.js";
 import { LOGIN_THROTTLED_MESSAGE, LoginThrottle } from "./lib/loginThrottle.js";
 import { consumeToken, hasLiveToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/authTokens.js";
 import { mail, resolveFrontEndBaseUrl } from "./lib/mail.js";
+import { createSession, endSession, endUserSessions, useSession } from "./lib/sessions.js";
 import { captureCover } from "./lib/covers.js";
 import {
   BOOK_SEARCH_UNAVAILABLE,
@@ -164,23 +164,32 @@ app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const authMiddleware = (req, res, next) => {
+const bearerToken = (req) => {
+  const header = req.header("Authorization") || "";
+  return header.startsWith("Bearer ") ? header.slice(7) : null;
+};
+
+// Every authenticated request looks its session up (lib/sessions.js), which
+// also slides the session's expiry forward.
+const authMiddleware = async (req, res, next) => {
   // ✅ always allow preflight through
   if (req.method === "OPTIONS") return next();
 
-  const header = req.header("Authorization") || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  const token = bearerToken(req);
 
   if (!token) {
     return res.status(401).json({ message: "Access denied. No token provided." });
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // { userId: ... }
+    const session = await useSession(token);
+    if (!session) {
+      return res.status(401).json({ message: "Your session has ended. Please sign in again." });
+    }
+    req.user = { userId: String(session.user) };
     next();
   } catch (err) {
-    return res.status(401).json({ message: "Invalid token" });
+    next(err);
   }
 };
 
@@ -269,7 +278,7 @@ app.post("/auth/login", loginValidators, async (req, res, next) => {
       });
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "2h" });
+    const token = await createSession(user._id);
 
     res.json({ token, user: { id: user._id, username: user.username } });
   } catch (err) {
@@ -409,6 +418,9 @@ app.post("/auth/reset-password", resetPasswordValidators, async (req, res, next)
 
     await revokeTokens(TOKEN_PURPOSES.resetPassword, user._id);
     await revokeTokens(TOKEN_PURPOSES.confirmEmail, user._id);
+    // A new password signs the account out everywhere, so a stolen sign-in
+    // does not outlive the reset.
+    await endUserSessions(user._id);
     await loginThrottle.recordSuccess(user.email);
 
     res.json({ message: "Password updated. You can sign in with it now." });
@@ -417,9 +429,16 @@ app.post("/auth/reset-password", resetPasswordValidators, async (req, res, next)
   }
 });
 
-app.post("/logout", async (req, res) => {
-  return res.status(200).json({ message: "Logged out successfully" });
-})
+// Ends this browser's session only. Answered the same whether or not the
+// token was still live, so signing out never fails.
+app.post("/logout", async (req, res, next) => {
+  try {
+    await endSession(bearerToken(req));
+    res.status(200).json({ message: "Logged out successfully" });
+  } catch (err) {
+    next(err);
+  }
+});
 
 app.get("/books/:id", async (req, res, next) => {
   try {

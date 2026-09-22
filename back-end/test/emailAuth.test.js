@@ -331,8 +331,8 @@ describe("changing the account email", () => {
   beforeEach(clearDatabase);
 
   const NEW_EMAIL = "moved@example.com";
-  const requestChange = (user, email = NEW_EMAIL) =>
-    api().post("/user/edit").set(authHeader(user)).send({ user: { email } });
+  const requestChange = async (user, email = NEW_EMAIL) =>
+    api().post("/user/edit").set(await authHeader(user)).send({ user: { email } });
   const confirmChange = (token) => api().post("/auth/confirm-email-change").send({ token });
 
   it("mails a link to the new address and keeps the current email in effect", async () => {
@@ -446,7 +446,7 @@ describe("changing the account email", () => {
     expect((await User.findById(user._id)).email).to.equal(user.email);
   });
 
-  const profile = (user) => api().get("/user").set(authHeader(user));
+  const profile = async (user) => api().get("/user").set(await authHeader(user));
 
   it("stops reporting a change as pending once its link has expired", async () => {
     const user = await createUser();
@@ -468,7 +468,7 @@ describe("changing the account email", () => {
 
     const res = await api()
       .post("/user/edit")
-      .set(authHeader(user))
+      .set(await authHeader(user))
       .send({ user: { username: "renamed", email: user.email } });
 
     expect(res).to.have.status(200);
@@ -482,7 +482,7 @@ describe("changing the account email", () => {
 
     const res = await api()
       .post("/user/edit")
-      .set(authHeader(user))
+      .set(await authHeader(user))
       .send({ user: { username: "renamed", location: "Queens", email: user.email } });
 
     expect(res).to.have.status(200);

@@ -15,6 +15,7 @@ export default function Login() {
     // Where RequireAuth wanted to go before it sent us here.
     const from = location.state?.from;
     const redirectTo = from ? `${from.pathname}${from.search || ''}` : '/home';
+    const sessionEnded = Boolean(location.state?.sessionEnded);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -52,6 +53,10 @@ export default function Login() {
     return (
         <AuthShell kicker="Welcome back" title="Sign in">
             <form className="form" onSubmit={handleSubmit}>
+                {sessionEnded && !error && (
+                    <p className="notice" role="status">Your session has ended. Please sign in again.</p>
+                )}
+
                 <label className="field">
                     <span className="field__label">Email</span>
                     <input className="input" type="email" id="email" name="email" placeholder="you@example.com" required />

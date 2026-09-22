@@ -22,12 +22,11 @@ VITE_SERVER_ADDRESS="http://localhost:5000"
 Create a file at back-end/.env and add the following line to the file:
 ```
 MONGODB_URI=mongodb+srv://rain:rain12345678@bookbroker.nelw2as.mongodb.net/?retryWrites=true&w=majority&appName=BookBroker
-JWT_SECRET="MYSECRET"
 ```
 
 See [back-end/.env.example](./back-end/.env.example) for the full list of back-end
 environment variables, including the CORS allowlist (`CORS_ALLOWED_ORIGINS`). Every
-optional variable has a working local default, so the two lines above are still enough
+optional variable has a working local default, so the line above is still enough
 for development.
 Without `RESEND_API_KEY` the API sends no email: sign-up confirmation, password reset
 and email change links are printed to the back-end console instead, so you can follow them locally.
