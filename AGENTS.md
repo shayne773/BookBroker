@@ -72,6 +72,13 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Tests never reach the network: `test/setup.js` makes `http.get` (`lib/http.js`) throw,
   and `mockHttp` in `test/helpers.js` answers it for one test.
 
+## Sign-in sessions
+
+- A sign-in token is opaque, not a JWT: `back-end/lib/sessions.js` stores its SHA-256 hash as a
+  `Session` with a 30-day sliding expiry (touched at most hourly) and a TTL index. `authMiddleware`
+  in `app.js` looks the session up on every request, so deleting it ends the sign-in: `/logout`
+  ends one, a password reset ends all of the account's. There is no `JWT_SECRET`.
+
 ## Email, confirmation and password reset
 
 - All mail goes through `mail` in `back-end/lib/mail.js` (Resend SDK). Without
@@ -132,10 +139,10 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `front-end/vite.config.js`.
 - `cd back-end && npm test` runs Mocha against an in-process MongoDB started as a one-node
   replica set (several exchange routes use transactions, which a standalone
-  mongod rejects). `back-end/test/setup.js` is the root hook: it sets `JWT_SECRET`, connects
+  mongod rejects). `back-end/test/setup.js` is the root hook: it connects
   Mongoose and empties every collection after each test. `back-end/test/helpers.js` signs users
   up through the real auth routes, so protected routes get a genuine token; its direct
-  fixtures (`createUser`, `authHeader`, ...) write to the database for states the routes
+  fixtures (`createUser`, `await authHeader(user)`, ...) write to the database for states the routes
   cannot produce.
 
 ## Maintaining this file

@@ -4,19 +4,20 @@ import { SESSION_EXPIRED_EVENT, getToken } from './auth';
 
 // Layout route that gates every page needing a signed-in user.
 // Without a token it sends the visitor to /login and remembers where they were
-// headed, so Login can drop them back there after a successful sign in.
+// headed, so Login can drop them back there after a successful sign in. When the
+// server ended the session (any 401), it also tells Login to say so.
 const RequireAuth = () => {
   const location = useLocation();
-  const [, bumpSession] = useState(0);
+  const [sessionEnded, setSessionEnded] = useState(false);
 
   useEffect(() => {
-    const onExpired = () => bumpSession((n) => n + 1);
+    const onExpired = () => setSessionEnded(true);
     window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
   }, []);
 
   if (!getToken()) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/login" state={{ from: location, sessionEnded }} replace />;
   }
 
   return <Outlet />;

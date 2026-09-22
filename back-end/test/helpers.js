@@ -1,12 +1,12 @@
 import { use } from "chai";
 import { default as chaiHttp, request } from "chai-http";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import app from "../app.js";
 import { OfferedBook, User } from "../Data.js";
 import { outbox } from "./setup.js";
 import { http } from "../lib/http.js";
+import { createSession } from "../lib/sessions.js";
 
 use(chaiHttp);
 
@@ -111,14 +111,9 @@ export async function createUser(overrides = {}) {
   });
 }
 
-export function tokenFor(user) {
-  return jwt.sign({ userId: user._id.toString() }, process.env.JWT_SECRET, {
-    expiresIn: "1h",
-  });
-}
-
-export function authHeader(user) {
-  return { Authorization: `Bearer ${tokenFor(user)}` };
+// Starts a session for a directly created user, as signing in would.
+export async function authHeader(user) {
+  return { Authorization: `Bearer ${await createSession(user._id)}` };
 }
 
 export async function createOfferedBook(owner, overrides = {}) {
