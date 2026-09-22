@@ -12,7 +12,7 @@
 // queries (the same search typed by several readers) spend the daily quota once.
 
 import { http } from "./http.js";
-import { httpsUrl, normalizeIsbn } from "./covers.js";
+import { httpsUrl } from "./covers.js";
 
 export const GOOGLE_BOOKS_API = "https://www.googleapis.com/books/v1";
 
@@ -123,17 +123,4 @@ export async function searchVolumes(query, { maxResults = 10, startIndex = 0 } =
 /** Matching volumes, mapped for storage. */
 export async function searchGoogleBooks(query, options) {
   return (await searchVolumes(query, options)).map(mapVolume);
-}
-
-/** The raw volume with this ISBN, or null. */
-export async function findVolumeByIsbn(isbn) {
-  const clean = normalizeIsbn(isbn);
-  if (!clean) return null;
-  const [item] = await searchVolumes(`isbn:${clean}`, { maxResults: 1 });
-  return item || null;
-}
-
-/** The raw volume with this Google volume id, or null. */
-export async function getVolume(volumeId) {
-  return googleGet(`/volumes/${encodeURIComponent(volumeId)}`);
 }

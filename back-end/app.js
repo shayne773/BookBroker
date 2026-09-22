@@ -11,14 +11,11 @@ import { buildCorsOptions } from "./lib/cors.js";
 import { LOGIN_THROTTLED_MESSAGE, LoginThrottle } from "./lib/loginThrottle.js";
 import { consumeToken, hasLiveToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/authTokens.js";
 import { mail, resolveFrontEndBaseUrl } from "./lib/mail.js";
-import { captureCover, normalizeIsbn } from "./lib/covers.js";
+import { captureCover } from "./lib/covers.js";
 import {
   BOOK_SEARCH_UNAVAILABLE,
   BOOK_SEARCH_UNAVAILABLE_MESSAGE,
   GoogleBooksUnavailableError,
-  findVolumeByIsbn,
-  getVolume,
-  mapVolume,
   searchGoogleBooks,
 } from "./lib/googleBooks.js";
 import {
@@ -778,7 +775,6 @@ function googleBooksFailure(err, res, next) {
 }
 
 const GOOGLE_QUERY_MAX_LENGTH = 200;
-const GOOGLE_VOLUME_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 app.get("/google-books/search", authMiddleware, googleBooksLimit, async (req, res, next) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
@@ -790,33 +786,6 @@ app.get("/google-books/search", authMiddleware, googleBooksLimit, async (req, re
 
   try {
     res.json({ books: await searchGoogleBooks(q) });
-  } catch (err) {
-    googleBooksFailure(err, res, next);
-  }
-});
-
-app.get("/google-books/isbn/:isbn", authMiddleware, googleBooksLimit, async (req, res, next) => {
-  const isbn = normalizeIsbn(req.params.isbn);
-  if (!isbn) return res.status(400).json({ message: "Not a valid ISBN." });
-
-  try {
-    const volume = await findVolumeByIsbn(isbn);
-    if (!volume) return res.status(404).json({ message: "Book not found" });
-    res.json({ book: mapVolume(volume) });
-  } catch (err) {
-    googleBooksFailure(err, res, next);
-  }
-});
-
-app.get("/google-books/volumes/:id", authMiddleware, googleBooksLimit, async (req, res, next) => {
-  if (!GOOGLE_VOLUME_ID.test(req.params.id)) {
-    return res.status(400).json({ message: "Not a valid volume id." });
-  }
-
-  try {
-    const volume = await getVolume(req.params.id);
-    if (!volume) return res.status(404).json({ message: "Book not found" });
-    res.json({ book: mapVolume(volume) });
   } catch (err) {
     googleBooksFailure(err, res, next);
   }

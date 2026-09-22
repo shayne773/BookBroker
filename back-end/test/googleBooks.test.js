@@ -107,35 +107,6 @@ describe("Google Books proxy", () => {
     const other = await signUp();
     expect(await api(other.token).get("/google-books/search?q=dune")).to.have.status(200);
   });
-
-  it("looks a book up by ISBN", async () => {
-    process.env.GOOGLE_BOOKS_API_KEY = KEY;
-    const calls = mockHttp(() => ({ items: [googleVolume("vol1", { isbn: "9780132350884" })] }));
-    const { token } = await signUp();
-
-    const res = await api(token).get("/google-books/isbn/978-0-13-235088-4");
-
-    expect(res).to.have.status(200);
-    expect(res.body.book).to.include({ isbn: "9780132350884", volumeId: "vol1" });
-    expect(calls[0].params).to.include({ q: "isbn:9780132350884", key: KEY });
-  });
-
-  it("looks a book up by Google volume id, and 404s an unknown one", async () => {
-    process.env.GOOGLE_BOOKS_API_KEY = KEY;
-    const calls = mockHttp((url) => {
-      if (url.endsWith("/volumes/vol1")) return googleVolume("vol1", { isbn: "9780132350884" });
-      throw httpFailure(404, "The volume ID could not be found.");
-    });
-    const { token } = await signUp();
-
-    const found = await api(token).get("/google-books/volumes/vol1");
-    const missing = await api(token).get("/google-books/volumes/nope");
-
-    expect(found).to.have.status(200);
-    expect(found.body.book.volumeId).to.equal("vol1");
-    expect(calls[0].params.key).to.equal(KEY);
-    expect(missing).to.have.status(404);
-  });
 });
 
 describe("cover capture when a book is added", () => {
