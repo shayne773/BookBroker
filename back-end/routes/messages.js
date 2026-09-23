@@ -1,6 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import { Conversation, Message, User } from "../Data.js";
+import { BLOCKED_MESSAGE_MESSAGE, isBlockedBetween } from "../lib/blocks.js";
 
 // Conversations are addressed by the other participant's id, so a user can only
 // ever reach the conversations they are part of.
@@ -108,7 +109,7 @@ router.get("/", async (req, res, next) => {
           String(convo.lastMessageBy) !== String(userId);
 
         const [otherUser, lastMsg, unread] = await Promise.all([
-          User.findById(otherUserId).select("_id username location ratings").lean(),
+          User.findById(otherUserId).select("_id username location ratingsAvg ratingsCount").lean(),
           Message.findOne({ conversation: convo._id })
             .sort({ createdAt: -1, _id: -1 })
             .select("content createdAt")
@@ -128,10 +129,17 @@ router.get("/", async (req, res, next) => {
             ? {
                 id: otherUser._id,
                 location: otherUser.location,
-                ratings: otherUser.ratings,
+                ratingsAvg: otherUser.ratingsAvg,
+                ratingsCount: otherUser.ratingsCount,
                 username: otherUser.username,
               }
-            : { id: otherUserId, location: null, ratings: 0, username: "Unknown" },
+            : {
+                id: otherUserId,
+                location: null,
+                ratingsAvg: 0,
+                ratingsCount: 0,
+                username: "Unknown",
+              },
           lastMessage: lastMsg?.content || "",
           lastAt: lastMsg?.createdAt || null,
           unread,
@@ -249,6 +257,10 @@ router.post("/:user", async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const otherUserId = otherUserParam(req);
+
+    // A block, in either direction, stops messages both ways.
+    if (await isBlockedBetween(userId, otherUserId)) throw httpError(403, BLOCKED_MESSAGE_MESSAGE);
+
     const { content } = req.body || {};
 
     if (typeof content !== "string") throw httpError(400, "Message content is required");

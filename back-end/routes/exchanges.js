@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import Exchange from "../Exchange.js";
 import { OfferedBook, User } from "../Data.js";
+import { BLOCKED_TRADE_MESSAGE, isBlockedBetween } from "../lib/blocks.js";
 
 const router = express.Router();
 
@@ -24,6 +25,18 @@ function httpError(status, message) {
   return err;
 }
 
+// The other participant's fields shown beside a trade.
+const PARTICIPANT_FIELDS = "username location ratingsAvg ratingsCount";
+
+// Readers blocked either way cannot propose, counter or accept a trade with
+// each other; declining, cancelling and completing stay open so a trade already
+// under way can still be wound down.
+async function assertNotBlocked(exchange) {
+  if (await isBlockedBetween(exchange.requester, exchange.responder)) {
+    throw httpError(403, BLOCKED_TRADE_MESSAGE);
+  }
+}
+
 // The side that made the offer currently on the table: whoever sent the invite
 // or the latest counter. Exchanges saved before proposedBy existed fall back to
 // the requester while still PENDING; a legacy counter's author is unknown.
@@ -44,6 +57,10 @@ router.post("/", async (req, res) => {
     // basic validation
     if (!responderId) return res.status(400).json({ message: "responderId required" });
     if (String(responderId) === String(userId)) return res.status(400).json({ message: "Cannot exchange with yourself" });
+    if (!mongoose.isValidObjectId(responderId)) return res.status(400).json({ message: "Invalid responderId" });
+    if (await isBlockedBetween(userId, responderId)) {
+      return res.status(403).json({ message: BLOCKED_TRADE_MESSAGE });
+    }
 
     // verify books belong to correct owners
     const myBooks = await OfferedBook.find({ _id: { $in: requesterBooks }, owner: userId, locked: false });
@@ -93,8 +110,8 @@ router.get("/", async (req, res) => {
       $or: [{ requester: userId }, { responder: userId }],
     })
       .sort({ updatedAt: -1 })
-      .populate("requester", "username location ratings")
-      .populate("responder", "username location ratings")
+      .populate("requester", PARTICIPANT_FIELDS)
+      .populate("responder", PARTICIPANT_FIELDS)
       .populate("requesterBooks")
       .populate("responderBooks");
 
@@ -117,8 +134,8 @@ router.get("/:id", async (req, res) => {
     assertParticipant(ex, userId);
 
     const full = await Exchange.findById(req.params.id)
-      .populate("requester", "username location ratings")
-      .populate("responder", "username location ratings")
+      .populate("requester", PARTICIPANT_FIELDS)
+      .populate("responder", PARTICIPANT_FIELDS)
       .populate("requesterBooks")
       .populate("responderBooks");
 
@@ -148,6 +165,8 @@ router.post("/:id/counter", async (req, res) => {
     if (!["PENDING", "COUNTERED"].includes(ex.status)) {
       return res.status(400).json({ message: "Cannot counter in current status" });
     }
+
+    await assertNotBlocked(ex);
 
     // verify ownership + unlocked
     const myId = String(userId);
@@ -201,6 +220,8 @@ router.post("/:id/accept", async (req, res) => {
     if (proposerOf(ex) === String(userId)) {
       throw httpError(403, "You cannot accept your own offer; the other side must accept it");
     }
+
+    await assertNotBlocked(ex);
 
     // lock both sides' books if still unlocked
     const allBookIds = [...ex.requesterBooks, ...ex.responderBooks];

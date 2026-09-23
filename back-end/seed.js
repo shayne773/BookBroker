@@ -117,7 +117,6 @@ export async function seed({ pauseMs = 250, log = console.log } = {}) {
       email: `${SEED_PREFIX}${i + 1}@example.com`,
       password: hashed,
       location: LOCATIONS[i % LOCATIONS.length],
-      ratings: Math.floor(Math.random() * 6),
     }))
   );
   log(`👤 Created ${createdUsers.length} users (password: ${SHARED_PASSWORD})`);

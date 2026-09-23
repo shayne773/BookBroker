@@ -106,7 +106,6 @@ export async function createUser(overrides = {}) {
     email: `user_${suffix}@example.com`,
     password: await bcrypt.hash(password, 10),
     location: "Brooklyn",
-    ratings: 5,
     ...rest,
   });
 }
