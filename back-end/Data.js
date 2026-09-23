@@ -69,9 +69,16 @@ const offeredBookSchema = new Schema({
 });
 
 // Conversations + Messages
+// `lastMessageAt` / `lastMessageBy` copy the newest message so the unread count
+// is one indexed query over conversations, and `readAt` maps each participant's
+// id to the time of the newest message they have seen (routes/messages.js).
 const conversationSchema = new Schema({
   users: [{ type: Schema.Types.ObjectId, ref: "User" }],
+  lastMessageAt: { type: Date },
+  lastMessageBy: { type: Schema.Types.ObjectId, ref: "User" },
+  readAt: { type: Map, of: Date, default: {} },
 });
+conversationSchema.index({ users: 1, lastMessageAt: -1 });
 
 const messageSchema = new Schema({
   user: { type: Schema.Types.ObjectId, ref: "User" },
@@ -79,6 +86,9 @@ const messageSchema = new Schema({
   createdAt: { type: Date, default: Date.now },
   content: String,
 });
+// Serves the thread, its incremental fetch (createdAt, then _id to break ties)
+// and the per-conversation unread count.
+messageSchema.index({ conversation: 1, createdAt: 1, _id: 1 });
 
 // --------------------
 // Models (default connection)

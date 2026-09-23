@@ -106,6 +106,16 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - An ACCEPTED exchange holds its books via `locked` / `lockedByExchange`; anything that lists
   books as available to trade must filter `locked: false`.
 
+## Messaging
+
+- The API is meant to run as serverless functions, so live delivery is short polling, never a
+  WebSocket/SSE server: poll through `front-end/src/usePolling.js` (pauses while the tab is
+  hidden). An open thread asks `GET /messages/:user?after=<newest fetched id>` for new
+  messages only; a message it sent is shown but never moves that cursor.
+- Unread state is `Conversation.readAt` (per-participant marker) against the denormalised
+  `lastMessageAt` / `lastMessageBy` (`back-end/routes/messages.js`); anything that writes a
+  message must update both. `front-end/src/unread.js` holds the one shared navbar count.
+
 ## Front-end build (Vite)
 
 - The front end is a Vite app, not Create React App: `npm run dev`, `npm run build` (into

@@ -107,7 +107,7 @@
   /* Square corners read as editorial rather than as a generic card UI. */
   --radius-none: 0;
   --radius-sm: 2px;
-  --radius-full: 999px; /* avatars only */
+  --radius-full: 999px; /* avatars and unread markers only */
   --border-hairline: 1px solid var(--color-rule);
   --border-hairline-subtle: 1px solid var(--color-rule-subtle);
   --border-strong: 1px solid var(--color-rule-strong);
