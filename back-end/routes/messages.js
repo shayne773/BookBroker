@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { Conversation, Message, User } from "../Data.js";
 import { BLOCKED_MESSAGE_MESSAGE, isBlockedBetween } from "../lib/blocks.js";
 import { isSuspended } from "../lib/suspensions.js";
+import { notifyNewMessage } from "../lib/notifications.js";
 
 // Conversations are addressed by the other participant's id, so a user can only
 // ever reach the conversations they are part of.
@@ -302,6 +303,8 @@ router.post("/:user", async (req, res, next) => {
         { $max: { [`readAt.${userId}`]: message.createdAt } }
       ),
     ]);
+
+    notifyNewMessage({ conversation, message, recipientId: otherUserId });
 
     res.status(200).json({ messageId: message._id, message: formatMessage(message) });
   } catch (err) {

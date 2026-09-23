@@ -17,8 +17,9 @@ What it does today: sign up with email confirmation, sign in and password reset,
 browse and search books (via a server-side Google Books proxy), keep a shelf of
 offered books and a wishlist, see which wishlist books other readers are offering,
 propose and accept trades, message other users, rate a trading partner and see each
-reader's average rating, and block or report another reader. Admins read the reports
-on a private page and can suspend a reader's account.
+reader's average rating, block or report another reader, and get email about new
+messages, trades and newly offered wishlist books (each category can be turned off).
+Admins read the reports on a private page and can suspend a reader's account.
 
 [Contributing Guidelines](./CONTRIBUTING.md) · [Agent and architecture notes](./AGENTS.md)
 
@@ -71,8 +72,8 @@ There is no login-signing secret: a sign-in token is an opaque server-side sessi
 not a JWT.
 
 Without `RESEND_API_KEY` the API sends no email — sign-up confirmation, password
-reset and email-change links are logged to the back-end console instead, so you can
-follow them locally. Without `GOOGLE_BOOKS_API_KEY`, book search reports that it is
+reset and email-change links, and notification emails, are logged to the back-end
+console instead, so you can follow them locally. Without `GOOGLE_BOOKS_API_KEY`, book search reports that it is
 temporarily unavailable.
 
 **Admins.** There is no admin sign-up and no role editing. An account is an admin
