@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import Exchange from "../Exchange.js";
 import { OfferedBook, User } from "../Data.js";
 import { BLOCKED_TRADE_MESSAGE, isBlockedBetween } from "../lib/blocks.js";
+import { isSuspended } from "../lib/suspensions.js";
 
 const router = express.Router();
 
@@ -29,10 +30,14 @@ function httpError(status, message) {
 const PARTICIPANT_FIELDS = "username location ratingsAvg ratingsCount";
 
 // Readers blocked either way cannot propose, counter or accept a trade with
-// each other; declining, cancelling and completing stay open so a trade already
-// under way can still be wound down.
+// each other, and nobody can with a suspended reader; declining, cancelling and
+// completing stay open so a trade already under way can still be wound down.
+async function canTrade(a, b) {
+  return !(await isBlockedBetween(a, b)) && !(await isSuspended(a)) && !(await isSuspended(b));
+}
+
 async function assertNotBlocked(exchange) {
-  if (await isBlockedBetween(exchange.requester, exchange.responder)) {
+  if (!(await canTrade(exchange.requester, exchange.responder))) {
     throw httpError(403, BLOCKED_TRADE_MESSAGE);
   }
 }
@@ -58,7 +63,7 @@ router.post("/", async (req, res) => {
     if (!responderId) return res.status(400).json({ message: "responderId required" });
     if (String(responderId) === String(userId)) return res.status(400).json({ message: "Cannot exchange with yourself" });
     if (!mongoose.isValidObjectId(responderId)) return res.status(400).json({ message: "Invalid responderId" });
-    if (await isBlockedBetween(userId, responderId)) {
+    if (!(await canTrade(userId, responderId))) {
       return res.status(403).json({ message: BLOCKED_TRADE_MESSAGE });
     }
 

@@ -116,13 +116,21 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `lastMessageAt` / `lastMessageBy` (`back-end/routes/messages.js`); anything that writes a
   message must update both. `front-end/src/unread.js` holds the one shared navbar count.
 
-## Blocks, reports and ratings
+## Blocks, reports, suspensions and ratings
 
 - A block (`Block` in `Data.js`) works both ways. Any route that lists offers builds its filter
   with `marketFilter` from `back-end/lib/blocks.js` (which also applies `locked: false`), and
   anything that lets one reader reach another (messages, proposing, countering or accepting a
   trade) checks `isBlockedBetween` on the server. The public book routes use `optionalAuth` in
   `app.js` so a signed-in caller's blocks apply; the front end calls them through `authFetch`.
+- Admins are the confirmed accounts listed in `ADMIN_EMAILS`; there are no roles in the database.
+  Admin API routes live in `back-end/routes/admin.js`, mounted behind `requireAdmin`
+  (`back-end/lib/admin.js`), which is the real gate; `GET /user`'s `isAdmin` only lets the
+  front end offer the page.
+- A suspended reader (`User.suspended`, `back-end/lib/suspensions.js`) cannot sign in and has
+  every session ended when suspended. `marketFilter` hides their offers, so listing through it
+  covers them too; anything that lets one reader reach another checks `isSuspended` beside
+  `isBlockedBetween`.
 - A reader's rating is `ratingsAvg` over `ratingsCount`; the legacy `ratings` field is retired
   and must not be read or written. The front end formats it only through `front-end/src/rating.js`.
 

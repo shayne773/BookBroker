@@ -1704,6 +1704,15 @@ a.list-row:focus-visible .textlink-arrow__mark {
   transform: translateX(3px);
 }
 
+/* Text written by a reader, e.g. a report's details: wrapped in full, not cut short. */
+.list-row__text {
+  max-width: var(--measure-text);
+  margin-top: var(--space-2);
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
 /* A row with something new in it: its excerpt reads in full ink. */
 .list-row--unread .list-row__excerpt {
   color: var(--color-ink);
