@@ -10,6 +10,7 @@ import Genre from './Browse/ByCategory/Genre';
 import Profile from './Profile';
 import MyBooks from './Profile/MyBooks';
 import MyTrades from './Profile/MyTrades';
+import WishlistMatches from './Profile/WishlistMatches';
 import Messages from './Messages';
 import MessagesDetail from './MessagesDetail';
 import BookPage from './BookPage';
@@ -69,6 +70,7 @@ const AppContent = () => {
               <Route path="edit" element={<Navigate to="/profile" replace />} />
               <Route path="my-books" element={<MyBooks />} />
               <Route path="my-trades" element={<MyTrades />} />
+              <Route path="matches" element={<WishlistMatches />} />
             </Route>
             <Route path="messages" element={<Messages />} />
             <Route path="messages/:user" element={<MessagesDetail />} />

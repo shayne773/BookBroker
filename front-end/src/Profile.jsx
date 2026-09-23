@@ -6,6 +6,8 @@ import ShelfPreview from './ShelfPreview';
 import AddBookDialog from './Profile/AddBookDialog';
 import EditProfileDialog from './Profile/EditProfileDialog';
 import useBookSearch from './Profile/useBookSearch';
+import useWishlistMatches from './Profile/useWishlistMatches';
+import BlockedReaders from './Profile/BlockedReaders';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -21,6 +23,10 @@ const Profile = () => {
   const [showToastWishlist, setShowToastWishlist] = useState(false);
   const [showToastOfferings, setShowToastOfferings] = useState(false);
   const [editNotice, setEditNotice] = useState(null);
+
+  const { matches, loaded: matchesLoaded } = useWishlistMatches();
+  // Every offer of a wishlisted book, for the preview; the full list groups them by book.
+  const matchedOffers = matches.flatMap(({ offers }) => offers);
 
   const wishlistSearch = useBookSearch();
   const offerSearch = useBookSearch();
@@ -176,6 +182,17 @@ const Profile = () => {
         </p>
       )}
 
+      {matchesLoaded && (
+        <ShelfPreview
+          title="Available from other readers"
+          books={matchedOffers}
+          emptyLabel="None of your wishlist is on offer right now."
+          seeAllTo="/profile/matches"
+          linkTo={(offer) => `/books/${offer._id}`}
+          metaOf={(offer) => `from ${offer.owner.username}`}
+        />
+      )}
+
       <div className="split">
         <ShelfPreview
           title="Wishlist"
@@ -193,6 +210,8 @@ const Profile = () => {
           onAdd={() => setShowAddOfferingsModal(true)}
         />
       </div>
+
+      <BlockedReaders />
 
       {showAddModal && (
         <AddBookDialog

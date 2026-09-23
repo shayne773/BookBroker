@@ -7,6 +7,9 @@ const Home = () => {
     const [books, setBooks] = useState([]);
     const screenRefs = useRef([]);
     const [showToast, setShowToast] = useState(false);
+    // ISBNs on the reader's wishlist, so a book they already want is flagged
+    // rather than offered to them again.
+    const [wishlistIsbns, setWishlistIsbns] = useState(() => new Set());
 
     useEffect(() => {
         // Fetch real offered books from backend
@@ -22,7 +25,19 @@ const Home = () => {
                 console.error("Failed to fetch books:", err);
                 setBooks([]);
             });
+
+        authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/wishlist`)
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data)) setWishlistIsbns(new Set(data.map(b => b.isbn).filter(Boolean)));
+            })
+            .catch(err => {
+                if (isSessionExpiredError(err)) return;
+                console.error("Failed to fetch wishlist:", err);
+            });
     }, []);
+
+    const onWishlist = (book) => Boolean(book?.isbn) && wishlistIsbns.has(book.isbn);
    
 
     useEffect(() => {
@@ -60,6 +75,7 @@ const Home = () => {
         })
         .then(data => {
             console.log("Book added to wishlist:", data);
+            if (book.isbn) setWishlistIsbns(prev => new Set(prev).add(book.isbn));
             setShowToast(true);
             setTimeout(() => setShowToast(false), 2000);
         })
@@ -122,12 +138,18 @@ const Home = () => {
                         {lead.desc && <p className="prose lead__desc">{lead.desc}</p>}
 
                         <div className="button-row lead__actions">
-                            <button
-                                className="button button--primary"
-                                onClick={() => handleAddBook(lead)}
-                            >
-                                Add to Wishlist
-                            </button>
+                            {onWishlist(lead) ? (
+                                <span className="tag">
+                                    <span aria-hidden="true">&#10003;</span> On your wishlist
+                                </span>
+                            ) : (
+                                <button
+                                    className="button button--primary"
+                                    onClick={() => handleAddBook(lead)}
+                                >
+                                    Add to Wishlist
+                                </button>
+                            )}
 
                             <Link to={`/books/${lead._id}`} className="button button--secondary">
                                 View Details
@@ -168,12 +190,20 @@ const Home = () => {
                                         </span>
                                     </Link>
 
-                                    <button
-                                        className="button button--secondary button--small button--block tile-action"
-                                        onClick={() => handleAddBook(book)}
-                                    >
-                                        Add to Wishlist
-                                    </button>
+                                    {onWishlist(book) ? (
+                                        <span className="tile-action">
+                                            <span className="tag">
+                                                <span aria-hidden="true">&#10003;</span> On your wishlist
+                                            </span>
+                                        </span>
+                                    ) : (
+                                        <button
+                                            className="button button--secondary button--small button--block tile-action"
+                                            onClick={() => handleAddBook(book)}
+                                        >
+                                            Add to Wishlist
+                                        </button>
+                                    )}
                                 </article>
                             ))}
                         </div>

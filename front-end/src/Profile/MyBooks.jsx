@@ -1,9 +1,18 @@
 import ShelfPage from '../ShelfPage';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from '../auth';
+import useWishlistMatches from './useWishlistMatches';
 
 const MyBooks = () => {
   const [wishlistBooks, setWishlistBooks] = useState([]);
+  const { matches } = useWishlistMatches();
+
+  // How many other readers offer each wishlist book, by wishlist book id.
+  const offerCounts = useMemo(
+    () => new Map(matches.map(({ wishlistBook, offers }) => [wishlistBook._id, offers.length])),
+    [matches]
+  );
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/wishlist`)
@@ -39,6 +48,18 @@ const MyBooks = () => {
       books={wishlistBooks}
       emptyLabel="Loading wishlist..."
       onRemove={handleDelete}
+      renderExtra={(book) => {
+        const count = offerCounts.get(book._id);
+        if (!count) return null;
+        return (
+          <p className="book-row__extra">
+            <Link to="/profile/matches" className="textlink-quiet">
+              Available from {count} {count === 1 ? 'reader' : 'readers'}
+              <span className="textlink-arrow__mark" aria-hidden="true">&rarr;</span>
+            </Link>
+          </p>
+        );
+      }}
     />
   );
 };

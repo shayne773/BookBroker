@@ -79,8 +79,13 @@ export default function ProposeTradeDialog({ otherUserId, otherUser, onClose }) 
       });
 
       if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`Create exchange failed: ${res.status} ${body}`);
+        const body = await res.json().catch(() => ({}));
+        // A refusal the reader can act on, such as a block, is shown as the API words it.
+        if (res.status === 403 && body.message) {
+          setTradeError(body.message);
+          return;
+        }
+        throw new Error(`Create exchange failed: ${res.status} ${body.message || ""}`);
       }
 
       const ex = await res.json();
