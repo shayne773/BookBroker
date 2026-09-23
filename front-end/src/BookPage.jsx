@@ -6,6 +6,7 @@ import BookCover from './BookCover';
 const BookPage = () => {
   const { id } = useParams();
   const [book, setBook] = useState({});
+  const [notFound, setNotFound] = useState(false);
 
   const [isInWishlist, setIsInWishlist] = useState(false);
   const navigate = useNavigate();
@@ -48,12 +49,17 @@ const BookPage = () => {
   };
 
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/books/${id}`)
-      .then(res => res.json())
+    // Signed in, so a book whose owner is blocked either way reads as not found.
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/books/${id}`)
+      .then(res => {
+        setNotFound(res.status === 404);
+        return res.ok ? res.json() : {};
+      })
       .then(data => {
         setBook(data);
       })
       .catch(err => {
+        if (isSessionExpiredError(err)) return;
         console.error('Failed to fetch book:', err);
         setBook({});
       });
@@ -98,6 +104,12 @@ const BookPage = () => {
         Back
       </button>
 
+      {notFound ? (
+        <div className="empty">
+          <p>This book is no longer available.</p>
+          <p>It may have been traded or taken off the market.</p>
+        </div>
+      ) : (
       <article className="book">
         <header className="book__head">
           <p className="kicker">{book.genre || "[NO GENRE]"}</p>
@@ -166,6 +178,7 @@ const BookPage = () => {
           </div>
         </div>
       </article>
+      )}
     </main>
   );
 };

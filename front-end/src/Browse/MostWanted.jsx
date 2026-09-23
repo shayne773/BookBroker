@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import BookList from './BookList';
+import { authFetch } from '../auth';
 
 const MostWanted = () => {
     const [books, setBooks] = useState([]);
 
     useEffect(() => {
-        fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/popular`)
+        authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/popular`)
             .then(res => res.json())
             .then(data => setBooks(data))
             .catch(err => {

@@ -128,6 +128,21 @@ describe("exchanges", () => {
       rated = await User.findById(responder.id).lean();
       expect(rated).to.include({ ratingsCount: 2, ratingsAvg: 2.5 });
     });
+
+    it("the list and detail endpoints carry each participant's real average and count", async () => {
+      const id = await complete();
+      await api(requester.token).post(`/exchanges/${id}/rate`).send({ rating: 1 });
+
+      const list = await api(requester.token).get("/exchanges");
+      const detail = await api(requester.token).get(`/exchanges/${id}`);
+
+      for (const ex of [list.body[0], detail.body]) {
+        expect(ex.responder).to.include({ username: responder.username, ratingsAvg: 1, ratingsCount: 1 });
+        expect(ex.requester).to.include({ username: requester.username, ratingsAvg: 0, ratingsCount: 0 });
+        expect(ex.responder).to.not.have.property("ratings");
+        expect(ex.requester).to.not.have.property("ratings");
+      }
+    });
   });
 
   it("a declined trade cannot then be accepted", async () => {

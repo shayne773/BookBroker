@@ -14,6 +14,10 @@ import { mail, resolveFrontEndBaseUrl } from "./lib/mail.js";
 import { createSession, endSession, endUserSessions, useSession } from "./lib/sessions.js";
 import { captureCover } from "./lib/covers.js";
 import {
+  isBlockedBetween,
+  marketFilter,
+} from "./lib/blocks.js";
+import {
   BOOK_SEARCH_UNAVAILABLE,
   BOOK_SEARCH_UNAVAILABLE_MESSAGE,
   GoogleBooksUnavailableError,
@@ -35,6 +39,10 @@ import {
   User,
   WishlistBook,
   OfferedBook,
+  Block,
+  Report,
+  REPORT_REASONS,
+  REPORT_DETAILS_MAX_LENGTH,
 } from "./Data.js";
 
 const app = express();
@@ -79,6 +87,14 @@ const forgotPasswordThrottles = mailThrottles("forgot-password");
 const changeEmailThrottles = mailThrottles("change-email");
 
 const MAIL_THROTTLED_MESSAGE = "Too many requests. Please try again later.";
+
+// Reports are stored for review by hand, so one reader cannot bury them in volume.
+const reportThrottle = new LoginThrottle({
+  scope: "report",
+  windowMs: HOUR,
+  lockoutMs: HOUR,
+  accountMaxAttempts: 10,
+});
 
 // Every Google Books call spends one of the key's shared daily requests, so
 // each signed-in reader gets a budget of lookups; identical queries are also
@@ -192,6 +208,25 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
+// For the public book routes: a signed-in caller is identified so their blocks
+// apply; anyone else, including a token that no longer names a session, reads
+// as signed out rather than being refused.
+const optionalAuth = async (req, res, next) => {
+  const token = bearerToken(req);
+  if (!token) return next();
+
+  try {
+    const session = await useSession(token);
+    if (session) req.user = { userId: String(session.user) };
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
+// The fields of another reader that the app shows wherever it names them.
+const PUBLIC_USER_FIELDS = "_id username location ratingsAvg ratingsCount";
+
 //exchange routes
 app.use("/exchanges", authMiddleware, exchangesRouter);
 
@@ -217,7 +252,6 @@ app.post("/auth/register", registerValidators, async (req, res, next) => {
       email,
       password: hashedPassword,
       location,
-      ratings: 5,
       emailVerified: false,
     });
     await user.save();
@@ -439,10 +473,15 @@ app.post("/logout", async (req, res, next) => {
   }
 });
 
-app.get("/books/:id", async (req, res, next) => {
+app.get("/books/:id", optionalAuth, async (req, res, next) => {
   try {
     const book = await OfferedBook.findById(req.params.id);
     if (!book) return res.status(404).json({ message: "Book not found" });
+
+    // A blocked reader's offers do not exist as far as the other is concerned.
+    if (req.user && (await isBlockedBetween(req.user.userId, book.owner))) {
+      return res.status(404).json({ message: "Book not found" });
+    }
 
     const owner = await User.findById(book.owner);
     const result = { ...book["_doc"] };
@@ -468,20 +507,25 @@ app.get("/genres", async (req, res, next) => {
   }
 });
 
-app.get("/genres/:genre", async (req, res, next) => {
+app.get("/genres/:genre", optionalAuth, async (req, res, next) => {
   try {
     // Escaped before it reaches the regex engine: raw user text here would
     // otherwise be interpreted as a regex pattern.
-    const books = await OfferedBook.find({ genre: safeRegex(req.params.genre) });
+    const books = await OfferedBook.find({
+      ...(await marketFilter(req.user?.userId, { includeOwn: true })),
+      genre: safeRegex(req.params.genre),
+    });
     res.json(books);
   } catch (err) {
     next(err);
   }
 });
 
-app.get("/new", async (req, res, next) => {
+app.get("/new", optionalAuth, async (req, res, next) => {
   try {
-    const books = await OfferedBook.find().sort({ createdAt: -1 }).limit(20);
+    const books = await OfferedBook.find(await marketFilter(req.user?.userId, { includeOwn: true }))
+      .sort({ createdAt: -1 })
+      .limit(20);
     res.json(books);
   } catch (err) {
     next(err);
@@ -544,9 +588,9 @@ function mostWanted(match, limit) {
   ]);
 }
 
-app.get("/popular", async (req, res, next) => {
+app.get("/popular", optionalAuth, async (req, res, next) => {
   try {
-    const books = await mostWanted({ locked: false }, 20);
+    const books = await mostWanted(await marketFilter(req.user?.userId, { includeOwn: true }), 20);
     res.json(books);
   } catch (err) {
     next(err);
@@ -561,10 +605,7 @@ app.get("/feed", authMiddleware, async (req, res, next) => {
   try {
     const userId = req.user.userId;
 
-    const books = await OfferedBook.find({
-      owner: { $ne: userId },
-      locked: false,
-    })
+    const books = await OfferedBook.find(await marketFilter(userId))
       .sort({ createdAt: -1 })
       .limit(20);
 
@@ -579,10 +620,7 @@ app.get("/books", authMiddleware, async (req, res, next) => {
   const userId = req.user.userId;
 
   try {
-    const books = await OfferedBook.find({
-      owner: { $ne: userId },
-      locked: false,
-    });
+    const books = await OfferedBook.find(await marketFilter(userId));
 
     const filtered = books.filter(
       (book) =>
@@ -606,8 +644,9 @@ app.get("/browse", authMiddleware, async (req, res, next) => {
   const GENRE_COUNT = 8;
 
   try {
-    // Books committed to an accepted trade are off the market until it ends.
-    const onMarket = { owner: { $ne: new mongoose.Types.ObjectId(userId) }, locked: false };
+    // Books committed to an accepted trade are off the market until it ends,
+    // and a blocked reader's books are hidden in both directions.
+    const onMarket = await marketFilter(userId);
 
     /* ---------------- SEARCH ---------------- */
     // Escaped before it reaches the regex engine: raw input here would allow
@@ -698,7 +737,7 @@ app.get("/browse", authMiddleware, async (req, res, next) => {
 app.get("/user", authMiddleware, async (req, res, next) => {
   try {
     const me = await withLivePendingEmail(
-      await User.findById(req.user.userId).select("_id username email pendingEmail location ratings")
+      await User.findById(req.user.userId).select(`${PUBLIC_USER_FIELDS} email pendingEmail`)
     );
     if (!me) return res.status(404).json({ message: "User not found" });
     return res.json(me);
@@ -709,16 +748,22 @@ app.get("/user", authMiddleware, async (req, res, next) => {
 
 // Public profile of another user. Requires a token, and returns only the
 // fields the app renders - never the password hash or the email address.
+// `blockedByMe` says whether the caller has blocked them; whether they have
+// blocked the caller is never revealed.
 app.get("/users/:id", authMiddleware, async (req, res, next) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ message: "Invalid user id" });
     }
 
-    const user = await User.findById(req.params.id).select("_id username location ratings");
+    const user = await User.findById(req.params.id).select(PUBLIC_USER_FIELDS).lean();
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    res.json(user);
+    const blockedByMe = Boolean(
+      await Block.exists({ blocker: req.user.userId, blocked: user._id })
+    );
+
+    res.json({ ...user, blockedByMe });
   } catch (err) {
     next(err);
   }
@@ -754,6 +799,13 @@ app.get("/users/:id/wishlist", authMiddleware, async (req, res) => {
 
 app.get("/users/:id/offered", authMiddleware, async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
+
+    // Blocked either way, their shelf reads as empty.
+    if (await isBlockedBetween(req.user.userId, req.params.id)) return res.json([]);
+
     const books = await OfferedBook.find({
       owner: req.params.id,
       locked: false,              
@@ -884,6 +936,51 @@ app.post(
   }
 );
 
+// The caller's wishlisted books that other readers are offering right now,
+// matched on ISBN: one entry per wishlist book with at least one offer, in
+// wishlist order, each offer carrying its owner. Their own books, books locked
+// into an accepted trade and books of readers blocked either way are left out.
+// Two indexed reads: the wishlist by userId, then the offers by ISBN.
+const MATCHES_MAX_OFFERS = 200;
+
+app.get("/user/wishlist/matches", authMiddleware, async (req, res, next) => {
+  const userId = req.user.userId;
+
+  try {
+    const wishlist = await WishlistBook.find({ userId })
+      .select("title author cover isbn")
+      .lean();
+    const isbns = [...new Set(wishlist.map((b) => (b.isbn || "").trim()).filter(Boolean))];
+    if (!isbns.length) return res.json([]);
+
+    const offers = await OfferedBook.find({ ...(await marketFilter(userId)), isbn: { $in: isbns } })
+      .select("title author cover isbn owner createdAt")
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(MATCHES_MAX_OFFERS)
+      .populate("owner", PUBLIC_USER_FIELDS)
+      .lean();
+
+    const offersByIsbn = new Map();
+    for (const offer of offers) {
+      if (!offer.owner) continue; // an owner deleted since the book was listed
+      const list = offersByIsbn.get(offer.isbn) ?? [];
+      list.push(offer);
+      offersByIsbn.set(offer.isbn, list);
+    }
+
+    const matches = wishlist
+      .map((wishlistBook) => ({
+        wishlistBook,
+        offers: offersByIsbn.get((wishlistBook.isbn || "").trim()) ?? [],
+      }))
+      .filter((match) => match.offers.length);
+
+    res.json(matches);
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.get("/user/wishlist/:isbn", authMiddleware, async (req, res, next) => {
   const { isbn } = req.params;
   try {
@@ -915,8 +1012,8 @@ app.get("/user/get-recommended-books", authMiddleware, async (req, res, next) =>
       { $unwind: "$ownerDetails" },
       {
         $match: {
+          ...(await marketFilter(userId)),
           "ownerDetails.location": userLocation,
-          owner: { $ne: new mongoose.Types.ObjectId(userId) },
         },
       },
       // The joined owner document is only a filter; it never reaches the client.
@@ -964,7 +1061,7 @@ app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
       userId,
       { $set: update },
       { new: true }
-    ).select("_id username email pendingEmail location ratings");
+    ).select(`${PUBLIC_USER_FIELDS} email pendingEmail`);
 
     if (pendingEmail && updatedUser) {
       const token = await issueToken(TOKEN_PURPOSES.changeEmail, updatedUser._id);
@@ -1015,6 +1112,110 @@ app.delete("/user/offered/:id", authMiddleware, async (req, res) => {
 
 // Conversations, unread state and the incremental fetch the client polls.
 app.use("/messages", authMiddleware, messagesRouter);
+
+// --------------------
+// BLOCKS AND REPORTS
+// --------------------
+
+// The readers the caller has blocked, most recent first, for unblocking.
+app.get("/user/blocks", authMiddleware, async (req, res, next) => {
+  try {
+    const blocks = await Block.find({ blocker: req.user.userId })
+      .sort({ createdAt: -1 })
+      .populate("blocked", "_id username")
+      .lean();
+
+    res.json(
+      blocks
+        .filter((b) => b.blocked)
+        .map((b) => ({ _id: b.blocked._id, username: b.blocked.username, blockedAt: b.createdAt }))
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Resolves the reader named by :id for the block and report routes, answering
+// 400 for a malformed id or the caller's own, and 404 for no such reader.
+async function otherReader(req, res) {
+  const { id } = req.params;
+  if (!mongoose.isValidObjectId(id)) {
+    res.status(400).json({ message: "Invalid user id" });
+    return null;
+  }
+  if (id === req.user.userId) {
+    res.status(400).json({ message: "You can't do that to yourself." });
+    return null;
+  }
+
+  const user = await User.findById(id).select("_id");
+  if (!user) res.status(404).json({ message: "User not found" });
+  return user;
+}
+
+// Blocking twice is the same as blocking once.
+app.post("/users/:id/block", authMiddleware, async (req, res, next) => {
+  try {
+    const user = await otherReader(req, res);
+    if (!user) return;
+
+    await Block.updateOne(
+      { blocker: req.user.userId, blocked: user._id },
+      { $setOnInsert: { createdAt: new Date() } },
+      { upsert: true }
+    );
+
+    res.json({ message: "Reader blocked", blockedByMe: true });
+  } catch (err) {
+    // Two simultaneous blocks race on the unique index; the block exists either way.
+    if (err?.code === 11000) return res.json({ message: "Reader blocked", blockedByMe: true });
+    next(err);
+  }
+});
+
+// Lifts only the caller's own block; one the other reader placed stays.
+app.delete("/users/:id/block", authMiddleware, async (req, res, next) => {
+  try {
+    const user = await otherReader(req, res);
+    if (!user) return;
+
+    await Block.deleteOne({ blocker: req.user.userId, blocked: user._id });
+    res.json({ message: "Reader unblocked", blockedByMe: false });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// body: { reason: one of REPORT_REASONS, details?: string }
+app.post("/users/:id/report", authMiddleware, async (req, res, next) => {
+  const { reason } = req.body ?? {};
+  const details = typeof req.body?.details === "string" ? req.body.details.trim() : "";
+
+  if (!REPORT_REASONS.includes(reason)) {
+    return res.status(400).json({ message: "Choose a reason for the report." });
+  }
+  if (details.length > REPORT_DETAILS_MAX_LENGTH) {
+    return res
+      .status(400)
+      .json({ message: `Keep the details under ${REPORT_DETAILS_MAX_LENGTH} characters.` });
+  }
+
+  try {
+    const user = await otherReader(req, res);
+    if (!user) return;
+
+    const limit = await reportThrottle.hit(req.user.userId);
+    if (limit.limited) {
+      res.set("Retry-After", String(limit.retryAfterSeconds));
+      return res.status(429).json({ message: MAIL_THROTTLED_MESSAGE });
+    }
+
+    await Report.create({ reporter: req.user.userId, reported: user._id, reason, details });
+    res.status(201).json({ message: "Thanks. Your report has been recorded." });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // --------------------
 // Error handling

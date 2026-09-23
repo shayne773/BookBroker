@@ -59,8 +59,11 @@ describe("GET /users/:id", () => {
     expect(res.body).to.include({
       username: user.username,
       location: "Queens",
-      ratings: 5,
+      ratingsAvg: 0,
+      ratingsCount: 0,
+      blockedByMe: false,
     });
+    expect(res.body).to.not.have.property("ratings");
     expect(res.body).to.not.have.property("password");
     expect(res.body).to.not.have.property("email");
     expect(JSON.stringify(res.body)).to.not.include(user.email);

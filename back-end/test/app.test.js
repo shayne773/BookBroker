@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import mongoose from "mongoose";
 import { api, signUp, offerBook, TEST_PASSWORD } from "./helpers.js";
-import { WishlistBook } from "../Data.js";
+import { User, WishlistBook } from "../Data.js";
 
 describe("auth", () => {
   it("POST /auth/register then /auth/login returns a token for the user", async () => {
@@ -9,6 +9,15 @@ describe("auth", () => {
 
     expect(user.token).to.be.a("string").that.is.not.empty;
     expect(user.username).to.equal("ada");
+  });
+
+  it("POST /auth/register starts a reader unrated, with no legacy ratings field", async () => {
+    const user = await signUp();
+
+    const stored = await User.findById(user.id).lean();
+
+    expect(stored).to.include({ ratingsAvg: 0, ratingsCount: 0 });
+    expect(stored).to.not.have.property("ratings");
   });
 
   it("POST /auth/register rejects an email that is already registered", async () => {

@@ -2,8 +2,9 @@ import { useNavigate } from 'react-router-dom';
 import BookCover from './BookCover';
 
 // A whole wishlist or offerings shelf, one book per row. Your own shelves pass
-// `onRemove`; another reader's are read-only.
-const ShelfPage = ({ kicker, title, books, emptyLabel, onRemove }) => {
+// `onRemove`; another reader's are read-only. `renderExtra(book)` adds a line
+// under a book's author, e.g. who is offering it.
+const ShelfPage = ({ kicker, title, books, emptyLabel, onRemove, renderExtra }) => {
   const navigate = useNavigate();
 
   return (
@@ -31,6 +32,7 @@ const ShelfPage = ({ kicker, title, books, emptyLabel, onRemove }) => {
               <div className="book-row__body">
                 <h2 className="book-row__title">{book.title}</h2>
                 {book.author && <p className="book-row__meta">{book.author}</p>}
+                {renderExtra?.(book)}
               </div>
 
               {onRemove && (

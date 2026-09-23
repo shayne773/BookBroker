@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import BookCover from "./BookCover";
 import { statusClass, statusLabel } from "./exchangeStatus";
 import { authFetch, isSessionExpiredError } from "./auth";
+import { readerMeta } from "./rating";
 
 function formatWhen(d) {
   if (!d) return "";
@@ -137,10 +138,7 @@ function ExchangeRow({ ex, other, completed = false }) {
 
       <div className="list-row__body">
         <h3 className="list-row__title">{other?.username || "Unknown"}</h3>
-        <p className="list-row__meta">
-          {other?.location ? other.location : "No location"} ·{" "}
-          {other?.ratingsAvg ? other.ratingsAvg.toFixed(1) : (other?.ratings ?? 0)}
-        </p>
+        <p className="list-row__meta">{readerMeta(other, { noLocation: "No location" })}</p>
 
         <div className="cover-strip list-row__extra">
           {thumbs.map((b) => (

@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { authFetch, isSessionExpiredError } from "./auth";
 import usePolling from "./usePolling";
+import { readerMeta } from "./rating";
 
 // How often the open inbox checks for new messages (paused while the tab is hidden).
 const LIST_INTERVAL = 15000;
 
-// [{ id, otherUser: { id, username, location, ratings }, lastMessage, lastAt, unread }, ...]
+// [{ id, otherUser: { id, username, location, ratingsAvg, ratingsCount }, lastMessage, lastAt, unread }, ...]
 async function fetchConversations() {
   const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/messages`);
   if (!res.ok) throw new Error(`Failed to load conversations: ${res.status}`);
@@ -116,7 +117,7 @@ const Messages = () => {
                   <div className="list-row__body">
                     <h2 className="list-row__title">{u.username || "Unknown"}</h2>
                     <p className="list-row__meta">
-                      {u.location ? u.location : "—"} · Rated {u.ratings ?? 0}
+                      {readerMeta(u, { noLocation: "—" })}
                     </p>
                     <p className="list-row__excerpt">{c.lastMessage || "Tap to open chat"}</p>
                   </div>

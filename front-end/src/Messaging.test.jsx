@@ -165,3 +165,30 @@ test('a message sent from the thread does not skip one the other person sent jus
   expect(calls('GET /messages/bea?after=')).toEqual(['GET /messages/bea?after=m1']);
   expect(screen.getAllByText('hi bea')).toHaveLength(1);
 });
+
+test('a message refused by a block shows the reason the API gives', async () => {
+  const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+  serve({
+    'GET /users/bea': respond(200, { _id: 'bea', username: 'bea' }),
+    'GET /messages/bea': respond(200, [message('m1', 'bea', 'hello', 1)]),
+    'POST /messages/bea': respond(403, { message: "You can't message this reader." }),
+    'POST /messages/bea/read': respond(204, null),
+    'GET /messages/unread': respond(200, { conversations: 0 }),
+  });
+
+  render(
+    <MemoryRouter initialEntries={['/messages/bea']}>
+      <Routes>
+        <Route path="/messages/:user" element={<MessagesDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  expect(await screen.findByText('hello')).toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'hi bea' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+  await waitFor(() => expect(alert).toHaveBeenCalledWith("You can't message this reader."));
+  alert.mockRestore();
+});

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { authFetch, isSessionExpiredError } from "./auth";
+import { readerMeta } from "./rating";
 import ExchangeProgress from "./ExchangeDetail/ExchangeProgress";
 import ExchangeBooks from "./ExchangeDetail/ExchangeBooks";
 import { CompletionPanel, RatingPanel } from "./ExchangeDetail/ExchangeWrapUp";
@@ -220,6 +221,7 @@ export default function ExchangeDetail() {
         <div className="page-head__main">
           <p className="kicker">Exchange with</p>
           <h1 className="page-title">{otherUser?.username || "Unknown"}</h1>
+          {readerMeta(otherUser) && <p className="page-lede">{readerMeta(otherUser)}</p>}
         </div>
         <div className="page-head__aside">
           <Link className="button button--secondary button--small" to={`/messages/${otherUser?._id}`}>

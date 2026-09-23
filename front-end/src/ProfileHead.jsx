@@ -1,3 +1,5 @@
+import { formatRating } from './rating';
+
 // The head of a reader's page - your own profile or someone else's: their
 // initial, their name, and the account facts in a row beneath.
 const ProfileHead = ({ kicker, user, children }) => (
@@ -31,7 +33,7 @@ const ProfileHead = ({ kicker, user, children }) => (
       </div>
       <div>
         <dt className="fact__term">Rating</dt>
-        <dd className="fact__value">{user?.ratings}</dd>
+        <dd className="fact__value">{formatRating(user)}</dd>
       </div>
     </dl>
   </>

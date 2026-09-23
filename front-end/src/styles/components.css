@@ -1892,6 +1892,126 @@ a.list-row:focus-visible .textlink-arrow__mark {
 }
 
 /* ======================================================================
+   Wishlist matches
+   ====================================================================== */
+
+/*
+ * A short flag on a book, e.g. "On your wishlist": tracked capitals on a
+ * hairline, quieter than an exchange status and never filled.
+ */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  justify-self: start;
+  padding: var(--space-1) var(--space-2);
+  border: var(--border-hairline);
+  color: var(--color-ink-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  line-height: var(--leading-normal);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Anything set under a book-row's meta line, e.g. who is offering it. */
+.book-row__extra {
+  margin-top: var(--space-3);
+}
+
+/* The readers offering one book: a hairline-ruled line each, naming who,
+   where and how they are rated, stepping in on hover like a contents line. */
+.offer-list {
+  margin-top: var(--space-4);
+  border-top: var(--border-hairline-subtle);
+}
+
+.offer-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-2) var(--space-3) 0;
+  border-bottom: var(--border-hairline-subtle);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  transition: padding-left var(--duration-base) var(--ease-out),
+    background-color var(--duration-base) var(--ease-standard);
+}
+
+.offer-line:hover,
+.offer-line:focus-visible {
+  padding-left: var(--space-3);
+  background: var(--color-paper);
+}
+
+.offer-line__who {
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.offer-line__meta {
+  color: var(--color-ink-muted);
+}
+
+.offer-line .textlink-arrow__mark {
+  color: var(--color-ink-muted);
+}
+
+.offer-line:hover .textlink-arrow__mark,
+.offer-line:focus-visible .textlink-arrow__mark {
+  color: var(--color-ink);
+  transform: translateX(3px);
+}
+
+/* ======================================================================
+   Choices (a short fixed list, one pick)
+   ====================================================================== */
+
+/* Radio options set as hairline-ruled rows; the control is drawn in ink. */
+.choices {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* A fieldset draws its legend into its own border, so the rule starts at the
+   first option instead. */
+.choice:first-of-type {
+  border-top: var(--border-hairline);
+}
+
+.choices > legend {
+  margin-bottom: var(--space-3);
+  padding: 0;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: var(--border-hairline);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.choice:hover {
+  background: var(--color-paper-raised);
+}
+
+.choice input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-ink);
+}
+
+/* ======================================================================
    Conversation
    ====================================================================== */
 

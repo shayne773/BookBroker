@@ -20,7 +20,6 @@ const userSchema = new Schema({
   email:    { type: String, required: true, unique: true },
   password: { type: String, required: true },
   location: String,
-  ratings: Number,
   // Sign-up stores false until the emailed link is used. Accounts created before
   // email confirmation existed have no such field and read as confirmed: the
   // default applies when they are loaded, and the login check only refuses an
@@ -30,6 +29,8 @@ const userSchema = new Schema({
   // and password reset until the link mailed here is followed.
   pendingEmail: { type: String },
   // Running totals kept by POST /exchanges/:id/rate; a user who predates them reads as unrated.
+  // They are the only rating: the old `ratings` field, which sign-up set to 5, is no longer
+  // read or written, though documents created before its removal may still carry it.
   ratingsCount: { type: Number, default: 0 },
   ratingsAvg:   { type: Number, default: 0 },
 
@@ -51,6 +52,9 @@ const wishlistBookSchema = new Schema({
   desc: String,
 });
 
+// A reader's wishlist is read whole, for their shelf and for their matches.
+wishlistBookSchema.index({ userId: 1 });
+
 // Offered book schema
 const offeredBookSchema = new Schema({
   owner: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -65,8 +69,10 @@ const offeredBookSchema = new Schema({
   locked: { type: Boolean, default: false },
   lockedByExchange: { type: mongoose.Schema.Types.ObjectId, ref: "Exchange", default: null },
   createdAt: { type: Date, default: Date.now },
-  
 });
+
+// Wishlist matching looks offers up by ISBN among the books still on the market.
+offeredBookSchema.index({ isbn: 1, locked: 1 });
 
 // Conversations + Messages
 // `lastMessageAt` / `lastMessageBy` copy the newest message so the unread count
@@ -90,6 +96,33 @@ const messageSchema = new Schema({
 // and the per-conversation unread count.
 messageSchema.index({ conversation: 1, createdAt: 1, _id: 1 });
 
+// Blocks and reports
+// A block works both ways: neither reader can message or propose a trade to the
+// other, and neither sees the other's offers. Only the blocker can lift it.
+const blockSchema = new Schema({
+  blocker: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  blocked: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
+// One block per pair and direction; the second index serves the reverse lookup.
+blockSchema.index({ blocker: 1, blocked: 1 }, { unique: true });
+blockSchema.index({ blocked: 1 });
+
+const REPORT_REASONS = ["SPAM", "HARASSMENT", "SCAM", "NO_SHOW", "INAPPROPRIATE", "OTHER"];
+const REPORT_DETAILS_MAX_LENGTH = 1000;
+
+// Stored for later review; nothing in the app reads them back.
+const reportSchema = new Schema({
+  reporter: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  reported: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  reason: { type: String, enum: REPORT_REASONS, required: true },
+  details: { type: String, default: "", maxlength: REPORT_DETAILS_MAX_LENGTH },
+  createdAt: { type: Date, default: Date.now },
+});
+
+reportSchema.index({ reported: 1, createdAt: -1 });
+
 // --------------------
 // Models (default connection)
 // --------------------
@@ -102,6 +135,8 @@ const Conversation =
   mongoose.models.Conversation || mongoose.model("Conversation", conversationSchema);
 const Message =
   mongoose.models.Message || mongoose.model("Message", messageSchema);
+const Block = mongoose.models.Block || mongoose.model("Block", blockSchema);
+const Report = mongoose.models.Report || mongoose.model("Report", reportSchema);
 
 // --------------------
 // (Optional) Legacy inject model helper
@@ -134,6 +169,10 @@ export {
   OfferedBook,
   Conversation,
   Message,
+  Block,
+  Report,
+  REPORT_REASONS,
+  REPORT_DETAILS_MAX_LENGTH,
 
   // optional legacy exports
   injectBookModel,

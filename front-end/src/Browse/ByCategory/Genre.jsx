@@ -1,13 +1,14 @@
 import { useParams, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import BookList from '../BookList';
+import { authFetch } from '../../auth';
 
 const Genre = () => {
   const { genre } = useParams();
   const [books, setBooks] = useState([]);
 
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/genres/${encodeURIComponent(genre)}`)
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/genres/${encodeURIComponent(genre)}`)
       .then(res => res.json())
       .then(data => setBooks(data))
       .catch(err => {
