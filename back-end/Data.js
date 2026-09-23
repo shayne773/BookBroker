@@ -45,6 +45,18 @@ const userSchema = new Schema({
     by: { type: Schema.Types.ObjectId, ref: "User" },
     note: { type: String, maxlength: SUSPENSION_NOTE_MAX_LENGTH },
   },
+  // Which notification emails the reader wants (lib/notifications.js). Every
+  // category is on until the reader turns it off, including for accounts that
+  // predate the setting: the defaults apply when a document is loaded, and the
+  // senders only skip an explicit false.
+  notifications: {
+    messages: { type: Boolean, default: true },
+    trades:   { type: Boolean, default: true },
+    wishlist: { type: Boolean, default: true },
+  },
+  // Signs the reader's unsubscribe links; created with the first one. Never sent
+  // to a client.
+  notificationKey: { type: String, select: false },
 
   // Optional arrays if you want them (not required to make wishlist/offered work)
   wishlist: [{ type: Schema.Types.ObjectId, ref: "WishlistBook" }],
@@ -93,11 +105,14 @@ offeredBookSchema.index({ isbn: 1, locked: 1 });
 // `lastMessageAt` / `lastMessageBy` copy the newest message so the unread count
 // is one indexed query over conversations, and `readAt` maps each participant's
 // id to the time of the newest message they have seen (routes/messages.js).
+// `notifiedAt` maps a participant's id to the message they were last emailed
+// about; no other email goes out until `readAt` reaches it.
 const conversationSchema = new Schema({
   users: [{ type: Schema.Types.ObjectId, ref: "User" }],
   lastMessageAt: { type: Date },
   lastMessageBy: { type: Schema.Types.ObjectId, ref: "User" },
   readAt: { type: Map, of: Date, default: {} },
+  notifiedAt: { type: Map, of: Date, default: {} },
 });
 conversationSchema.index({ users: 1, lastMessageAt: -1 });
 

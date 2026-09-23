@@ -16,6 +16,13 @@ import { consumeToken, hasLiveToken, issueToken, revokeTokens, TOKEN_PURPOSES } 
 import { mail, resolveFrontEndBaseUrl } from "./lib/mail.js";
 import { createSession, endSession, endUserSessions, useSession } from "./lib/sessions.js";
 import { captureCover } from "./lib/covers.js";
+import { wishlistMatches } from "./lib/matches.js";
+import {
+  NOTIFICATION_CATEGORIES,
+  notificationSettings,
+  notifyWishlistMatch,
+  unsubscribe,
+} from "./lib/notifications.js";
 import {
   isBlockedBetween,
   marketFilter,
@@ -477,6 +484,23 @@ app.post("/auth/reset-password", resetPasswordValidators, async (req, res, next)
   }
 });
 
+// The one-click unsubscribe link in every notification email. It needs no
+// sign-in: the signed token names the reader and the category it turns off.
+app.post("/notifications/unsubscribe", async (req, res, next) => {
+  try {
+    const category = await unsubscribe(req.body?.token);
+    if (!category) {
+      return res.status(400).json({
+        message: "This unsubscribe link is not valid.",
+        code: TOKEN_INVALID,
+      });
+    }
+    res.json({ category, message: "You will no longer get these emails." });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Ends this browser's session only. Answered the same whether or not the
 // token was still live, so signing out never fails.
 app.post("/logout", async (req, res, next) => {
@@ -756,7 +780,7 @@ app.get("/user", authMiddleware, async (req, res, next) => {
   try {
     const me = await withLivePendingEmail(
       await User.findById(req.user.userId).select(
-        `${PUBLIC_USER_FIELDS} email pendingEmail emailVerified`
+        `${PUBLIC_USER_FIELDS} email pendingEmail emailVerified notifications`
       )
     );
     if (!me) return res.status(404).json({ message: "User not found" });
@@ -764,9 +788,35 @@ app.get("/user", authMiddleware, async (req, res, next) => {
     // `isAdmin` only decides whether the front end offers the admin page; the
     // admin routes check for themselves.
     const { emailVerified, ...fields } = me.toObject();
-    return res.json({ ...fields, isAdmin: isAdmin({ email: me.email, emailVerified }) });
+    return res.json({
+      ...fields,
+      notifications: notificationSettings(me),
+      isAdmin: isAdmin({ email: me.email, emailVerified }),
+    });
   } catch (err) {
     return next(err);
+  }
+});
+
+// body: any of { messages, trades, wishlist } as booleans; answers every setting.
+app.post("/user/notifications", authMiddleware, async (req, res, next) => {
+  const body = req.body ?? {};
+  const update = {};
+  for (const category of NOTIFICATION_CATEGORIES) {
+    if (body[category] === undefined) continue;
+    if (typeof body[category] !== "boolean") {
+      return res.status(400).json({ message: `${category} must be true or false.` });
+    }
+    update[`notifications.${category}`] = body[category];
+  }
+
+  try {
+    const user = await User.findByIdAndUpdate(req.user.userId, { $set: update }, { new: true })
+      .select("notifications");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json({ notifications: notificationSettings(user) });
+  } catch (err) {
+    next(err);
   }
 });
 
@@ -955,6 +1005,7 @@ app.post(
       });
 
       await book.save();
+      notifyWishlistMatch(book);
       return res.status(201).json({ message: "successfully added offered book" });
     } catch (err) {
       console.error("ADD OFFERED ERROR:", err);
@@ -966,45 +1017,10 @@ app.post(
 );
 
 // The caller's wishlisted books that other readers are offering right now,
-// matched on ISBN: one entry per wishlist book with at least one offer, in
-// wishlist order, each offer carrying its owner. Their own books, books locked
-// into an accepted trade and books of readers blocked either way are left out.
-// Two indexed reads: the wishlist by userId, then the offers by ISBN.
-const MATCHES_MAX_OFFERS = 200;
-
+// matched on ISBN (lib/matches.js), each offer carrying its owner.
 app.get("/user/wishlist/matches", authMiddleware, async (req, res, next) => {
-  const userId = req.user.userId;
-
   try {
-    const wishlist = await WishlistBook.find({ userId })
-      .select("title author cover isbn")
-      .lean();
-    const isbns = [...new Set(wishlist.map((b) => (b.isbn || "").trim()).filter(Boolean))];
-    if (!isbns.length) return res.json([]);
-
-    const offers = await OfferedBook.find({ ...(await marketFilter(userId)), isbn: { $in: isbns } })
-      .select("title author cover isbn owner createdAt")
-      .sort({ createdAt: -1, _id: -1 })
-      .limit(MATCHES_MAX_OFFERS)
-      .populate("owner", PUBLIC_USER_FIELDS)
-      .lean();
-
-    const offersByIsbn = new Map();
-    for (const offer of offers) {
-      if (!offer.owner) continue; // an owner deleted since the book was listed
-      const list = offersByIsbn.get(offer.isbn) ?? [];
-      list.push(offer);
-      offersByIsbn.set(offer.isbn, list);
-    }
-
-    const matches = wishlist
-      .map((wishlistBook) => ({
-        wishlistBook,
-        offers: offersByIsbn.get((wishlistBook.isbn || "").trim()) ?? [],
-      }))
-      .filter((match) => match.offers.length);
-
-    res.json(matches);
+    res.json(await wishlistMatches(req.user.userId, PUBLIC_USER_FIELDS));
   } catch (err) {
     next(err);
   }

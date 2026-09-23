@@ -98,6 +98,22 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `outbox`; `emailedToken` / `confirmEmail` in `test/helpers.js` read links from it, and
   `signUp` confirms through the real route.
 
+## Notification emails
+
+- `back-end/lib/notifications.js` owns them: `notifyNewMessage`, `notifyTrade` and
+  `notifyWishlistMatch` are called from the route that causes the event, after its write (after
+  commit in a transaction), and never awaited: `notifyInBackground` logs a failure. Its
+  `recipientFor` is the one eligibility check (not self, confirmed address, not suspended,
+  category on in `User.notifications`, no block).
+- `notificationsSettled()` resolves when every started send is done. `test/setup.js` awaits it
+  after each test; tests await it before reading the `outbox`. A serverless entry should hand it
+  to the platform's wait-until so the function is not frozen mid-send.
+- One message email per conversation until read: `Conversation.notifiedAt[recipient]` holds the
+  emailed message's time and is claimed atomically only once `readAt` has reached it.
+- Unsubscribe links are `userId.category.HMAC` under a per-user `User.notificationKey`
+  (`select: false`), with no expiry and no sign-in; `POST /notifications/unsubscribe` and the
+  front end's `/unsubscribe` page. Wishlist matching for both directions is `lib/matches.js`.
+
 ## Back-end trades
 
 - A route in `back-end/routes/exchanges.js` that opens a transaction signals every early

@@ -7,6 +7,7 @@ import { MongoMemoryReplSet } from "mongodb-memory-server";
 import { mail } from "../lib/mail.js";
 import { http } from "../lib/http.js";
 import { clearGoogleBooksCache } from "../lib/googleBooks.js";
+import { notificationsSettled } from "../lib/notifications.js";
 
 // The CORS allowlist is read when app.js is imported, which happens after this file.
 process.env.CORS_ALLOWED_ORIGINS =
@@ -45,6 +46,8 @@ export const mochaHooks = {
   },
 
   async afterEach() {
+    // Notifications are sent in the background; none may outlive its test.
+    await notificationsSettled();
     outbox.length = 0;
     http.get = refuseNetwork;
     clearGoogleBooksCache();

@@ -4,6 +4,7 @@ import Exchange from "../Exchange.js";
 import { OfferedBook, User } from "../Data.js";
 import { BLOCKED_TRADE_MESSAGE, isBlockedBetween } from "../lib/blocks.js";
 import { isSuspended } from "../lib/suspensions.js";
+import { notifyTrade } from "../lib/notifications.js";
 
 const router = express.Router();
 
@@ -91,6 +92,7 @@ router.post("/", async (req, res) => {
       expiresAt,
     });
 
+    notifyTrade(ex, "proposed", userId);
     res.status(201).json(ex);
   } catch (err) {
     console.error("CREATE EXCHANGE error:", err);
@@ -194,6 +196,7 @@ router.post("/:id/counter", async (req, res) => {
     ex.responderConfirmedComplete = false;
 
     await ex.save();
+    notifyTrade(ex, "countered", userId);
     res.json(ex);
   } catch (err) {
     console.error("COUNTER error:", err);
@@ -250,6 +253,7 @@ router.post("/:id/accept", async (req, res) => {
     await ex.save({ session });
 
     await session.commitTransaction();
+    notifyTrade(ex, "accepted", userId);
     res.json({ message: "Exchange accepted", exchangeId: ex._id });
   } catch (err) {
     await session.abortTransaction();
@@ -279,6 +283,7 @@ router.post("/:id/decline", async (req, res) => {
 
     ex.status = "DECLINED";
     await ex.save();
+    notifyTrade(ex, "declined", userId);
     res.json({ message: "Exchange declined" });
   } catch (err) {
     console.error("DECLINE error:", err);
@@ -328,6 +333,7 @@ router.post("/:id/cancel", async (req, res) => {
     await ex.save({ session });
 
     await session.commitTransaction();
+    notifyTrade(ex, "cancelled", userId);
     res.json({ message: "Exchange cancelled" });
   } catch (err) {
     await session.abortTransaction();
@@ -382,6 +388,7 @@ router.post("/:id/confirm-complete", async (req, res) => {
     await ex.save({ session });
 
     await session.commitTransaction();
+    if (ex.status === "COMPLETED") notifyTrade(ex, "completed", userId);
     res.json({ message: "Completion recorded", status: ex.status });
   } catch (err) {
     await session.abortTransaction();

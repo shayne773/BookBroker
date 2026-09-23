@@ -34,11 +34,22 @@ const escapeHtml = (value) =>
   String(value).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 // One short black-and-white message: the wordmark, one sentence, one link, and
-// what to do if the reader did not ask for it.
-export function renderEmail({ sentence, action, link }) {
-  const ignore = "If you did not ask for this, you can ignore this email.";
+// a small-print footer. `footer` is a list of lines, each plain text or
+// { text, link } for a link; the account emails say what to do if the reader
+// did not ask for them.
+function renderMessage({ sentence, action, link, footer }) {
+  const footerText = footer
+    .map((line) => (typeof line === "string" ? line : `${line.text}: ${line.link}`))
+    .join("\n");
+  const footerHtml = footer
+    .map((line) =>
+      typeof line === "string"
+        ? escapeHtml(line)
+        : `<a href="${escapeHtml(line.link)}" style="color:#666666;">${escapeHtml(line.text)}</a>`
+    )
+    .join("<br>");
 
-  const text = `BookBroker\n\n${sentence}\n\n${action}: ${link}\n\n${ignore}\n`;
+  const text = `BookBroker\n\n${sentence}\n\n${action}: ${link}\n\n${footerText}\n`;
 
   const html = `<!doctype html>
 <html>
@@ -47,12 +58,36 @@ export function renderEmail({ sentence, action, link }) {
       <p style="margin:0 0 24px;font-family:Georgia,serif;font-size:20px;font-weight:600;">BookBroker</p>
       <p style="margin:0 0 24px;font-size:16px;line-height:1.5;">${escapeHtml(sentence)}</p>
       <p style="margin:0 0 32px;"><a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 20px;background:#111111;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;">${escapeHtml(action)}</a></p>
-      <p style="margin:0;color:#666666;font-size:13px;line-height:1.5;">${escapeHtml(ignore)}</p>
+      <p style="margin:0;color:#666666;font-size:13px;line-height:1.5;">${footerHtml}</p>
     </div>
   </body>
 </html>`;
 
   return { text, html };
+}
+
+export function renderEmail({ sentence, action, link }) {
+  return renderMessage({
+    sentence,
+    action,
+    link,
+    footer: ["If you did not ask for this, you can ignore this email."],
+  });
+}
+
+// A notification says why it was sent and carries a one-click unsubscribe for
+// its category and a link to every notification setting.
+export function renderNotification({ sentence, action, link, reason, unsubscribeLink, settingsLink }) {
+  return renderMessage({
+    sentence,
+    action,
+    link,
+    footer: [
+      reason,
+      { text: "Unsubscribe from these emails", link: unsubscribeLink },
+      { text: "Email settings", link: settingsLink },
+    ],
+  });
 }
 
 let client = null;
@@ -126,5 +161,10 @@ export const mail = {
         link,
       }),
     });
+  },
+
+  /** A notification email; see lib/notifications.js for who gets one and when. */
+  sendNotification({ to, subject, ...content }) {
+    return mail.deliver({ to, subject, link: content.link, ...renderNotification(content) });
   },
 };
