@@ -2,18 +2,16 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import mongoose from "mongoose";
 import app from "./app.js";
+import { connectDatabase, DB_NAME } from "./lib/db.js";
 
 const port = process.env.PORT || 5000;
 
 async function start() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI, {
-      dbName: "bookbroker",
-    });
+    await connectDatabase();
 
-    console.log("MongoDB connected (dbName=bookbroker)");
+    console.log(`MongoDB connected (dbName=${DB_NAME})`);
 
     const listener = app.listen(port, () => {
       console.log(`Server running on port: ${port}`);

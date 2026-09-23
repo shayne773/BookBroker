@@ -5,11 +5,12 @@
 //
 //   CORS_ALLOWED_ORIGINS=https://bookbroker.example.com,https://www.bookbroker.example.com
 //
-// Outside production, an unset variable falls back to the local development
-// front end only, so a misconfigured process fails closed instead of accepting
-// every origin on the internet. In production the variable is required: the API
-// refuses to start without it rather than serving an origin that is not the
-// deployed front end. No deployment hostname is hardcoded here.
+// The deployed site calls the API on its own origin (Vercel serves both, the
+// API under /api), and a same-origin request needs no CORS approval. So in
+// production an unset variable allows no other origin at all: the site works
+// and every cross-origin caller is refused. Outside production it falls back
+// to the local development front end, which runs on a different port from the
+// API. No deployment hostname is hardcoded here.
 
 export const DEFAULT_DEV_ORIGINS = ["http://localhost:3000"];
 
@@ -24,12 +25,7 @@ export function resolveAllowedOrigins(env = process.env) {
   const configured = parseAllowedOrigins(env.CORS_ALLOWED_ORIGINS);
   if (configured.length > 0) return configured;
 
-  if (env.NODE_ENV === "production") {
-    throw new Error(
-      "CORS_ALLOWED_ORIGINS must be set in production. " +
-        "Set it to the deployed front-end origin(s) before starting the API."
-    );
-  }
+  if (env.NODE_ENV === "production") return [];
   return [...DEFAULT_DEV_ORIGINS];
 }
 

@@ -16,6 +16,7 @@ import { consumeToken, hasLiveToken, issueToken, revokeTokens, TOKEN_PURPOSES } 
 import { mail, resolveFrontEndBaseUrl } from "./lib/mail.js";
 import { createSession, endSession, endUserSessions, useSession } from "./lib/sessions.js";
 import { captureCover } from "./lib/covers.js";
+import { runInBackground } from "./lib/background.js";
 import {
   isBlockedBetween,
   marketFilter,
@@ -133,7 +134,7 @@ const frontEndLink = (path, token) =>
 // provider neither holds up the request nor, for the endpoints that must answer
 // identically for unknown addresses, makes a known address take longer.
 function sendInBackground(send, what) {
-  send.catch((err) => console.error(`Failed to send ${what}:`, err));
+  runInBackground(send, `send ${what}`);
 }
 
 async function sendEmailConfirmation(user) {
