@@ -13,8 +13,8 @@ import { OfferedBook, User } from "./Data.js";
 import { hasGoogleBooksKey, mapVolume, searchVolumes } from "./lib/googleBooks.js";
 import { captureCover } from "./lib/covers.js";
 import { pause } from "./lib/http.js";
+import { DB_NAME } from "./lib/db.js";
 
-const DB_NAME = "bookbroker";
 const SEED_PREFIX = "seed_user_";
 const USER_COUNT = 10;
 const BOOKS_PER_USER = 10;

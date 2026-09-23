@@ -9,6 +9,10 @@ The app is two independent services that share nothing but an HTTP contract:
 - `front-end/` — a React single-page app built with [Vite](https://vite.dev/).
 - `back-end/` — an Express API on MongoDB (Mongoose).
 
+Both deploy to one [Vercel](https://vercel.com/) project at one address: the site
+as static files and the API as a Vercel Function under `/api` (see
+[Deployment](#deployment)).
+
 What it does today: sign up with email confirmation, sign in and password reset,
 browse and search books (via a server-side Google Books proxy), keep a shelf of
 offered books and a wishlist, see which wishlist books other readers are offering,
@@ -54,12 +58,12 @@ its default and when it is required. The variables it reads, by name:
 | --- | --- |
 | `MONGODB_URI` | Required. |
 | `PORT` | Optional; the API's listening port. |
-| `CORS_ALLOWED_ORIGINS` | Browser origins allowed to call the API; required in production. |
+| `CORS_ALLOWED_ORIGINS` | Other browser origins allowed to call the API; not needed when the site and API share an origin, as on Vercel. |
 | `GOOGLE_BOOKS_API_KEY` | Server-side key for the book-search proxy and the seed. |
 | `RESEND_API_KEY` | Unset means no mail is sent. |
 | `EMAIL_FROM` | Sender address for outgoing mail. |
 | `FRONTEND_BASE_URL` | Base URL emailed links point at; required in production. |
-| `TRUST_PROXY` | Number of proxies in front of the API. |
+| `TRUST_PROXY` | Number of proxies in front of the API; `1` on Vercel. |
 
 There is no login-signing secret: a sign-in token is an opaque server-side session,
 not a JWT.
@@ -71,9 +75,10 @@ temporarily unavailable.
 
 **Front end.** Copy `front-end/.env.example` to `front-end/.env.local` and set
 `VITE_SERVER_ADDRESS` to the API's base URL (`http://localhost:5000` locally). Vite
-compiles it into the bundle at build time, so every environment needs its own build
-with its own value, and only `VITE_`-prefixed variables reach client code — never
-put a secret behind that prefix. See [`front-end/README.md`](./front-end/README.md).
+compiles it into the bundle at build time; production builds default to `/api` on
+the site's own origin (`front-end/.env.production`), which is where Vercel serves
+the API. Only `VITE_`-prefixed variables reach client code — never put a secret
+behind that prefix. See [`front-end/README.md`](./front-end/README.md).
 
 ## Running it
 
@@ -123,5 +128,73 @@ The back-end tests need no database of their own, and no test reaches the networ
 
 ## Deployment
 
-The front end deploys to Vercel and the back end to AWS. Each is deployed
-separately, with its own environment variables.
+The front end and the API deploy together to one Vercel project, so the site and
+the API share one address. `vercel.json` at the repository root describes the whole
+build:
+
+- It installs both packages and builds `front-end/` with Vite into `front-end/dist`,
+  which Vercel serves as static files.
+- `api/index.js` is the one Vercel Function. It re-exports `back-end/vercel.js`,
+  which runs the unchanged Express app from `back-end/app.js` and reuses one
+  MongoDB connection across the requests a warm instance serves.
+- Every `/api/*` request goes to that function (`/api/auth/login` reaches the app's
+  `/auth/login`); every other path that is not a built file falls back to
+  `index.html`, so client-side routes such as `/books/:id` load on refresh.
+
+`back-end/server.js` is still the entry for running the API locally.
+
+### One-time setup
+
+1. In the Vercel dashboard choose **Add New… → Project** and import this GitHub
+   repository (grant the Vercel GitHub app access to it if asked).
+2. Configure the project:
+
+   | Setting | Value |
+   | --- | --- |
+   | Framework Preset | Other |
+   | Root Directory | Leave empty: the repository root, not `front-end/`. |
+   | Build Command | Leave the default; `vercel.json` sets `npm --prefix front-end run build`. |
+   | Output Directory | Leave the default; `vercel.json` sets `front-end/dist`. |
+   | Install Command | Leave the default; `vercel.json` installs `front-end/` and `back-end/`. |
+   | Node.js Version | 22.x or newer. |
+
+3. Under **Environment Variables**, add these for Production (and Preview, if you
+   use preview deployments, which then share the same database). Mark the keys as
+   sensitive. `back-end/.env.example` documents each one in full.
+
+   | Variable | What it is for |
+   | --- | --- |
+   | `MONGODB_URI` | Connection string of the MongoDB Atlas cluster (`mongodb+srv://…`). The API always uses the `bookbroker` database on it. Atlas network access must allow connections from anywhere, since Vercel functions have no fixed address. |
+   | `GOOGLE_BOOKS_API_KEY` | Server-side Google Books key. Without it, book search reports that it is unavailable. |
+   | `RESEND_API_KEY` | Resend API key. Without it no email is sent: the links appear in the function logs instead. |
+   | `EMAIL_FROM` | Sender address, e.g. `BookBroker <hello@your-domain.example>`. See the email note below. |
+   | `FRONTEND_BASE_URL` | The site's Vercel address, e.g. `https://your-project.vercel.app`, with no trailing slash. Emailed links point here. |
+   | `TRUST_PROXY` | `1`. Vercel's edge sets `X-Forwarded-For` to the caller's address; with this set, the per-client limits on password reset and resending confirmation count each visitor separately instead of all together. |
+   | `NODE_ENV` | `production`. The API then refuses to start without `FRONTEND_BASE_URL` rather than emailing links to `localhost`. |
+
+   Do not set `VITE_SERVER_ADDRESS` or `CORS_ALLOWED_ORIGINS` on Vercel: the site
+   calls `/api` on its own origin, which needs neither.
+
+4. Deploy. If you do not know the production address until the first deployment
+   finishes, set `FRONTEND_BASE_URL` then and redeploy: a change to environment
+   variables applies only to deployments made after it.
+
+After that, every push to `master` deploys to production, and every other branch
+gets a preview deployment.
+
+To load or refresh the demo data in the cluster, run the seed from your machine
+with `MONGODB_URI` pointing at it (see [Demo data](#demo-data)).
+
+### Things to know
+
+- **Email.** Resend's default sender, `onboarding@resend.dev`, delivers only to the
+  Resend account owner's own address. Mail to real users needs a domain verified in
+  Resend and an `EMAIL_FROM` on that domain.
+- **Plan.** Vercel's free Hobby plan is for personal, non-commercial use only; a
+  commercial deployment needs a paid plan. The function's `maxDuration` in
+  `vercel.json` (30 seconds) is within the Hobby limit.
+- **Serverless.** An instance may be frozen or discarded between any two requests,
+  so the API keeps nothing it needs in memory: sessions and rate limits live in
+  MongoDB, the Google Books cache is only a saving, and work that finishes after the
+  response (sending mail) goes through `runInBackground` in `back-end/lib/background.js`,
+  which keeps the invocation alive until it settles.

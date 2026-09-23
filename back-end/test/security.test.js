@@ -220,10 +220,8 @@ describe("CORS allowlist", () => {
     expect(res).to.have.header("access-control-allow-origin", ALLOWED_ORIGIN);
   });
 
-  it("refuses to resolve an allowlist in production when unconfigured", () => {
-    expect(() => resolveAllowedOrigins({ NODE_ENV: "production" })).to.throw(
-      /CORS_ALLOWED_ORIGINS/
-    );
+  it("allows no cross-origin caller in production when unconfigured", () => {
+    expect(resolveAllowedOrigins({ NODE_ENV: "production" })).to.deep.equal([]);
   });
 
   it("falls back to the development origin outside production", () => {
