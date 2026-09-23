@@ -1,16 +1,7 @@
 import { useState } from 'react';
 import Dialog from '../Dialog';
 import { authFetch, isSessionExpiredError } from '../auth';
-
-// The reasons the API accepts (REPORT_REASONS in back-end/Data.js).
-const REPORT_REASONS = [
-  ['SPAM', 'Spam or advertising'],
-  ['HARASSMENT', 'Harassment or abuse'],
-  ['SCAM', 'Scam or fraud'],
-  ['NO_SHOW', "Didn't follow through on a trade"],
-  ['INAPPROPRIATE', 'Inappropriate content'],
-  ['OTHER', 'Something else'],
-];
+import { REPORT_REASONS } from '../reports';
 
 const DETAILS_MAX_LENGTH = 1000;
 

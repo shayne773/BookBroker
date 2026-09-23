@@ -27,6 +27,7 @@ import Navbar from './Navbar';
 import RequireAuth from './RequireAuth';
 import ExchangesList from "./ExchangesList";
 import ExchangeDetail from "./ExchangeDetail";
+import AdminReports from "./AdminReports";
 
 const AppContent = () => {
 
@@ -78,6 +79,8 @@ const AppContent = () => {
             <Route path="users/:id" element={<UserPage />} />
             <Route path="users/:id/wishlist" element={<UserPageWishlist />} />
             <Route path="users/:id/offered" element={<UserPageOffered />} />
+            {/* Admins only: linked from an admin's profile, never from the navigation. */}
+            <Route path="admin/reports" element={<AdminReports />} />
           </Route>
         </Routes>
       </div>

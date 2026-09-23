@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { authFetch, isSessionExpiredError, logout } from './auth';
 import ProfileHead from './ProfileHead';
 import ShelfPreview from './ShelfPreview';
@@ -167,6 +167,13 @@ const Profile = () => {
           setCustomLocation={setCustomLocation}
           onSubmit={handleProfileEdit}
         />
+
+        {/* The API decides who is an admin (ADMIN_EMAILS); this only offers the page. */}
+        {user.isAdmin && (
+          <Link to="/admin/reports" className="button button--secondary">
+            Reports
+          </Link>
+        )}
 
         <button type="button" className="button button--quiet" onClick={handleLogout}>
           Log out

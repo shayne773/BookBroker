@@ -7,6 +7,9 @@ import bcrypt from "bcryptjs";
 import { body, matchedData, validationResult } from "express-validator";
 import exchangesRouter from "./routes/exchanges.js";
 import messagesRouter from "./routes/messages.js";
+import adminRouter from "./routes/admin.js";
+import { isAdmin, requireAdmin } from "./lib/admin.js";
+import { isSuspended, SUSPENDED_LOGIN_MESSAGE } from "./lib/suspensions.js";
 import { buildCorsOptions } from "./lib/cors.js";
 import { LOGIN_THROTTLED_MESSAGE, LoginThrottle } from "./lib/loginThrottle.js";
 import { consumeToken, hasLiveToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/authTokens.js";
@@ -120,6 +123,7 @@ async function mailRequestLimited(throttles, req, res, email) {
 }
 
 const EMAIL_NOT_CONFIRMED = "EMAIL_NOT_CONFIRMED";
+const ACCOUNT_SUSPENDED = "ACCOUNT_SUSPENDED";
 const TOKEN_INVALID = "TOKEN_INVALID";
 
 const frontEndLink = (path, token) =>
@@ -230,6 +234,9 @@ const PUBLIC_USER_FIELDS = "_id username location ratingsAvg ratingsCount";
 //exchange routes
 app.use("/exchanges", authMiddleware, exchangesRouter);
 
+// Reports and suspensions, for the accounts named by ADMIN_EMAILS only.
+app.use("/admin", authMiddleware, requireAdmin, adminRouter);
+
 // --------------------
 // PUBLIC ROUTES
 // --------------------
@@ -312,6 +319,14 @@ app.post("/auth/login", loginValidators, async (req, res, next) => {
     }
 
     const token = await createSession(user._id);
+
+    // Also only after the password, for the same reason. Checked afresh after
+    // the session exists: a suspension that lands during bcrypt has already
+    // ended the reader's sessions, so this one must not survive it.
+    if (await isSuspended(user._id)) {
+      await endSession(token);
+      return res.status(403).json({ message: SUSPENDED_LOGIN_MESSAGE, code: ACCOUNT_SUSPENDED });
+    }
 
     res.json({ token, user: { id: user._id, username: user.username } });
   } catch (err) {
@@ -478,8 +493,11 @@ app.get("/books/:id", optionalAuth, async (req, res, next) => {
     const book = await OfferedBook.findById(req.params.id);
     if (!book) return res.status(404).json({ message: "Book not found" });
 
-    // A blocked reader's offers do not exist as far as the other is concerned.
-    if (req.user && (await isBlockedBetween(req.user.userId, book.owner))) {
+    // A blocked or suspended reader's offers do not exist as far as others are concerned.
+    if (
+      (await isSuspended(book.owner)) ||
+      (req.user && (await isBlockedBetween(req.user.userId, book.owner)))
+    ) {
       return res.status(404).json({ message: "Book not found" });
     }
 
@@ -737,10 +755,16 @@ app.get("/browse", authMiddleware, async (req, res, next) => {
 app.get("/user", authMiddleware, async (req, res, next) => {
   try {
     const me = await withLivePendingEmail(
-      await User.findById(req.user.userId).select(`${PUBLIC_USER_FIELDS} email pendingEmail`)
+      await User.findById(req.user.userId).select(
+        `${PUBLIC_USER_FIELDS} email pendingEmail emailVerified`
+      )
     );
     if (!me) return res.status(404).json({ message: "User not found" });
-    return res.json(me);
+
+    // `isAdmin` only decides whether the front end offers the admin page; the
+    // admin routes check for themselves.
+    const { emailVerified, ...fields } = me.toObject();
+    return res.json({ ...fields, isAdmin: isAdmin({ email: me.email, emailVerified }) });
   } catch (err) {
     return next(err);
   }
@@ -803,8 +827,13 @@ app.get("/users/:id/offered", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Invalid user id" });
     }
 
-    // Blocked either way, their shelf reads as empty.
-    if (await isBlockedBetween(req.user.userId, req.params.id)) return res.json([]);
+    // Blocked either way, or suspended, their shelf reads as empty.
+    if (
+      (await isSuspended(req.params.id)) ||
+      (await isBlockedBetween(req.user.userId, req.params.id))
+    ) {
+      return res.json([]);
+    }
 
     const books = await OfferedBook.find({
       owner: req.params.id,

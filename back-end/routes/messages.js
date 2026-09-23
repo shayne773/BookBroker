@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import { Conversation, Message, User } from "../Data.js";
 import { BLOCKED_MESSAGE_MESSAGE, isBlockedBetween } from "../lib/blocks.js";
+import { isSuspended } from "../lib/suspensions.js";
 
 // Conversations are addressed by the other participant's id, so a user can only
 // ever reach the conversations they are part of.
@@ -258,8 +259,14 @@ router.post("/:user", async (req, res, next) => {
     const userId = req.user.userId;
     const otherUserId = otherUserParam(req);
 
-    // A block, in either direction, stops messages both ways.
-    if (await isBlockedBetween(userId, otherUserId)) throw httpError(403, BLOCKED_MESSAGE_MESSAGE);
+    // A block, in either direction, stops messages both ways; a suspended
+    // reader cannot be written to at all.
+    if (
+      (await isBlockedBetween(userId, otherUserId)) ||
+      (String(userId) !== String(otherUserId) && (await isSuspended(otherUserId)))
+    ) {
+      throw httpError(403, BLOCKED_MESSAGE_MESSAGE);
+    }
 
     const { content } = req.body || {};
 

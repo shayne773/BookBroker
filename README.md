@@ -13,7 +13,8 @@ What it does today: sign up with email confirmation, sign in and password reset,
 browse and search books (via a server-side Google Books proxy), keep a shelf of
 offered books and a wishlist, see which wishlist books other readers are offering,
 propose and accept trades, message other users, rate a trading partner and see each
-reader's average rating, and block or report another reader.
+reader's average rating, and block or report another reader. Admins read the reports
+on a private page and can suspend a reader's account.
 
 [Contributing Guidelines](./CONTRIBUTING.md) · [Agent and architecture notes](./AGENTS.md)
 
@@ -60,6 +61,7 @@ its default and when it is required. The variables it reads, by name:
 | `EMAIL_FROM` | Sender address for outgoing mail. |
 | `FRONTEND_BASE_URL` | Base URL emailed links point at; required in production. |
 | `TRUST_PROXY` | Number of proxies in front of the API. |
+| `ADMIN_EMAILS` | Comma-separated emails of the admin accounts; unset means no admins. |
 
 There is no login-signing secret: a sign-in token is an opaque server-side session,
 not a JWT.
@@ -68,6 +70,16 @@ Without `RESEND_API_KEY` the API sends no email — sign-up confirmation, passwo
 reset and email-change links are logged to the back-end console instead, so you can
 follow them locally. Without `GOOGLE_BOOKS_API_KEY`, book search reports that it is
 temporarily unavailable.
+
+**Admins.** There is no admin sign-up and no role editing. An account is an admin
+when its confirmed email is listed in `ADMIN_EMAILS` (compared case-insensitively);
+change the list and restart the API to add or remove one. An admin reaches the reports
+page from a link on their own profile (it is at `/admin/reports` and is not in the
+navigation). There they can list reports, open or reviewed, mark one reviewed, and
+suspend or unsuspend the reported reader with an optional note. A suspended reader
+cannot sign in and is signed out everywhere at once; their offers leave browse, search,
+matches and the most-wanted list, and nobody can message them or propose a trade to
+them. Trades already under way are left as they are.
 
 **Front end.** Copy `front-end/.env.example` to `front-end/.env.local` and set
 `VITE_SERVER_ADDRESS` to the API's base URL (`http://localhost:5000` locally). Vite

@@ -14,6 +14,8 @@ const { Schema } = mongoose;
 // Schemas
 // --------------------
 
+const SUSPENSION_NOTE_MAX_LENGTH = 1000;
+
 // User schema
 const userSchema = new Schema({
   username: { type: String, required: true },
@@ -34,10 +36,23 @@ const userSchema = new Schema({
   ratingsCount: { type: Number, default: 0 },
   ratingsAvg:   { type: Number, default: 0 },
 
+  // Set by an admin (routes/admin.js). A suspended reader cannot sign in, their
+  // offers are off the market and nobody can message them or propose a trade to
+  // them (lib/suspensions.js). `suspension` keeps when, by whom and why.
+  suspended: { type: Boolean, default: false },
+  suspension: {
+    at: Date,
+    by: { type: Schema.Types.ObjectId, ref: "User" },
+    note: { type: String, maxlength: SUSPENSION_NOTE_MAX_LENGTH },
+  },
+
   // Optional arrays if you want them (not required to make wishlist/offered work)
   wishlist: [{ type: Schema.Types.ObjectId, ref: "WishlistBook" }],
   offered:  [{ type: Schema.Types.ObjectId, ref: "OfferedBook" }],
 });
+
+// The suspended accounts are few, and every market listing looks them up.
+userSchema.index({ suspended: 1 }, { partialFilterExpression: { suspended: true } });
 
 // Wishlist book schema
 const wishlistBookSchema = new Schema({
@@ -112,16 +127,20 @@ blockSchema.index({ blocked: 1 });
 const REPORT_REASONS = ["SPAM", "HARASSMENT", "SCAM", "NO_SHOW", "INAPPROPRIATE", "OTHER"];
 const REPORT_DETAILS_MAX_LENGTH = 1000;
 
-// Stored for later review; nothing in the app reads them back.
+// Reviewed on the admin reports page (routes/admin.js): a report is open until
+// an admin marks it reviewed.
 const reportSchema = new Schema({
   reporter: { type: Schema.Types.ObjectId, ref: "User", required: true },
   reported: { type: Schema.Types.ObjectId, ref: "User", required: true },
   reason: { type: String, enum: REPORT_REASONS, required: true },
   details: { type: String, default: "", maxlength: REPORT_DETAILS_MAX_LENGTH },
   createdAt: { type: Date, default: Date.now },
+  reviewedAt: { type: Date, default: null },
+  reviewedBy: { type: Schema.Types.ObjectId, ref: "User" },
 });
 
 reportSchema.index({ reported: 1, createdAt: -1 });
+reportSchema.index({ reviewedAt: 1, createdAt: -1 });
 
 // --------------------
 // Models (default connection)
@@ -173,6 +192,7 @@ export {
   Report,
   REPORT_REASONS,
   REPORT_DETAILS_MAX_LENGTH,
+  SUSPENSION_NOTE_MAX_LENGTH,
 
   // optional legacy exports
   injectBookModel,

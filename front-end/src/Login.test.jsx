@@ -127,3 +127,21 @@ test('links to the forgot password page', () => {
 
   expect(screen.getByRole('link', { name: 'Forgot password?' })).toHaveAttribute('href', '/forgot-password');
 });
+
+test('tells a suspended reader their account is suspended and keeps them signed out', async () => {
+  global.fetch.mockResolvedValue({
+    ok: false,
+    status: 403,
+    json: async () => ({
+      message: 'This account has been suspended. If you think this is a mistake, contact BookBroker.',
+      code: 'ACCOUNT_SUSPENDED'
+    })
+  });
+
+  renderLogin();
+  await fillAndSubmit();
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('This account has been suspended.');
+  expect(localStorage.getItem('token')).toBeNull();
+  expect(screen.queryByText('Home page')).not.toBeInTheDocument();
+});

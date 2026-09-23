@@ -3,6 +3,7 @@
 // the reader who was blocked are kept apart alike.
 import mongoose from "mongoose";
 import { Block } from "../Data.js";
+import { suspendedUserIds } from "./suspensions.js";
 
 export const BLOCKED_MESSAGE_MESSAGE = "You can't message this reader.";
 export const BLOCKED_TRADE_MESSAGE = "You can't trade with this reader.";
@@ -32,12 +33,14 @@ export async function isBlockedBetween(a, b) {
 }
 
 // The OfferedBook filter for books `userId` may see on the market: not locked
-// into an accepted trade, not owned by anyone blocked either way, and, unless
-// `includeOwn`, not their own. Without a user it is every book on the market.
+// into an accepted trade, not owned by a suspended reader or by anyone blocked
+// either way, and, unless `includeOwn`, not their own. Without a user it is
+// every book on the market from a reader in good standing.
 export async function marketFilter(userId, { includeOwn = false } = {}) {
-  if (!userId) return { locked: false };
-
-  const hidden = await blockedUserIds(userId);
-  if (!includeOwn) hidden.push(toObjectId(userId));
+  const hidden = await suspendedUserIds();
+  if (userId) {
+    hidden.push(...(await blockedUserIds(userId)));
+    if (!includeOwn) hidden.push(toObjectId(userId));
+  }
   return hidden.length ? { locked: false, owner: { $nin: hidden } } : { locked: false };
 }
