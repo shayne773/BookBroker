@@ -11,7 +11,9 @@ The app is two independent services that share nothing but an HTTP contract:
 
 What it does today: sign up with email confirmation, sign in and password reset,
 browse and search books (via a server-side Google Books proxy), keep a shelf of
-offered books and a wishlist, propose and accept trades, and message other users.
+offered books and a wishlist, see which wishlist books other readers are offering,
+propose and accept trades, message other users, rate a trading partner and see each
+reader's average rating, and block or report another reader.
 
 [Contributing Guidelines](./CONTRIBUTING.md) · [Agent and architecture notes](./AGENTS.md)
 
