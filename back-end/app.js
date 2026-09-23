@@ -320,7 +320,9 @@ app.post("/auth/login", loginValidators, async (req, res, next) => {
 
     const token = await createSession(user._id);
 
-    // Also only after the password, for the same reason.
+    // Also only after the password, for the same reason. Checked afresh after
+    // the session exists: a suspension that lands during bcrypt has already
+    // ended the reader's sessions, so this one must not survive it.
     if (await isSuspended(user._id)) {
       await endSession(token);
       return res.status(403).json({ message: SUSPENDED_LOGIN_MESSAGE, code: ACCOUNT_SUSPENDED });
