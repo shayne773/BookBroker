@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Messages from './Messages';
 import MessagesDetail from './MessagesDetail';
@@ -129,4 +129,39 @@ test('an open conversation marks itself read and polls only for newer messages, 
 
   act(() => setVisibility('visible'));
   await waitFor(() => expect(calls('GET /messages/bea?after=m2')).toHaveLength(1));
+});
+
+test('a message sent from the thread does not skip one the other person sent just before it', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  serve({
+    'GET /users/bea': respond(200, { _id: 'bea', username: 'bea' }),
+    'GET /messages/bea': respond(200, [message('m1', 'bea', 'hello', 1)]),
+    'POST /messages/bea': respond(200, { messageId: 'm3', message: message('m3', 'me', 'hi bea', 3) }),
+    'GET /messages/bea?after=m1': respond(200, [
+      message('m2', 'bea', 'are you there?', 2),
+      message('m3', 'me', 'hi bea', 3),
+    ]),
+    'GET /messages/bea?after=m3': respond(200, []),
+    'POST /messages/bea/read': respond(204, null),
+    'GET /messages/unread': respond(200, { conversations: 0 }),
+  });
+
+  render(
+    <MemoryRouter initialEntries={['/messages/bea']}>
+      <Routes>
+        <Route path="/messages/:user" element={<MessagesDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  expect(await screen.findByText('hello')).toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'hi bea' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(await screen.findByText('hi bea')).toBeInTheDocument();
+
+  await act(() => vi.advanceTimersByTimeAsync(3000));
+  expect(await screen.findByText('are you there?')).toBeInTheDocument();
+  expect(calls('GET /messages/bea?after=')).toEqual(['GET /messages/bea?after=m1']);
+  expect(screen.getAllByText('hi bea')).toHaveLength(1);
 });

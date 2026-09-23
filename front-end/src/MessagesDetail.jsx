@@ -26,7 +26,13 @@ const MessagesDetail = () => {
 
   const listRef = useRef(null);
   const messagesRef = useRef([]);
-  const lastIdRef = useRef(null);
+  // The newest message a fetch has returned, which the next poll asks after. A
+  // message sent from here is shown straight away but never moves it, so one
+  // from the other person that arrived first is still fetched.
+  const cursorRef = useRef(null);
+  // Changes each time a different conversation loads, so a poll still in flight
+  // for the previous one is dropped.
+  const threadRef = useRef(0);
 
   const server = import.meta.env.VITE_SERVER_ADDRESS;
 
@@ -45,8 +51,7 @@ const MessagesDetail = () => {
   }, [server, otherUserId]);
 
   // Adds messages the thread does not hold yet, keeping it oldest first, or with
-  // `replace` swaps the whole thread. The newest message's id is the cursor the
-  // next poll asks after.
+  // `replace` swaps the whole thread.
   const addMessages = useCallback((incoming, { replace = false } = {}) => {
     const base = replace ? [] : messagesRef.current;
     const known = new Set(base.map((m) => String(m.id)));
@@ -59,14 +64,19 @@ const MessagesDetail = () => {
         String(a.id).localeCompare(String(b.id))
     );
     messagesRef.current = next;
-    lastIdRef.current = next.length ? next[next.length - 1].id : null;
     setMessages(next);
   }, []);
 
-  // Records that this user has seen the thread up to its newest message, and
-  // lets the navigation bar's count catch up. Only while the tab is in view.
+  // Messages returned by a fetch, oldest first: the only ones that move the cursor.
+  const addFetched = useCallback((fetched, options) => {
+    if (fetched.length) cursorRef.current = fetched[fetched.length - 1].id;
+    addMessages(fetched, options);
+  }, [addMessages]);
+
+  // Records that this user has seen the thread up to the newest fetched message,
+  // and lets the navigation bar's count catch up. Only while the tab is in view.
   const markRead = useCallback(async () => {
-    const upTo = lastIdRef.current;
+    const upTo = cursorRef.current;
     if (!upTo || document.visibilityState === "hidden") return;
     const res = await authFetch(`${server}/messages/${otherUserId}/read`, {
       method: "POST",
@@ -88,8 +98,8 @@ const MessagesDetail = () => {
   // Initial load
   useEffect(() => {
     let cancelled = false;
-    // Until this thread loads, no poll may extend the previous one.
-    lastIdRef.current = null;
+    threadRef.current += 1;
+    cursorRef.current = null;
 
     (async () => {
       try {
@@ -99,7 +109,7 @@ const MessagesDetail = () => {
 
         const thread = await fetchMessages();
         if (cancelled) return;
-        addMessages(thread, { replace: true });
+        addFetched(thread, { replace: true });
         setLoading(false);
 
         setTimeout(scrollToBottom, 0);
@@ -114,18 +124,17 @@ const MessagesDetail = () => {
     return () => {
       cancelled = true;
     };
-  }, [loadOtherUser, fetchMessages, addMessages, markRead, scrollToBottom]);
+  }, [loadOtherUser, fetchMessages, addFetched, markRead, scrollToBottom]);
 
   // Live delivery by short polling: often while the conversation is in view,
   // not at all while the tab is hidden (it catches up the moment it returns).
   const poll = useCallback(async () => {
-    const cursor = lastIdRef.current;
-    const fresh = await fetchMessages(cursor);
-    // The thread was reset (another conversation opened) while this was in flight.
-    if (lastIdRef.current !== cursor) return;
-    addMessages(fresh);
+    const thread = threadRef.current;
+    const fresh = await fetchMessages(cursorRef.current);
+    if (threadRef.current !== thread) return;
+    addFetched(fresh);
     if (fresh.some((m) => String(m.sender) !== String(myUserId))) await markRead();
-  }, [fetchMessages, addMessages, markRead, myUserId]);
+  }, [fetchMessages, addFetched, markRead, myUserId]);
   usePolling(poll, { interval: THREAD_INTERVAL, enabled: !loading });
 
   useEffect(() => {

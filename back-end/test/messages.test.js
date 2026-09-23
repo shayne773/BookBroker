@@ -79,9 +79,30 @@ describe("messages", () => {
       expect(foreign).to.have.status(400);
     });
 
-    it("refuses a conversation with oneself", async () => {
-      expect(await api(ada.token).get(`/messages/${ada.id}`)).to.have.status(400);
-      expect(await api(ada.token).post(`/messages/${ada.id}`).send({ content: "me" })).to.have.status(400);
+    it("keeps a conversation with oneself apart from the caller's other conversations", async () => {
+      const toBea = await send(ada, bea, "for bea");
+      const note = await send(ada, ada, "note to self");
+
+      const self = await api(ada.token).get(`/messages/${ada.id}`);
+      expect(self).to.have.status(200);
+      expect(self.body.map((m) => String(m.id))).to.deep.equal([note]);
+
+      const withBea = await api(ada.token).get(`/messages/${bea.id}`);
+      expect(withBea.body.map((m) => String(m.id))).to.deep.equal([toBea]);
+
+      const crossed = await api(ada.token).get(`/messages/${ada.id}?after=${toBea}`);
+      expect(crossed).to.have.status(400);
+      expect(await unreadCount(ada)).to.equal(0);
+    });
+
+    it("sends a long message, and to an id with no account behind it", async () => {
+      const long = "x".repeat(5000);
+      await send(ada, bea, long);
+      const thread = await api(bea.token).get(`/messages/${ada.id}`);
+      expect(thread.body[0].content).to.equal(long);
+
+      const nobody = { id: String(new mongoose.Types.ObjectId()) };
+      await send(ada, nobody, "anyone there?");
     });
 
     it("needs a signed-in user", async () => {

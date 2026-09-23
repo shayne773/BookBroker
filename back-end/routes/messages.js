@@ -11,7 +11,6 @@ import { Conversation, Message, User } from "../Data.js";
 
 const router = express.Router();
 
-const MAX_MESSAGE_LENGTH = 2000;
 const EPOCH = new Date(0);
 
 function httpError(status, message) {
@@ -20,18 +19,21 @@ function httpError(status, message) {
   return err;
 }
 
-// The other participant's id from the route, which may not be the caller's own.
+// The other participant's id from the route.
 function otherUserParam(req) {
   const other = req.params.user;
   if (!mongoose.isValidObjectId(other)) throw httpError(400, "Invalid user id");
-  if (String(other) === String(req.user.userId)) {
-    throw httpError(400, "You cannot message yourself");
-  }
   return other;
 }
 
+// A conversation with oneself is stored as [me, me], and only that one matches:
+// `$all` with the same id twice would match any conversation the caller is in.
 function findConversation(userId, otherUserId) {
-  return Conversation.findOne({ users: { $all: [userId, otherUserId], $size: 2 } });
+  const users =
+    String(userId) === String(otherUserId)
+      ? [userId, userId]
+      : { $all: [userId, otherUserId], $size: 2 };
+  return Conversation.findOne({ users });
 }
 
 // The message `messageId` if it belongs to `conversation`, for use as a cursor.
@@ -251,15 +253,10 @@ router.post("/:user", async (req, res, next) => {
 
     if (typeof content !== "string") throw httpError(400, "Message content is required");
     if (!content.trim()) return res.status(200).json({ message: "Empty message ignored" });
-    if (content.length > MAX_MESSAGE_LENGTH) {
-      throw httpError(400, `Messages are limited to ${MAX_MESSAGE_LENGTH} characters.`);
-    }
 
-    let conversation = await findConversation(userId, otherUserId);
-    if (!conversation) {
-      if (!(await User.exists({ _id: otherUserId }))) throw httpError(404, "User not found");
-      conversation = await Conversation.create({ users: [otherUserId, userId] });
-    }
+    const conversation =
+      (await findConversation(userId, otherUserId)) ||
+      (await Conversation.create({ users: [otherUserId, userId] }));
 
     const message = await Message.create({
       content,

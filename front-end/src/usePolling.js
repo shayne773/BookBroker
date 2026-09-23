@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
 
 // Short polling that suits a serverless API: `poll` runs every `interval` ms
-// while the tab is visible, every `hiddenInterval` ms while it is hidden (or not
-// at all when that is null), and once straight away when the tab comes back.
+// while the tab is visible, not at all while it is hidden, and once straight
+// away when the tab comes back.
 // Runs never overlap: the next one is scheduled when the last one settles.
 // The first run is left to the caller, which usually loads the page's data itself.
-export default function usePolling(poll, { interval, hiddenInterval = null, enabled = true }) {
+export default function usePolling(poll, { interval, enabled = true }) {
   const pollRef = useRef(poll);
   useEffect(() => {
     pollRef.current = poll;
@@ -18,13 +18,10 @@ export default function usePolling(poll, { interval, hiddenInterval = null, enab
     let running = false;
     let stopped = false;
 
-    const delay = () => (document.visibilityState === 'hidden' ? hiddenInterval : interval);
-
     const schedule = () => {
       clearTimeout(timer);
       timer = null;
-      const ms = delay();
-      if (!stopped && ms != null) timer = setTimeout(run, ms);
+      if (!stopped && document.visibilityState !== 'hidden') timer = setTimeout(run, interval);
     };
 
     const run = async () => {
@@ -52,5 +49,5 @@ export default function usePolling(poll, { interval, hiddenInterval = null, enab
       clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [interval, hiddenInterval, enabled]);
+  }, [interval, enabled]);
 }
