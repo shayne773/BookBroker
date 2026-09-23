@@ -1,35 +1,30 @@
 # Contributing Guidelines
 
-## Team Norms
+## Code conventions
 
-### Team Expectations
-- Make best effort to hold standups synchronously
-- Team members must include blocking items in their standup report
-- Team members that need help must reach out to get help
-- Conflicts will be resolved by a 3-out-of-5 majority vote
-- Responses expected by 2 business days or 1 weekend, over discord
-- In case of an event where a member will be unresponsive for 2+ days, they must inform the rest of the team
-- Should a member fail to deliver, tasks will be reassigned to other members until a compromise can be reached. If this is repeated, the professor may be contacted
-- Standups should be done the day before they are due
-- A member who makes no progress on a task after two standups in a row without making an honest effort to find a breakthrough will be reported to admins
-- Follow all conventions outlined in the coding conventions document distributed to the class
-- Always push working code, if you break the pipeline/build then fix it
-- Make granular and small commits, per feature or per bug fix
-- Don't leave dead/commented out code behind. If you see such code, delete it
+- Always push working code. If you break the build, fix it.
+- Make granular, small commits — one per feature or bug fix.
+- Don't leave dead or commented-out code behind. If you see such code, delete it.
 
-## Git Workflow
-- Create new branch from main
-- Make edits
-- Make commits
-- Open pull request
-- Another member will approve or deny this
-- If approved, it will be merged into main. If denied, retry
+Architecture, sharp edges and the conventions specific to this codebase (front-end
+auth, the design system, the back end, email, trades, tests) live in
+[`AGENTS.md`](./AGENTS.md). Read it before making a change; keep it up to date when
+you learn something durable.
 
-## Local Development Setup
-- npm install in the main directory
-(Will be added as needed)
+## Git workflow
+
+- Create a new branch from `master`.
+- Make your edits and commits.
+- Open a pull request; it needs another contributor's approval.
+- Once approved and green, it is merged into `master`.
+
+## Local development setup
+
+See the [README](./README.md) for prerequisites, environment configuration and the
+commands that run each service.
 
 ## Building and Testing
+
 The checks every pull request must pass are pinned in `.no-mistakes.yaml` and run by
 the `CI` GitHub workflow (`.github/workflows/ci.yml`). From the repository root:
 
