@@ -214,7 +214,7 @@ router.get("/:user", async (req, res, next) => {
 // --------------------
 // POST /messages/:user/read   body: { upTo?: messageId }
 // Marks the conversation read up to `upTo` (the newest message the client has
-// shown), or up to its newest message. The marker only ever moves forward.
+// fetched), or up to its newest message. The marker only ever moves forward.
 // --------------------
 router.post("/:user/read", async (req, res, next) => {
   try {

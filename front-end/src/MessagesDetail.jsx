@@ -86,7 +86,7 @@ const MessagesDetail = () => {
     if (res.ok) await refreshUnread();
   }, [server, otherUserId, jsonHeaders]);
 
-  // With a cursor, asks only for messages newer than the newest one on screen.
+  // With a cursor, asks only for messages newer than the newest one fetched.
   const fetchMessages = useCallback(async (after) => {
     const query = after ? `?after=${encodeURIComponent(after)}` : "";
     const res = await authFetch(`${server}/messages/${otherUserId}${query}`);
