@@ -24,7 +24,7 @@ const Profile = () => {
   const [showToastOfferings, setShowToastOfferings] = useState(false);
   const [editNotice, setEditNotice] = useState(null);
 
-  const { matches, loaded: matchesLoaded } = useWishlistMatches();
+  const { matches, loaded: matchesLoaded, error: matchesError } = useWishlistMatches();
   // Every offer of a wishlisted book, for the preview; the full list groups them by book.
   const matchedOffers = matches.flatMap(({ offers }) => offers);
 
@@ -187,6 +187,7 @@ const Profile = () => {
           title="Available from other readers"
           books={matchedOffers}
           emptyLabel="None of your wishlist is on offer right now."
+          error={matchesError && 'Your matches could not be loaded.'}
           seeAllTo="/profile/matches"
           linkTo={(offer) => `/books/${offer._id}`}
           metaOf={(offer) => `from ${offer.owner.username}`}

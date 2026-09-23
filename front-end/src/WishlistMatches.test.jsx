@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import WishlistMatches from './Profile/WishlistMatches';
 import MyBooks from './Profile/MyBooks';
+import Profile from './Profile';
 
 const hobbit = { _id: 'w1', title: 'The Hobbit', author: 'Tolkien', isbn: '9780261102217' };
 const dune = { _id: 'w2', title: 'Dune', author: 'Herbert', isbn: '9780441013593' };
@@ -61,4 +62,17 @@ test('the wishlist marks only the books other readers are offering', async () =>
 
   expect(flag).toHaveAttribute('href', '/profile/matches');
   expect(screen.getAllByRole('link', { name: /Available from/ })).toHaveLength(1);
+});
+
+test('the profile preview reports a failed load instead of claiming no matches', async () => {
+  const answer = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url) =>
+    String(url).includes('/user/wishlist/matches')
+      ? { ok: false, status: 500, json: async () => ({ message: 'Internal Server Error' }) }
+      : answer(url)
+  );
+  render(<Profile />, { wrapper: MemoryRouter });
+
+  expect(await screen.findByText('Your matches could not be loaded.')).toBeInTheDocument();
+  expect(screen.queryByText('None of your wishlist is on offer right now.')).not.toBeInTheDocument();
 });
