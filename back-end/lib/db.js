@@ -15,7 +15,7 @@ let connecting = null;
 export function connectDatabase(uri = process.env.MONGODB_URI) {
   if (!uri) return Promise.reject(new Error("MONGODB_URI is not set"));
 
-  connecting ??= mongoose.connect(uri, { dbName: DB_NAME }).catch((err) => {
+  connecting ??= mongoose.connect(uri, { dbName: DB_NAME, serverSelectionTimeoutMS: 10_000 }).catch((err) => {
     connecting = null;
     throw err;
   });

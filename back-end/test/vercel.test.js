@@ -122,7 +122,7 @@ describe("connectDatabase", () => {
 
     expect(first).to.equal(second);
     expect(calls).to.have.lengthOf(2);
-    expect(calls[1]).to.deep.equal({ uri: "mongodb://db.example", options: { dbName: DB_NAME } });
+    expect(calls[1]).to.deep.equal({ uri: "mongodb://db.example", options: { dbName: DB_NAME, serverSelectionTimeoutMS: 10_000 } });
   });
 });
 
