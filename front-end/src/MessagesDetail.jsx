@@ -4,6 +4,11 @@ import { authFetch, isSessionExpiredError } from "./auth";
 import MessageThread from "./MessagesDetail/MessageThread";
 import Composer from "./MessagesDetail/Composer";
 import ProposeTradeDialog from "./MessagesDetail/ProposeTradeDialog";
+import usePolling from "./usePolling";
+import { refreshUnread } from "./unread";
+
+// How often an open conversation checks for new messages while the tab is visible.
+const THREAD_INTERVAL = 3000;
 
 const MessagesDetail = () => {
   const { user: otherUserId } = useParams();
@@ -20,6 +25,8 @@ const MessagesDetail = () => {
   const [showTradeModal, setShowTradeModal] = useState(false);
 
   const listRef = useRef(null);
+  const messagesRef = useRef([]);
+  const lastIdRef = useRef(null);
 
   const server = import.meta.env.VITE_SERVER_ADDRESS;
 
@@ -37,21 +44,52 @@ const MessagesDetail = () => {
     return res.json();
   }, [server, otherUserId]);
 
-  const loadMessages = useCallback(async () => {
-    const res = await authFetch(`${server}/messages/${otherUserId}`);
+  // Adds messages the thread does not hold yet, keeping it oldest first, or with
+  // `replace` swaps the whole thread. The newest message's id is the cursor the
+  // next poll asks after.
+  const addMessages = useCallback((incoming, { replace = false } = {}) => {
+    const base = replace ? [] : messagesRef.current;
+    const known = new Set(base.map((m) => String(m.id)));
+    const fresh = incoming.filter((m) => !known.has(String(m.id)));
+    if (!fresh.length && !replace) return;
+
+    const next = [...base, ...fresh].sort(
+      (a, b) =>
+        new Date(a.timestamp) - new Date(b.timestamp) ||
+        String(a.id).localeCompare(String(b.id))
+    );
+    messagesRef.current = next;
+    lastIdRef.current = next.length ? next[next.length - 1].id : null;
+    setMessages(next);
+  }, []);
+
+  // Records that this user has seen the thread up to its newest message, and
+  // lets the navigation bar's count catch up. Only while the tab is in view.
+  const markRead = useCallback(async () => {
+    const upTo = lastIdRef.current;
+    if (!upTo || document.visibilityState === "hidden") return;
+    const res = await authFetch(`${server}/messages/${otherUserId}/read`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ upTo }),
+    });
+    if (res.ok) await refreshUnread();
+  }, [server, otherUserId, jsonHeaders]);
+
+  // With a cursor, asks only for messages newer than the newest one on screen.
+  const fetchMessages = useCallback(async (after) => {
+    const query = after ? `?after=${encodeURIComponent(after)}` : "";
+    const res = await authFetch(`${server}/messages/${otherUserId}${query}`);
     if (!res.ok) throw new Error(`Failed to load messages: ${res.status}`);
     const data = await res.json();
-
-    // oldest -> newest
-    const sorted = [...data].sort(
-      (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
-    );
-    setMessages(sorted);
+    return Array.isArray(data) ? data : [];
   }, [server, otherUserId]);
 
   // Initial load
   useEffect(() => {
     let cancelled = false;
+    // Until this thread loads, no poll may extend the previous one.
+    lastIdRef.current = null;
 
     (async () => {
       try {
@@ -59,11 +97,15 @@ const MessagesDetail = () => {
         const u = await loadOtherUser();
         if (!cancelled) setOtherUser(u);
 
-        await loadMessages();
-        if (!cancelled) setLoading(false);
+        const thread = await fetchMessages();
+        if (cancelled) return;
+        addMessages(thread, { replace: true });
+        setLoading(false);
 
         setTimeout(scrollToBottom, 0);
+        await markRead();
       } catch (err) {
+        if (isSessionExpiredError(err)) return;
         console.error(err);
         if (!cancelled) setLoading(false);
       }
@@ -72,15 +114,19 @@ const MessagesDetail = () => {
     return () => {
       cancelled = true;
     };
-  }, [loadOtherUser, loadMessages, scrollToBottom]);
+  }, [loadOtherUser, fetchMessages, addMessages, markRead, scrollToBottom]);
 
-  // Gentle polling
-  useEffect(() => {
-    const t = setInterval(() => {
-      loadMessages().catch(() => {});
-    }, 7000);
-    return () => clearInterval(t);
-  }, [loadMessages]);
+  // Live delivery by short polling: often while the conversation is in view,
+  // not at all while the tab is hidden (it catches up the moment it returns).
+  const poll = useCallback(async () => {
+    const cursor = lastIdRef.current;
+    const fresh = await fetchMessages(cursor);
+    // The thread was reset (another conversation opened) while this was in flight.
+    if (lastIdRef.current !== cursor) return;
+    addMessages(fresh);
+    if (fresh.some((m) => String(m.sender) !== String(myUserId))) await markRead();
+  }, [fetchMessages, addMessages, markRead, myUserId]);
+  usePolling(poll, { interval: THREAD_INTERVAL, enabled: !loading });
 
   useEffect(() => {
     scrollToBottom();
@@ -103,8 +149,9 @@ const MessagesDetail = () => {
         throw new Error(`Send failed: ${res.status} ${body}`);
       }
 
+      const sent = await res.json();
       setText("");
-      await loadMessages();
+      if (sent?.message) addMessages([sent.message]);
       scrollToBottom();
     } catch (err) {
       // RequireAuth is already redirecting to the login page.

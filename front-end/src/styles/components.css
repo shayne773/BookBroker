@@ -148,6 +148,24 @@
   outline-offset: -4px;
 }
 
+/* Unread conversations beside Messages: a small ink count, not a coloured badge. */
+.site-nav__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--color-fill-strong);
+  color: var(--color-ink-inverse);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 /* ======================================================================
    Masthead / page header
    ====================================================================== */
@@ -1684,6 +1702,29 @@ a.list-row:hover .textlink-arrow__mark,
 a.list-row:focus-visible .textlink-arrow__mark {
   color: var(--color-ink);
   transform: translateX(3px);
+}
+
+/* A row with something new in it: its excerpt reads in full ink. */
+.list-row--unread .list-row__excerpt {
+  color: var(--color-ink);
+  font-weight: var(--weight-medium);
+}
+
+/* "2 new" behind a black dot, the whole of the unread marker. */
+.unread-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-ink);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.unread-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-fill-strong);
 }
 
 /* Anything set under a row's meta line, e.g. the covers in an exchange. */

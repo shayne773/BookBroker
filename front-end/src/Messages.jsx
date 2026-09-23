@@ -1,6 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { authFetch, isSessionExpiredError } from "./auth";
+import usePolling from "./usePolling";
+
+// How often the open inbox checks for new messages (paused while the tab is hidden).
+const LIST_INTERVAL = 15000;
+
+// [{ id, otherUser: { id, username, location, ratings }, lastMessage, lastAt, unread }, ...]
+async function fetchConversations() {
+  const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/messages`);
+  if (!res.ok) throw new Error(`Failed to load conversations: ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
 
 const Messages = () => {
   const [convos, setConvos] = useState([]);
@@ -11,15 +23,7 @@ const Messages = () => {
   useEffect(() => {
     const run = async () => {
       try {
-        setLoading(true);
-        setError("");
-
-        const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/messages`);
-
-        const data = await res.json();
-
-        // data is expected to be: [{ id, otherUser: { id, username, location, ratings } }, ...]
-        setConvos(Array.isArray(data) ? data : []);
+        setConvos(await fetchConversations());
       } catch (err) {
         // RequireAuth is already redirecting to the login page.
         if (isSessionExpiredError(err)) return;
@@ -34,6 +38,11 @@ const Messages = () => {
 
     run();
   }, []);
+
+  // New messages and unread markers arrive while the list is open. A failed
+  // refresh keeps the list on screen and tries again on the next tick.
+  const refresh = useCallback(async () => setConvos(await fetchConversations()), []);
+  usePolling(refresh, { interval: LIST_INTERVAL, enabled: !loading && !error });
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -94,10 +103,14 @@ const Messages = () => {
           {filtered.map((c) => {
             const u = c.otherUser || {};
             const initials = (u.username || "?").slice(0, 1).toUpperCase();
+            const unread = Number(c.unread) || 0;
 
             return (
               <li key={c.id}>
-                <Link to={`/messages/${u.id}`} className="list-row">
+                <Link
+                  to={`/messages/${u.id}`}
+                  className={`list-row${unread > 0 ? " list-row--unread" : ""}`}
+                >
                   <span className="avatar" aria-hidden="true">{initials}</span>
 
                   <div className="list-row__body">
@@ -109,6 +122,15 @@ const Messages = () => {
                   </div>
 
                   <div className="list-row__trail">
+                    {unread > 0 && (
+                      <span className="unread-marker">
+                        <span className="unread-dot" aria-hidden="true" />
+                        {unread} new
+                        <span className="visually-hidden">
+                          {unread === 1 ? " message" : " messages"}
+                        </span>
+                      </span>
+                    )}
                     <span className="textlink-arrow__mark" aria-hidden="true">&rarr;</span>
                   </div>
                 </Link>

@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import { body, matchedData, validationResult } from "express-validator";
 import exchangesRouter from "./routes/exchanges.js";
+import messagesRouter from "./routes/messages.js";
 import { buildCorsOptions } from "./lib/cors.js";
 import { LOGIN_THROTTLED_MESSAGE, LoginThrottle } from "./lib/loginThrottle.js";
 import { consumeToken, hasLiveToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/authTokens.js";
@@ -34,8 +35,6 @@ import {
   User,
   WishlistBook,
   OfferedBook,
-  Conversation,
-  Message,
 } from "./Data.js";
 
 const app = express();
@@ -1014,159 +1013,8 @@ app.delete("/user/offered/:id", authMiddleware, async (req, res) => {
 });
 
 
-app.get("/messages", authMiddleware, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-
-    const conversations = await Conversation.find({
-      users: { $in: [userId] },
-    });
-
-    const formattedConversations = await Promise.all(
-      conversations.map(async (convo) => {
-        const otherUserId = String(convo.users[0]) === String(userId)
-          ? convo.users[1]
-          : convo.users[0];
-
-        const otherUserResult = await User.findById(otherUserId).select(
-          "_id username location ratings"
-        );
-
-        // ✅ get last message in this conversation
-        const lastMsg = await Message.findOne({ conversation: convo._id })
-          .sort({ createdAt: -1 })
-          .select("content createdAt");
-
-        const otherUserInfo = otherUserResult
-          ? {
-              id: otherUserResult._id,
-              location: otherUserResult.location,
-              ratings: otherUserResult.ratings,
-              username: otherUserResult.username,
-            }
-          : {
-              id: otherUserId,
-              location: null,
-              ratings: 0,
-              username: "Unknown",
-            };
-
-        return {
-          id: convo._id,
-          otherUser: otherUserInfo,
-          lastMessage: lastMsg?.content || "",
-          lastAt: lastMsg?.createdAt || null,
-        };
-      })
-    );
-
-    // ✅ sort by lastAt (most recent first). Conversations with no messages go bottom.
-    formattedConversations.sort((a, b) => {
-      const ta = a.lastAt ? new Date(a.lastAt).getTime() : 0;
-      const tb = b.lastAt ? new Date(b.lastAt).getTime() : 0;
-      return tb - ta;
-    });
-
-    res.json(formattedConversations);
-  } catch (err) {
-    console.error("Error fetching conversations: ", err);
-    res.status(500).json({
-      message: "Internal server error while fetching conversations",
-    });
-  }
-});
-
-app.get("/messages/:user", authMiddleware, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const otherUserId = req.params.user;
-
-    if (!mongoose.isValidObjectId(otherUserId)) {
-      return res.status(400).json({ message: "Invalid user id" });
-    }
-
-    const conversation = await Conversation.findOne({
-      users: { $all: [userId, otherUserId] },
-    });
-
-    if (!conversation) {
-      return res.status(404).json({ message: "Conversation not found" });
-    }
-
-    const [requester, nonRequester] = await Promise.all([
-      User.findById(userId).select("_id username location ratings"),
-      User.findById(otherUserId).select("_id username location ratings"),
-    ]);
-
-    if (!requester || !nonRequester) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const messages = await Message.find({ conversation: conversation._id })
-      .sort({ createdAt: 1 }) // oldest -> newest for chat UI
-      .lean();
-
-    const formatted = messages.map((msg) => {
-      const sender = String(msg.user) === String(userId) ? requester : nonRequester;
-      const receiver = String(msg.user) === String(userId) ? nonRequester : requester;
-
-      return {
-        id: msg._id,
-        sender,
-        receiver,
-        content: msg.content,
-        timestamp: msg.createdAt,
-      };
-    });
-
-    return res.json(formatted);
-  } catch (err) {
-    console.error("Error fetching messages:", err);
-    return res.status(500).json({
-      message: "Internal server error while fetching messages",
-    });
-  }
-});
-
-app.post("/messages/:user", authMiddleware, async (req, res) => {
-  const { content } = req.body
-
-  if (content === "") {
-    res.status(200).json({message: "Empty message ignored"})
-    return
-  }
-
-  try {
-    let conversation = await Conversation.findOne({ 
-      users: {
-        $in: [[req.params.user, req.user.userId], [req.user.userId, req.params.user]]
-      }, 
-    })
-    if (!conversation) {
-      const newConversation = new Conversation({
-        users: [req.params.user, req.user.userId]
-      })
-
-      conversation = await newConversation.save()
-    }
-
-    const conversationId = conversation["_id"]
-
-    const message = new Message({
-      content: content,
-      conversation: conversationId,
-      user: req.user.userId,
-      createdAt: new Date()
-    })
-
-    await message.save()
-    res.status(200).json({ messageId: message["_id"] })
-  } 
-  catch (err) {
-    console.error("Error sending message: ", err.message)
-    res.status(500).json({ message: "Internal server error while sending message" })
-  }
-})
+// Conversations, unread state and the incremental fetch the client polls.
+app.use("/messages", authMiddleware, messagesRouter);
 
 // --------------------
 // Error handling
