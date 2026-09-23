@@ -116,6 +116,16 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `lastMessageAt` / `lastMessageBy` (`back-end/routes/messages.js`); anything that writes a
   message must update both. `front-end/src/unread.js` holds the one shared navbar count.
 
+## Blocks, reports and ratings
+
+- A block (`Block` in `Data.js`) works both ways. Any route that lists offers builds its filter
+  with `marketFilter` from `back-end/lib/blocks.js` (which also applies `locked: false`), and
+  anything that lets one reader reach another (messages, proposing, countering or accepting a
+  trade) checks `isBlockedBetween` on the server. The public book routes use `optionalAuth` in
+  `app.js` so a signed-in caller's blocks apply; the front end calls them through `authFetch`.
+- A reader's rating is `ratingsAvg` over `ratingsCount`; the legacy `ratings` field is retired
+  and must not be read or written. The front end formats it only through `front-end/src/rating.js`.
+
 ## Front-end build (Vite)
 
 - The front end is a Vite app, not Create React App: `npm run dev`, `npm run build` (into
