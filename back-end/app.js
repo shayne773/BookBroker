@@ -318,12 +318,13 @@ app.post("/auth/login", loginValidators, async (req, res, next) => {
       });
     }
 
+    const token = await createSession(user._id);
+
     // Also only after the password, for the same reason.
-    if (user.suspended) {
+    if (await isSuspended(user._id)) {
+      await endSession(token);
       return res.status(403).json({ message: SUSPENDED_LOGIN_MESSAGE, code: ACCOUNT_SUSPENDED });
     }
-
-    const token = await createSession(user._id);
 
     res.json({ token, user: { id: user._id, username: user.username } });
   } catch (err) {

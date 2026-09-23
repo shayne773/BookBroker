@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import { api, createUser, authHeader, offerBook, signUp, TEST_PASSWORD } from "./helpers.js";
 import { Report, User } from "../Data.js";
@@ -168,6 +169,27 @@ describe("admin", () => {
       expect(res.body.code).to.equal("ACCOUNT_SUSPENDED");
       expect(res.body.message).to.match(/suspended/);
       expect(res.body).to.not.have.property("token");
+    });
+
+    it("refuses a sign-in that was checking the password when the suspension landed", async () => {
+      const compare = bcrypt.compare;
+      bcrypt.compare = async (...args) => {
+        const matched = await compare(...args);
+        await suspend(admin, reported);
+        return matched;
+      };
+
+      let res;
+      try {
+        res = await login(reported);
+      } finally {
+        bcrypt.compare = compare;
+      }
+
+      expect(res).to.have.status(403);
+      expect(res.body.code).to.equal("ACCOUNT_SUSPENDED");
+      expect(res.body).to.not.have.property("token");
+      expect(await Session.countDocuments({ user: reported.id })).to.equal(0);
     });
 
     it("still answers a wrong password as invalid credentials", async () => {
