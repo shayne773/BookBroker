@@ -3,12 +3,11 @@
 // ratingsCount ratings; the API sends both wherever it sends a reader.
 
 // What a reader nobody has rated yet shows instead of an average.
-// TODO(never-rated-display): pending a product decision - "0", blank, or "No rating yet".
-export const NEVER_RATED = '';
+export const NEVER_RATED = 'No ratings yet';
 
 export const isRated = (user) => Number(user?.ratingsCount) > 0;
 
-// "4.5 of 5 · 2 ratings", or NEVER_RATED.
+// "4.5 of 5 · 2 ratings", or "No ratings yet".
 export const formatRating = (user) => {
   if (!isRated(user)) return NEVER_RATED;
 

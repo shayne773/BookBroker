@@ -41,6 +41,7 @@ test('lists each wishlisted book on offer with every reader offering it', async 
   expect(links.map((a) => a.getAttribute('href'))).toEqual(['/books/o1', '/books/o2']);
   expect(links[0]).toHaveTextContent('rob');
   expect(links[0]).toHaveTextContent('Queens · 4.5 of 5 · 2 ratings');
+  expect(links[1]).toHaveTextContent('Bronx · No ratings yet');
   expect(screen.getByText('2 offers')).toBeInTheDocument();
   expect(screen.queryByText('Dune')).not.toBeInTheDocument();
 });
