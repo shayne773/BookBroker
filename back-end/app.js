@@ -19,6 +19,9 @@ import { createSession, endSession, endUserSessions, useSession } from "./lib/se
 import { captureCover } from "./lib/covers.js";
 import { runInBackground } from "./lib/background.js";
 import { wishlistMatches } from "./lib/matches.js";
+import { listBooks, mostWanted, NEWEST_FIRST, readerTaste, recommendations } from "./lib/listings.js";
+import { distanceFields, moveOwnerBooks, readerArea, withinArea } from "./lib/nearby.js";
+import { lookupZip } from "./lib/zipCodes.js";
 import {
   NOTIFICATION_CATEGORIES,
   notificationSettings,
@@ -113,6 +116,17 @@ const googleBooksThrottle = new LoginThrottle({
 });
 const GOOGLE_BOOKS_THROTTLED_MESSAGE =
   "Too many book searches. Please try again in a few minutes.";
+
+// Distances are measured from a reader's ZIP, so moving it at will would let a
+// reader work out where others are from the distances shown at each ZIP.
+const ZIP_CHANGES_PER_DAY = 3;
+const zipChangeThrottle = new LoginThrottle({
+  scope: "zip-change",
+  windowMs: 24 * HOUR,
+  lockoutMs: 24 * HOUR,
+  accountMaxAttempts: ZIP_CHANGES_PER_DAY,
+});
+const ZIP_CHANGE_THROTTLED_MESSAGE = `You can change your ZIP code ${ZIP_CHANGES_PER_DAY} times a day. Please try again tomorrow.`;
 
 // Answers 429 and returns true when the caller or the address is over its limit.
 async function mailRequestLimited(throttles, req, res, email) {
@@ -218,7 +232,11 @@ const optionalAuth = async (req, res, next) => {
 };
 
 // The fields of another reader that the app shows wherever it names them.
+// `location` is their place name; their ZIP and point never leave the server.
 const PUBLIC_USER_FIELDS = "_id username location ratingsAvg ratingsCount";
+
+// The caller's own settings, on top of the public fields, for their profile.
+const OWN_USER_FIELDS = `${PUBLIC_USER_FIELDS} email pendingEmail zip maxDistanceMiles`;
 
 //exchange routes
 app.use("/exchanges", authMiddleware, exchangesRouter);
@@ -236,7 +254,8 @@ app.post("/auth/register", registerValidators, async (req, res, next) => {
 
   // matchedData returns only the validated + sanitized fields: the email is
   // already normalized and the strings are trimmed.
-  const { username, email, password, location } = matchedData(req);
+  const { username, email, password, zip } = matchedData(req);
+  const where = lookupZip(zip);
 
   try {
     const existingUser = await User.findOne({ email });
@@ -247,7 +266,9 @@ app.post("/auth/register", registerValidators, async (req, res, next) => {
       username,
       email,
       password: hashedPassword,
-      location,
+      zip: where.zip,
+      location: where.place,
+      geo: where.point,
       emailVerified: false,
     });
     await user.save();
@@ -494,9 +515,11 @@ app.post("/logout", async (req, res, next) => {
   }
 });
 
+// A direct link opens a book wherever it is, beyond the caller's distance too,
+// and says how far away it is (beyond it, only that it is farther).
 app.get("/books/:id", optionalAuth, async (req, res, next) => {
   try {
-    const book = await OfferedBook.findById(req.params.id);
+    const book = await OfferedBook.findById(req.params.id).select("+ownerGeo");
     if (!book) return res.status(404).json({ message: "Book not found" });
 
     // A blocked or suspended reader's offers do not exist as far as others are concerned.
@@ -507,11 +530,10 @@ app.get("/books/:id", optionalAuth, async (req, res, next) => {
       return res.status(404).json({ message: "Book not found" });
     }
 
-    const owner = await User.findById(book.owner);
-    const result = { ...book["_doc"] };
-    result.owner = owner ? { id: owner["_id"], username: owner.username } : null;
-
-    res.json(result);
+    const owner = await User.findById(book.owner).select("username location");
+    const { ownerGeo, ...result } = book.toObject();
+    result.owner = owner ? { id: owner._id, username: owner.username, location: owner.location } : null;
+    res.json({ ...result, ...distanceFields(await readerArea(req.user?.userId), ownerGeo) });
   } catch (err) {
     // A malformed id is simply "no such book" as far as the caller is
     // concerned; anything else is a real failure for the error handler.
@@ -522,9 +544,12 @@ app.get("/books/:id", optionalAuth, async (req, res, next) => {
   }
 });
 
-app.get("/genres", async (req, res, next) => {
+app.get("/genres", optionalAuth, async (req, res, next) => {
   try {
-    const genres = await OfferedBook.distinct("genre");
+    const genres = await OfferedBook.distinct(
+      "genre",
+      withinArea(await readerArea(req.user?.userId))
+    );
     res.json(genres);
   } catch (err) {
     next(err);
@@ -535,9 +560,12 @@ app.get("/genres/:genre", optionalAuth, async (req, res, next) => {
   try {
     // Escaped before it reaches the regex engine: raw user text here would
     // otherwise be interpreted as a regex pattern.
-    const books = await OfferedBook.find({
-      ...(await marketFilter(req.user?.userId, { includeOwn: true })),
-      genre: safeRegex(req.params.genre),
+    const books = await listBooks({
+      area: await readerArea(req.user?.userId),
+      match: {
+        ...(await marketFilter(req.user?.userId, { includeOwn: true })),
+        genre: safeRegex(req.params.genre),
+      },
     });
     res.json(books);
   } catch (err) {
@@ -547,74 +575,25 @@ app.get("/genres/:genre", optionalAuth, async (req, res, next) => {
 
 app.get("/new", optionalAuth, async (req, res, next) => {
   try {
-    const books = await OfferedBook.find(await marketFilter(req.user?.userId, { includeOwn: true }))
-      .sort({ createdAt: -1 })
-      .limit(20);
+    const books = await listBooks({
+      area: await readerArea(req.user?.userId),
+      match: await marketFilter(req.user?.userId, { includeOwn: true }),
+      sort: NEWEST_FIRST,
+      limit: 20,
+    });
     res.json(books);
   } catch (err) {
     next(err);
   }
 });
 
-// Normalised (trimmed, lower-cased) value of a book field, "" when missing.
-const normalised = (field) => ({ $toLower: { $trim: { input: { $ifNull: [field, ""] } } } });
-
-// Books matching `match`, most wanted first: ranked by how many readers have the
-// same book on their wishlist. Two books are the same when both carry an ISBN and
-// it agrees; otherwise title and author agree, ignoring case. Ties, including the
-// case where nothing is wishlisted yet, fall back to newest listing first.
-function mostWanted(match, limit) {
-  return OfferedBook.aggregate([
-    { $match: match },
-    {
-      $lookup: {
-        from: WishlistBook.collection.name,
-        let: {
-          bookIsbn: normalised("$isbn"),
-          bookTitle: normalised("$title"),
-          bookAuthor: normalised("$author"),
-        },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $let: {
-                  vars: {
-                    isbn: normalised("$isbn"),
-                    title: normalised("$title"),
-                    author: normalised("$author"),
-                  },
-                  in: {
-                    $cond: [
-                      { $and: [{ $ne: ["$$bookIsbn", ""] }, { $ne: ["$$isbn", ""] }] },
-                      { $eq: ["$$bookIsbn", "$$isbn"] },
-                      {
-                        $and: [
-                          { $ne: ["$$bookTitle", ""] },
-                          { $eq: ["$$bookTitle", "$$title"] },
-                          { $eq: ["$$bookAuthor", "$$author"] },
-                        ],
-                      },
-                    ],
-                  },
-                },
-              },
-            },
-          },
-          { $group: { _id: "$userId" } },
-        ],
-        as: "wantedBy",
-      },
-    },
-    { $addFields: { wantedBy: { $size: "$wantedBy" } } },
-    { $sort: { wantedBy: -1, createdAt: -1, _id: -1 } },
-    { $limit: limit },
-  ]);
-}
-
 app.get("/popular", optionalAuth, async (req, res, next) => {
   try {
-    const books = await mostWanted(await marketFilter(req.user?.userId, { includeOwn: true }), 20);
+    const books = await mostWanted(
+      await readerArea(req.user?.userId),
+      await marketFilter(req.user?.userId, { includeOwn: true }),
+      20
+    );
     res.json(books);
   } catch (err) {
     next(err);
@@ -629,9 +608,11 @@ app.get("/feed", authMiddleware, async (req, res, next) => {
   try {
     const userId = req.user.userId;
 
-    const books = await OfferedBook.find(await marketFilter(userId))
-      .sort({ createdAt: -1 })
-      .limit(20);
+    const books = await listBooks({
+      area: await readerArea(userId),
+      match: await marketFilter(userId),
+      limit: 20,
+    });
 
     res.json(books);
   } catch (err) {
@@ -640,19 +621,21 @@ app.get("/feed", authMiddleware, async (req, res, next) => {
 });
 
 app.get("/books", authMiddleware, async (req, res, next) => {
-  const query = String(req.query.query ?? "").toLowerCase();
+  const query = String(req.query.query ?? "").trim();
   const userId = req.user.userId;
 
   try {
-    const books = await OfferedBook.find(await marketFilter(userId));
+    // Escaped before it reaches the regex engine, as in /browse.
+    const pattern = query ? safeRegex(query) : null;
+    const books = await listBooks({
+      area: await readerArea(userId),
+      match: {
+        ...(await marketFilter(userId)),
+        ...(pattern ? { $or: [{ title: pattern }, { author: pattern }] } : {}),
+      },
+    });
 
-    const filtered = books.filter(
-      (book) =>
-        (book.title || "").toLowerCase().includes(query) ||
-        (book.author || "").toLowerCase().includes(query)
-    );
-
-    res.json(filtered);
+    res.json(books);
   } catch (err) {
     next(err);
   }
@@ -669,62 +652,39 @@ app.get("/browse", authMiddleware, async (req, res, next) => {
 
   try {
     // Books committed to an accepted trade are off the market until it ends,
-    // and a blocked reader's books are hidden in both directions.
+    // a blocked reader's books are hidden in both directions, and a book
+    // beyond the reader's distance is not shown at all.
     const onMarket = await marketFilter(userId);
+    const area = await readerArea(userId);
 
     /* ---------------- SEARCH ---------------- */
     // Escaped before it reaches the regex engine: raw input here would allow
     // regex injection and a pattern that backtracks catastrophically.
     const searchPattern = q ? safeRegex(q) : null;
     const searchResults = searchPattern
-      ? await OfferedBook.find({
-          ...onMarket,
-          $or: [{ title: searchPattern }, { author: searchPattern }],
+      ? await listBooks({
+          area,
+          match: { ...onMarket, $or: [{ title: searchPattern }, { author: searchPattern }] },
+          limit: 40,
         })
-          .sort({ createdAt: -1 })
-          .limit(40)
       : [];
 
     /* ---------------- MOST WANTED ---------------- */
-    const popular = await mostWanted(onMarket, LIMIT_SECTION);
+    const popular = await mostWanted(area, onMarket, LIMIT_SECTION);
 
     /* ---------------- NEW ---------------- */
-    const newlyAdded = await OfferedBook.find(onMarket)
-      .sort({ createdAt: -1 })
-      .limit(LIMIT_SECTION);
-
-    /* ---------------- RECOMMENDED ---------------- */
-    const user = await User.findById(userId).select("location");
-    let recommended = [];
-
-    if (user?.location) {
-      recommended = await OfferedBook.aggregate([
-        { $match: onMarket },
-        {
-          $lookup: {
-            from: "users",
-            localField: "owner",
-            foreignField: "_id",
-            as: "ownerDetails",
-          },
-        },
-        { $unwind: "$ownerDetails" },
-        {
-          $match: {
-            "ownerDetails.location": user.location,
-          },
-        },
-        // The joined owner document is only a filter; it never reaches the client.
-        { $project: { ownerDetails: 0 } },
-        { $sort: { createdAt: -1 } },
-        { $limit: LIMIT_SECTION },
-      ]);
-    }
+    const newlyAdded = await listBooks({
+      area,
+      match: onMarket,
+      sort: NEWEST_FIRST,
+      limit: LIMIT_SECTION,
+    });
 
     /* ---------------- GENRES ---------------- */
     const genres = (
       await OfferedBook.distinct("genre", {
         ...onMarket,
+        ...withinArea(area),
         genre: { $ne: null },
       })
     )
@@ -733,19 +693,15 @@ app.get("/browse", authMiddleware, async (req, res, next) => {
 
     const genreRows = {};
     for (const genre of genres) {
-      genreRows[genre] = await OfferedBook.find({
-        ...onMarket,
-        genre,
-      })
-        .sort({ createdAt: -1 })
-        .limit(LIMIT_ROW);
+      genreRows[genre] = await listBooks({ area, match: { ...onMarket, genre }, limit: LIMIT_ROW });
     }
 
     /* ---------------- RESPONSE ---------------- */
+    // `area` is the caller's own place and distance; null until they add a ZIP.
     res.json({
       q,
+      area: area && { place: area.place, miles: area.miles },
       searchResults,
-      recommended,
       popular,
       newlyAdded,
       genres,
@@ -761,9 +717,7 @@ app.get("/browse", authMiddleware, async (req, res, next) => {
 app.get("/user", authMiddleware, async (req, res, next) => {
   try {
     const me = await withLivePendingEmail(
-      await User.findById(req.user.userId).select(
-        `${PUBLIC_USER_FIELDS} email pendingEmail emailVerified notifications`
-      )
+      await User.findById(req.user.userId).select(`${OWN_USER_FIELDS} emailVerified notifications`)
     );
     if (!me) return res.status(404).json({ message: "User not found" });
 
@@ -869,10 +823,15 @@ app.get("/users/:id/offered", authMiddleware, async (req, res) => {
 
     const books = await OfferedBook.find({
       owner: req.params.id,
-      locked: false,              
-    }).sort({ createdAt: -1 });
+      locked: false,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    res.json(books);
+    // Their shelf opens wherever they are, each book saying how far away it is.
+    const owner = await User.findById(req.params.id).select("geo").lean();
+    const distance = distanceFields(await readerArea(req.user.userId), owner?.geo);
+    res.json(books.map((book) => ({ ...book, ...distance })));
   } catch (err) {
     console.error("Error fetching offered books for user:", err);
     res.status(500).json({ error: "Failed to fetch offered books" });
@@ -974,8 +933,11 @@ app.post(
     const { title, author, publisher, year, cover, isbn, genre, desc } = req.body;
 
     try {
+      // The book is placed where its owner is, for distance queries.
+      const owner = await User.findById(req.user.userId).select("geo").lean();
       const book = new OfferedBook({
         owner: req.user.userId, // ✅ from token
+        ownerGeo: owner?.geo,
         title,
         author,
         publisher,
@@ -1018,37 +980,20 @@ app.get("/user/wishlist/:isbn", authMiddleware, async (req, res, next) => {
   }
 });
 
-app.get("/user/get-recommended-books", authMiddleware, async (req, res, next) => {
+// Books for the caller: other readers' books on the market within their
+// distance, ranked by the authors and genres on the caller's wishlist and
+// shelf, then by how many readers want them, then nearest first
+// (lib/listings.js).
+app.get("/recommendations", authMiddleware, async (req, res, next) => {
   const userId = req.user.userId;
 
   try {
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const userLocation = user.location;
-
-    const books = await OfferedBook.aggregate([
-      {
-        $lookup: {
-          from: "users",
-          localField: "owner",
-          foreignField: "_id",
-          as: "ownerDetails",
-        },
-      },
-      { $unwind: "$ownerDetails" },
-      {
-        $match: {
-          ...(await marketFilter(userId)),
-          "ownerDetails.location": userLocation,
-        },
-      },
-      // The joined owner document is only a filter; it never reaches the client.
-      { $project: { ownerDetails: 0 } },
-      { $sort: { createdAt: -1 } },
+    const [area, match, taste] = await Promise.all([
+      readerArea(userId),
+      marketFilter(userId),
+      readerTaste(userId),
     ]);
-
-    res.json(books);
+    res.json(await recommendations({ area, match, taste, limit: 20 }));
   } catch (err) {
     next(err);
   }
@@ -1060,12 +1005,30 @@ app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
 
   try {
     const userId = req.user.userId;
-    const { username, location } = req.body.user;
-    const email = matchedData(req).user?.email;
+    const { username } = req.body.user;
+    const { email, zip, maxDistanceMiles } = matchedData(req).user ?? {};
 
     const update = {};
     if (username?.trim()) update.username = username.trim();
-    if (location?.trim()) update.location = location.trim();
+    if (maxDistanceMiles !== undefined && maxDistanceMiles !== null) {
+      update.maxDistanceMiles = maxDistanceMiles;
+    }
+    // The ZIP sets the place others see and the point the reader's books are
+    // found by, so a new one moves every book of theirs too.
+    const where = zip ? lookupZip(zip) : null;
+    if (where) {
+      const current = await User.findById(userId).select("zip").lean();
+      if (current?.zip !== where.zip) {
+        const limit = await zipChangeThrottle.hit(userId);
+        if (limit.limited) {
+          res.set("Retry-After", String(limit.retryAfterSeconds));
+          return res.status(429).json({ message: ZIP_CHANGE_THROTTLED_MESSAGE });
+        }
+      }
+      update.zip = where.zip;
+      update.location = where.place;
+      update.geo = where.point;
+    }
 
     // A new address only becomes the account's email once the link mailed to it
     // is followed; until then it is held as pending.
@@ -1086,7 +1049,8 @@ app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
       userId,
       { $set: update },
       { new: true }
-    ).select(`${PUBLIC_USER_FIELDS} email pendingEmail`);
+    ).select(OWN_USER_FIELDS);
+    if (where && updatedUser) await moveOwnerBooks(userId, where.point);
 
     if (pendingEmail && updatedUser) {
       const token = await issueToken(TOKEN_PURPOSES.changeEmail, updatedUser._id);

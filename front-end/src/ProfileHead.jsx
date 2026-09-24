@@ -29,7 +29,7 @@ const ProfileHead = ({ kicker, user, children }) => (
       </div>
       <div>
         <dt className="fact__term">Location</dt>
-        <dd className="fact__value">{user?.location ?? 'N/A'}</dd>
+        <dd className="fact__value">{user?.location || 'N/A'}</dd>
       </div>
       <div>
         <dt className="fact__term">Rating</dt>

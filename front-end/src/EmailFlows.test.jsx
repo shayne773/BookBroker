@@ -42,12 +42,27 @@ test('sign-up ends on a check-your-email state', async () => {
   await userEvent.type(screen.getByLabelText('Username'), 'reader');
   await userEvent.type(screen.getByLabelText('Password'), 'Str0ngPassw0rd');
   await userEvent.type(screen.getByLabelText('Confirm'), 'Str0ngPassw0rd');
-  await userEvent.selectOptions(screen.getByLabelText('City'), 'Chicago');
+  await userEvent.type(screen.getByLabelText('ZIP code'), '60614-1234');
   await userEvent.click(screen.getByRole('button', { name: 'Sign up' }));
 
   expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeInTheDocument();
+  expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toMatchObject({ zip: '60614' });
   expect(screen.getByText('reader@example.com')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Resend confirmation email' })).toBeInTheDocument();
+});
+
+test('sign-up asks for a US ZIP code before sending anything', async () => {
+  renderAt('/signup');
+
+  await userEvent.type(screen.getByLabelText('Email'), 'reader@example.com');
+  await userEvent.type(screen.getByLabelText('Username'), 'reader');
+  await userEvent.type(screen.getByLabelText('Password'), 'Str0ngPassw0rd');
+  await userEvent.type(screen.getByLabelText('Confirm'), 'Str0ngPassw0rd');
+  await userEvent.type(screen.getByLabelText('ZIP code'), 'M5V 2T6');
+  await userEvent.click(screen.getByRole('button', { name: 'Sign up' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Enter a 5-digit US ZIP code.');
+  expect(global.fetch).not.toHaveBeenCalled();
 });
 
 test('confirm-email spends the token once and reports success', async () => {

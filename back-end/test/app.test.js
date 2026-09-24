@@ -25,7 +25,7 @@ describe("auth", () => {
 
     const res = await api()
       .post("/auth/register")
-      .send({ username: "again", email: user.email, password: TEST_PASSWORD, location: "Queens" });
+      .send({ username: "again", email: user.email, password: TEST_PASSWORD, zip: "11375" });
 
     expect(res).to.have.status(400);
   });
@@ -90,7 +90,11 @@ describe("books", () => {
     expect(res).to.have.status(200);
     expect(res).to.be.json;
     expect(res.body).to.include({ _id: book.id, title: "The Hobbit" });
-    expect(res.body.owner).to.deep.equal({ id: other.id, username: other.username });
+    expect(res.body.owner).to.deep.equal({
+      id: other.id,
+      username: other.username,
+      location: "Brooklyn, NY",
+    });
   });
 
   it("GET /books/:id answers 404 for an id that matches no book", async () => {

@@ -13,9 +13,12 @@ Both deploy to one [Vercel](https://vercel.com/) project at one address: the sit
 as static files and the API as a Vercel Function under `/api` (see
 [Deployment](#deployment)).
 
-What it does today: sign up with email confirmation, sign in and password reset,
-browse and search books (via a server-side Google Books proxy), keep a shelf of
-offered books and a wishlist, see which wishlist books other readers are offering,
+What it does today: sign up with a US ZIP code and email confirmation, sign in and
+password reset, browse and search the books within your chosen distance, nearest
+first, with recommendations drawn from your wishlist and shelf (see
+[Location](#location)), find books to add via a server-side Google Books proxy, keep
+a shelf of offered books and a wishlist, see which wishlist books other readers
+nearby are offering,
 propose and accept trades, message other users, rate a trading partner and see each
 reader's average rating, block or report another reader, and get email about new
 messages, trades and newly offered wishlist books (each category can be turned off).
@@ -111,6 +114,35 @@ npm install
 npm run dev      # npm run build / npm run preview for the production bundle
 ```
 
+## Location
+
+Trades happen in person, so where a reader is decides what they see. Each reader
+sets a US ZIP code (at sign-up, or later on their profile) and a distance: 5, 10,
+25 (the default), 50 or 100 miles. Browse, search, genres, most wanted, the feed,
+recommendations and wishlist matches then show only the books within that distance,
+nearest first unless a list has its own order, each labelled with how far away it
+is; a book beyond it is hidden, though a direct link to it still opens. Wishlist
+emails go only to readers whose distance reaches the offer. Recommendations rank the
+nearby books by the authors and genres on the reader's wishlist and shelf, then by
+how many readers want them, then by distance.
+
+Other readers see a reader's town ("Brooklyn, NY") and, for a book within their own
+distance, a rounded distance to it (beyond it, only "More than 25 mi away"), never
+their ZIP code or coordinates. A reader can change their ZIP code 3 times a day. An
+account from before ZIP codes is asked to add one, and until then sees every book,
+without distances; its own books are hidden from readers who have set a ZIP.
+
+ZIP codes are resolved offline from `back-end/data/us-zip-codes.tsv.gz`, with no
+geocoding service at runtime. It is built from the
+[GeoNames](https://www.geonames.org/) postal code dump for the United States,
+licensed under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/)
+and used here with credit to GeoNames. To regenerate it from the current dump:
+
+```
+cd back-end
+npm run build:zip-codes
+```
+
 ## Demo data
 
 The seed needs `MONGODB_URI` and `GOOGLE_BOOKS_API_KEY` in `back-end/.env`.
@@ -119,6 +151,10 @@ The seed needs `MONGODB_URI` and `GOOGLE_BOOKS_API_KEY` in `back-end/.env`.
 cd back-end
 npm run seed     # replaces the seed_user_* demo users and their 100 books
 ```
+
+The ten demo readers live at real ZIP codes in four metro areas (New York, Chicago,
+Champaign-Urbana and the San Francisco Bay Area), so readers in the same area see
+each other's books with distances and readers elsewhere do not.
 
 It fetches every book, cover included, before deleting the previous seed, so a
 Google failure leaves the existing data in place. Covers are stored as https; a book

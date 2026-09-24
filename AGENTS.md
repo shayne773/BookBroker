@@ -155,6 +155,24 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `lastMessageAt` / `lastMessageBy` (`back-end/routes/messages.js`); anything that writes a
   message must update both. `front-end/src/unread.js` holds the one shared navbar count.
 
+## Location and distance
+
+- Trades are in person, so every list of books for a reader is limited to their distance
+  (`User.maxDistanceMiles`, default 25) around their ZIP. Build it with `listBooks`,
+  `mostWanted` or `recommendations` (`back-end/lib/listings.js`) and `readerArea(userId)`
+  (`lib/nearby.js`): `$geoNear` must open the pipeline and does not cast its query, and
+  `presentStages` adds the rounded `distanceMiles` and strips `ownerGeo`. A reader without a
+  ZIP has a null area: unfiltered, no distances.
+- `User.zip` and `User.geo` and `OfferedBook.ownerGeo` are `select: false` and never reach
+  another reader; `User.location` is the public place name. Every new book copies its owner's
+  `geo` into `ownerGeo`, and a ZIP change calls `moveOwnerBooks`.
+- A distance is a way to locate a reader, so it is sent only for books within the caller's
+  distance (`distanceFields` in `lib/nearby.js` for a single book; beyond it, only a
+  `distanceLabel`), never on a reader's profile, and ZIP changes are throttled (3 a day).
+- ZIPs resolve offline through `lib/zipCodes.js` from the bundled GeoNames table
+  (`npm run build:zip-codes`; shipped to Vercel by `includeFiles` in `vercel.json`).
+  Test fixtures live in Brooklyn (11201); `createUser({ zip: null })` is a pre-ZIP account.
+
 ## Blocks, reports, suspensions and ratings
 
 - A block (`Block` in `Data.js`) works both ways. Any route that lists offers builds its filter

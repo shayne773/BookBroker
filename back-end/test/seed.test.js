@@ -1,6 +1,8 @@
 import { expect } from "chai";
 import { OfferedBook, User } from "../Data.js";
-import { seed } from "../seed.js";
+import { seed, SEED_ZIPS } from "../seed.js";
+import { lookupZip } from "../lib/zipCodes.js";
+import { metersBetween, METERS_PER_MILE } from "../lib/nearby.js";
 import { createOfferedBook, createUser, googleVolume, httpFailure, mockHttp } from "./helpers.js";
 
 const quiet = { pauseMs: 0, log: () => {} };
@@ -87,5 +89,26 @@ describe("seed.js", () => {
     expect(books).to.have.length(100);
     expect(books.every((b) => b.cover.startsWith("https://"))).to.equal(true);
     expect(books.filter((b) => b.cover === "https://covers.openlibrary.org/b/id/900-M.jpg")).to.have.length(10);
+  });
+
+  it("places the seeded readers at real ZIP codes, and their books with them", async () => {
+    process.env.GOOGLE_BOOKS_API_KEY = "seed-test-key";
+    fakeSources();
+
+    await seed(quiet);
+
+    const users = await User.find({ email: /^seed_user_/ }).select("zip geo location").lean();
+    expect(users.map((u) => u.zip)).to.have.members(SEED_ZIPS);
+    expect(users.every((u) => u.geo?.type === "Point" && /, [A-Z]{2}$/.test(u.location))).to.equal(true);
+
+    const books = await OfferedBook.find().select("owner +ownerGeo").lean();
+    const geoOf = new Map(users.map((u) => [String(u._id), u.geo]));
+    expect(books.every((b) => b.ownerGeo && b.ownerGeo.coordinates.join() === geoOf.get(String(b.owner)).coordinates.join())).to.equal(true);
+
+    // Some readers are within the default 25 miles of each other, some far apart.
+    const [brooklyn, ...others] = SEED_ZIPS.map((zip) => lookupZip(zip).point);
+    const miles = others.map((p) => metersBetween(brooklyn, p) / METERS_PER_MILE);
+    expect(miles.filter((m) => m <= 25)).to.not.be.empty;
+    expect(miles.filter((m) => m > 100)).to.not.be.empty;
   });
 });

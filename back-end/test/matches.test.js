@@ -8,7 +8,7 @@ describe("wishlist matches", () => {
 
   beforeEach(async () => {
     reader = await signUp();
-    owner = await signUp({ location: "Queens" });
+    owner = await signUp({ zip: "11375" });
   });
 
   const wish = (user, fields = {}) =>
@@ -36,7 +36,7 @@ describe("wishlist matches", () => {
     expect(res.body[0].offers[0].owner).to.deep.equal({
       _id: owner.id,
       username: owner.username,
-      location: "Queens",
+      location: "Forest Hills, NY",
       ratingsAvg: 4.5,
       ratingsCount: 2,
     });
@@ -61,9 +61,9 @@ describe("wishlist matches", () => {
     expect(res.body.map((m) => m.wishlistBook._id)).to.deep.equal([String(second._id)]);
   });
 
-  it("gathers every reader offering the same book, newest first", async () => {
+  it("gathers every reader offering the same book, newest first at the same distance", async () => {
     await wish(reader);
-    const another = await signUp();
+    const another = await signUp({ zip: "11375" });
     const older = await offerBook(owner, { createdAt: new Date("2026-01-01") });
     const newer = await offerBook(another, { createdAt: new Date("2026-02-01") });
 

@@ -1,16 +1,19 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState } from 'react';
+import { authFetch, isSessionExpiredError } from '../auth';
 
 const ByCategory = () => {
   const [genres, setGenres] = useState([]);
 
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_SERVER_ADDRESS}/genres`)
+    // Signed in, so the genres are those of the books within your distance.
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/genres`)
       .then((res) => res.json())
       .then((data) => {
-        setGenres(data);
+        setGenres(Array.isArray(data) ? data.filter(Boolean) : []);
       })
       .catch((error) => {
+        if (isSessionExpiredError(error)) return;
         console.error('Failed to fetch genres:', error);
         setGenres([]);
       });

@@ -23,7 +23,7 @@ const register = (overrides = {}) =>
       username: "newreader",
       email: EMAIL,
       password: TEST_PASSWORD,
-      location: "Brooklyn",
+      zip: "11201",
       ...overrides,
     });
 
@@ -60,7 +60,7 @@ describe("email confirmation", () => {
       username: "newreader",
       email: EMAIL,
       password: TEST_PASSWORD,
-      location: "Brooklyn",
+      zip: "11201",
     });
 
     expect(outbox[0].link).to.not.include("evil.example.com");
@@ -476,14 +476,14 @@ describe("changing the account email", () => {
     expect((await User.findById(user._id)).pendingEmail).to.equal(undefined);
   });
 
-  it("keeps a live pending change through a username or location edit", async () => {
+  it("keeps a live pending change through a username or ZIP code edit", async () => {
     const user = await createUser();
     await requestChange(user);
 
     const res = await api()
       .post("/user/edit")
       .set(await authHeader(user))
-      .send({ user: { username: "renamed", location: "Queens", email: user.email } });
+      .send({ user: { username: "renamed", zip: "11375", email: user.email } });
 
     expect(res).to.have.status(200);
     expect(res.body.user.pendingEmail).to.equal(NEW_EMAIL);

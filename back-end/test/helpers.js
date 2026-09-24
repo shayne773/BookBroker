@@ -8,6 +8,7 @@ import { outbox } from "./setup.js";
 import { http } from "../lib/http.js";
 import { createSession } from "../lib/sessions.js";
 import { normalizeEmail } from "../lib/validation.js";
+import { lookupZip } from "../lib/zipCodes.js";
 
 use(chaiHttp);
 
@@ -56,7 +57,7 @@ export async function signUp(overrides = {}) {
     username: `reader${userCount}`,
     email: `reader${userCount}@example.com`,
     password: TEST_PASSWORD,
-    location: "Brooklyn",
+    zip: "11201",
     ...overrides,
   };
 
@@ -77,10 +78,14 @@ export async function signUp(overrides = {}) {
   };
 }
 
+// Where `userId` is, as a book of theirs records it (see the add-offered-book route).
+const ownerGeo = async (userId) => (await User.findById(userId).select("geo").lean())?.geo;
+
 // Inserts an offered book owned by `owner` directly, so tests get real document ids.
 export async function offerBook(owner, fields = {}) {
   return OfferedBook.create({
     owner: owner.id,
+    ownerGeo: await ownerGeo(owner.id),
     title: "The Hobbit",
     author: "J. R. R. Tolkien",
     publisher: "Allen & Unwin",
@@ -98,15 +103,21 @@ export async function clearDatabase() {
   await Promise.all(Object.values(collections).map((c) => c.deleteMany({})));
 }
 
-// Stores the email normalized, as every route does.
+// Stores the email normalized, as every route does. The user is in Brooklyn
+// (11201) unless `zip` names another ZIP code; `zip: null` makes an account from
+// before ZIP codes, with the free-text `location` it typed and no position.
 export async function createUser(overrides = {}) {
-  const { password = TEST_PASSWORD, ...rest } = overrides;
+  const { password = TEST_PASSWORD, zip = "11201", ...rest } = overrides;
   const suffix = new mongoose.Types.ObjectId().toString();
+  const where = zip ? lookupZip(zip) : null;
+  if (zip && !where) throw new Error(`no such ZIP code ${zip}`);
 
   return User.create({
     username: `user_${suffix.slice(-6)}`,
     password: await bcrypt.hash(password, 10),
-    location: "Brooklyn",
+    ...(where
+      ? { zip: where.zip, location: where.place, geo: where.point }
+      : { location: "Brooklyn" }),
     ...rest,
     email: normalizeEmail(rest.email ?? `user_${suffix}@example.com`),
   });
@@ -120,6 +131,7 @@ export async function authHeader(user) {
 export async function createOfferedBook(owner, overrides = {}) {
   return OfferedBook.create({
     owner: owner._id,
+    ownerGeo: await ownerGeo(owner._id),
     title: "The Hobbit",
     author: "J.R.R. Tolkien",
     publisher: "Allen & Unwin",

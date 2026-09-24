@@ -1,19 +1,20 @@
 import { useState, useEffect } from "react";
 import { authFetch, isSessionExpiredError } from './auth';
 import BookCover from './BookCover';
+import DistanceLabel from './DistanceLabel';
+import LocationPrompt from './LocationPrompt';
+import useReaderArea from './useReaderArea';
 
 const Feed = () => {
   const [booksData, setBooksData] = useState([]);
+  const area = useReaderArea();
 
   useEffect(() => {
-    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/get-recommended-books`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    }).then(res => res.json())
+    // Nearby books ranked by the authors and genres on your wishlist and shelf.
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/recommendations`)
+    .then(res => res.json())
     .then(data => {
-        setBooksData(data);
+        setBooksData(Array.isArray(data) ? data : []);
     })
     .catch(err => {
         // RequireAuth is already redirecting to the login page.
@@ -33,6 +34,8 @@ const Feed = () => {
         </div>
       </div>
 
+      <LocationPrompt area={area} />
+
       {/* Books */}
       <div className="section">
         <div className="book-grid">
@@ -47,6 +50,7 @@ const Feed = () => {
                 <br />
                 {book.author || "[NO AUTHOR]"}
               </p>
+              <DistanceLabel miles={book.distanceMiles} block />
               <a
                 href={`/books/${book._id}`}
                 className="button button--secondary button--small button--block tile-action"

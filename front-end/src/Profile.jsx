@@ -9,6 +9,8 @@ import useBookSearch from './Profile/useBookSearch';
 import useWishlistMatches from './Profile/useWishlistMatches';
 import BlockedReaders from './Profile/BlockedReaders';
 import NotificationSettings from './Profile/NotificationSettings';
+import LocationSettings from './Profile/LocationSettings';
+import { formatDistance } from './distance';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -31,10 +33,6 @@ const Profile = () => {
 
   const wishlistSearch = useBookSearch();
   const offerSearch = useBookSearch();
-
-  // Edit profile fields
-  const [location, setLocation] = useState('');
-  const [customLocation, setCustomLocation] = useState('');
 
   const fetchUserData = () => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user?id=${userId}`)
@@ -120,9 +118,8 @@ const Profile = () => {
     e.preventDefault();
     const username = e.target.username.value;
     const email = e.target.email.value;
-    const finalLocation = location === 'Other' ? customLocation : location;
 
-    const data = { user: { username, email, location: finalLocation } };
+    const data = { user: { username, email } };
 
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/edit`, {
       method: 'POST',
@@ -161,13 +158,7 @@ const Profile = () => {
   return (
     <main className="page">
       <ProfileHead kicker="Your profile" user={user}>
-        <EditProfileDialog
-          location={location}
-          setLocation={setLocation}
-          customLocation={customLocation}
-          setCustomLocation={setCustomLocation}
-          onSubmit={handleProfileEdit}
-        />
+        <EditProfileDialog onSubmit={handleProfileEdit} />
 
         {/* The API decides who is an admin (ADMIN_EMAILS); this only offers the page. */}
         {user.isAdmin && (
@@ -198,7 +189,9 @@ const Profile = () => {
           error={matchesError && 'Your matches could not be loaded.'}
           seeAllTo="/profile/matches"
           linkTo={(offer) => `/books/${offer._id}`}
-          metaOf={(offer) => `from ${offer.owner.username}`}
+          metaOf={(offer) =>
+            [`from ${offer.owner.username}`, formatDistance(offer.distanceMiles)].filter(Boolean).join(' · ')
+          }
         />
       )}
 
@@ -219,6 +212,8 @@ const Profile = () => {
           onAdd={() => setShowAddOfferingsModal(true)}
         />
       </div>
+
+      <LocationSettings user={user} onSaved={fetchUserData} />
 
       <NotificationSettings settings={user.notifications} />
 

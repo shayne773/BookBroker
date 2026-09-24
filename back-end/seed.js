@@ -1,5 +1,5 @@
 // Replaces the demo data: 10 users (seed_user_N@example.com) offering 100 real
-// books from Google Books. Run with `npm run seed`; it needs MONGODB_URI and
+// books from Google Books, spread over four metro areas so distances show. Run with `npm run seed`; it needs MONGODB_URI and
 // GOOGLE_BOOKS_API_KEY (see .env.example).
 //
 // Every book, cover included, is fetched BEFORE anything is deleted, so a
@@ -15,12 +15,26 @@ import { captureCover } from "./lib/covers.js";
 import { pause } from "./lib/http.js";
 import { DB_NAME } from "./lib/db.js";
 import { normalizeEmail } from "./lib/validation.js";
+import { lookupZip } from "./lib/zipCodes.js";
 
 const SEED_PREFIX = "seed_user_";
 const USER_COUNT = 10;
 const BOOKS_PER_USER = 10;
 const SHARED_PASSWORD = "Password123!";
-const LOCATIONS = ["NYC", "Champaign", "Chicago", "Taipei", "Hsinchu"];
+// One per user, in four metro areas: readers in the same one are within the
+// default 25 miles of each other; the areas are 130 to 1,850 miles apart.
+export const SEED_ZIPS = [
+  "11201", // Brooklyn, NY
+  "10001", // New York, NY
+  "07030", // Hoboken, NJ
+  "11375", // Forest Hills, NY
+  "60614", // Chicago, IL
+  "60201", // Evanston, IL
+  "61820", // Champaign, IL
+  "61801", // Urbana, IL
+  "94110", // San Francisco, CA
+  "94704", // Berkeley, CA
+];
 
 // Use a mix of queries to get varied, real books
 export const QUERIES = [
@@ -112,20 +126,26 @@ export async function seed({ pauseMs = 250, log = console.log } = {}) {
 
   // ---- 3. Create the users and give each their share of the books ----
   const hashed = await bcrypt.hash(SHARED_PASSWORD, 10);
+  const places = SEED_ZIPS.map(lookupZip);
   const createdUsers = await User.insertMany(
-    Array.from({ length: USER_COUNT }, (_, i) => ({
-      username: `${SEED_PREFIX}${i + 1}`,
-      email: normalizeEmail(`${SEED_PREFIX}${i + 1}@example.com`),
-      password: hashed,
-      location: LOCATIONS[i % LOCATIONS.length],
-    }))
+    Array.from({ length: USER_COUNT }, (_, i) => {
+      const where = places[i % places.length];
+      return {
+        username: `${SEED_PREFIX}${i + 1}`,
+        email: normalizeEmail(`${SEED_PREFIX}${i + 1}@example.com`),
+        password: hashed,
+        zip: where.zip,
+        location: where.place,
+        geo: where.point,
+      };
+    })
   );
   log(`👤 Created ${createdUsers.length} users (password: ${SHARED_PASSWORD})`);
 
-  const offeredDocs = books.map((book, i) => ({
-    ...book,
-    owner: createdUsers[Math.floor(i / BOOKS_PER_USER)]._id,
-  }));
+  const offeredDocs = books.map((book, i) => {
+    const owner = createdUsers[Math.floor(i / BOOKS_PER_USER)];
+    return { ...book, owner: owner._id, ownerGeo: owner.geo };
+  });
   await OfferedBook.insertMany(offeredDocs);
   log(`✅ Inserted ${offeredDocs.length} offered books linked to users`);
 }

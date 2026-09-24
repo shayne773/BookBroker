@@ -2,6 +2,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { authFetch, isSessionExpiredError } from './auth';
 import BookCover from './BookCover';
+import { formatDistance } from './distance';
 
 const BookPage = () => {
   const { id } = useParams();
@@ -155,6 +156,14 @@ const BookPage = () => {
                   {book.owner?.username || "[NO USER]"}
                 </Link>
               </p>
+              {/* The owner's town, never their ZIP, and how far it is from you. */}
+              {(book.owner?.location || formatDistance(book.distanceMiles, book.distanceLabel)) && (
+                <p className="hint">
+                  {[book.owner?.location, formatDistance(book.distanceMiles, book.distanceLabel)]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              )}
             </section>
 
             <section className="book__section">
