@@ -11,6 +11,7 @@ import adminRouter from "./routes/admin.js";
 import { isAdmin, requireAdmin } from "./lib/admin.js";
 import { isSuspended, SUSPENDED_LOGIN_MESSAGE } from "./lib/suspensions.js";
 import { buildCorsOptions } from "./lib/cors.js";
+import { trustProxySetting } from "./lib/proxy.js";
 import { LOGIN_THROTTLED_MESSAGE, LoginThrottle } from "./lib/loginThrottle.js";
 import { consumeToken, hasLiveToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/authTokens.js";
 import { mail, resolveFrontEndBaseUrl } from "./lib/mail.js";
@@ -51,13 +52,7 @@ import {
 
 const app = express();
 
-// Behind a load balancer every request arrives from the balancer's address, so
-// the per-client limits below need TRUST_PROXY to read the caller from
-// X-Forwarded-For. Left unset, the header is ignored, since anyone can forge it.
-if (process.env.TRUST_PROXY) {
-  const raw = process.env.TRUST_PROXY.trim();
-  app.set("trust proxy", /^\d+$/.test(raw) ? Number(raw) : raw === "true" ? true : raw);
-}
+app.set("trust proxy", trustProxySetting());
 
 const loginThrottle = new LoginThrottle();
 

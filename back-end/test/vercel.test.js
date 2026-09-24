@@ -1,9 +1,11 @@
 import { expect, use } from "chai";
 import { default as chaiHttp, request } from "chai-http";
+import express from "express";
 import mongoose from "mongoose";
 
 import { runInBackground } from "../lib/background.js";
 import { connectDatabase, DB_NAME } from "../lib/db.js";
+import { trustProxySetting } from "../lib/proxy.js";
 import { createVercelHandler } from "../vercel.js";
 import { authHeader, createUser } from "./helpers.js";
 
@@ -162,5 +164,34 @@ describe("runInBackground", () => {
     expect(logged).to.have.lengthOf(1);
     expect(logged[0][0]).to.equal("Failed to send mail:");
     expect(logged[0][1].message).to.equal("Resend is down");
+  });
+});
+
+describe("trustProxySetting", () => {
+  const VISITOR = "203.0.113.7";
+
+  // The address Express reports for a request that reached it through one
+  // proxy, which put the visitor's address in X-Forwarded-For.
+  async function clientAddress(env) {
+    const app = express();
+    app.set("trust proxy", trustProxySetting(env));
+    app.get("/", (req, res) => res.json({ ip: req.ip }));
+
+    const res = await request.execute(app).get("/").set("X-Forwarded-For", VISITOR);
+    return res.body.ip;
+  }
+
+  it("reads the visitor's address from X-Forwarded-For on Vercel", async () => {
+    expect(await clientAddress({ VERCEL: "1" })).to.equal(VISITOR);
+  });
+
+  it("ignores X-Forwarded-For elsewhere unless TRUST_PROXY is set", async () => {
+    expect(await clientAddress({})).to.not.equal(VISITOR);
+    expect(await clientAddress({ TRUST_PROXY: "1" })).to.equal(VISITOR);
+  });
+
+  it("lets an explicit TRUST_PROXY win on Vercel", async () => {
+    expect(await clientAddress({ VERCEL: "1", TRUST_PROXY: "false" })).to.not.equal(VISITOR);
+    expect(await clientAddress({ VERCEL: "1", TRUST_PROXY: "2" })).to.equal(VISITOR);
   });
 });

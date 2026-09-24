@@ -64,7 +64,7 @@ its default and when it is required. The variables it reads, by name:
 | `RESEND_API_KEY` | Unset means no mail is sent. |
 | `EMAIL_FROM` | Sender address for outgoing mail. |
 | `FRONTEND_BASE_URL` | Base URL emailed links point at; required in production. |
-| `TRUST_PROXY` | Number of proxies in front of the API; `1` on Vercel. |
+| `TRUST_PROXY` | Number of proxies in front of the API; optional on Vercel, where it defaults to `1`. |
 | `ADMIN_EMAILS` | Comma-separated emails of the admin accounts; unset means no admins. |
 
 There is no login-signing secret: a sign-in token is an opaque server-side session,
@@ -181,12 +181,14 @@ build:
    | `RESEND_API_KEY` | Resend API key. Without it no email is sent: the links appear in the function logs instead. |
    | `EMAIL_FROM` | Sender address, e.g. `BookBroker <hello@your-domain.example>`. See the email note below. |
    | `FRONTEND_BASE_URL` | The site's Vercel address, e.g. `https://your-project.vercel.app`, with no trailing slash. Emailed links point here. |
-   | `TRUST_PROXY` | `1`. Vercel's edge sets `X-Forwarded-For` to the caller's address; with this set, the per-client limits on password reset and resending confirmation count each visitor separately instead of all together. |
    | `ADMIN_EMAILS` | Comma-separated confirmed emails of the admin accounts; unset means no admins. A change takes effect on the next deployment (redeploy), not a restart. |
    | `NODE_ENV` | `production`. The API then refuses to start without `FRONTEND_BASE_URL` rather than emailing links to `localhost`. |
 
    Do not set `VITE_SERVER_ADDRESS` or `CORS_ALLOWED_ORIGINS` on Vercel: the site
    calls `/api` on its own origin, which needs neither.
+   `TRUST_PROXY` is optional too: on Vercel it defaults to `1`, since Vercel's edge
+   sets `X-Forwarded-For` to the caller's address, so the per-client limits on
+   password reset and resending confirmation count each visitor separately.
 
 4. Deploy. If you do not know the production address until the first deployment
    finishes, set `FRONTEND_BASE_URL` then and redeploy: a change to environment
