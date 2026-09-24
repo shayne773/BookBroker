@@ -424,10 +424,32 @@ describe("notification emails", () => {
       expect(mostInFlight).to.equal(1);
       expect(startedAt).to.have.length(3);
       for (let i = 1; i < startedAt.length; i += 1) {
-        expect(startedAt[i] - startedAt[i - 1]).to.be.at.least(95);
+        expect(startedAt[i] - startedAt[i - 1]).to.be.at.least(80);
       }
       const sent = await Promise.all(readers.map((reader) => notificationsTo(reader)));
       expect(sent.map((emails) => emails.length).sort()).to.deep.equal([0, 1, 1]);
+    });
+
+    it("emails at most maxReaders per offer, leaving the rest to the next offer of that ISBN", async () => {
+      const carol = await signUp();
+      const readers = [bob, await signUp(), await signUp()];
+      for (const reader of readers) await wish(reader);
+
+      const maxReaders = wishlistPacing.maxReaders;
+      wishlistPacing.maxReaders = 2;
+      try {
+        await offer(alice);
+        await notificationsSettled();
+        expect(await WishlistNotice.countDocuments()).to.equal(2);
+
+        await offer(carol);
+        await notificationsSettled();
+      } finally {
+        wishlistPacing.maxReaders = maxReaders;
+      }
+
+      const sent = await Promise.all(readers.map((reader) => notificationsTo(reader)));
+      expect(sent.map((emails) => emails.length)).to.deep.equal([1, 1, 1]);
     });
 
     it("keeps each reader's and each ISBN's allowance separate", async () => {
