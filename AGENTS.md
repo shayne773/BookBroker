@@ -120,8 +120,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - `back-end/lib/notifications.js` owns them: `notifyNewMessage`, `notifyTrade` and
   `notifyWishlistMatch` are called from the route that causes the event, after its write (after
-  commit in a transaction), and never awaited: `notifyInBackground` hands each send to
-  `runInBackground` (Vercel's `waitUntil`), which logs a failure. Its
+  commit in a transaction), and never awaited: `notifyInBackground` hands each event's sends to
+  `runInBackground` (Vercel's `waitUntil`), which logs a failure; a new offer's wishlist emails
+  go one at a time, paced and capped by `wishlistPacing` to fit Resend's rate limit. Its
   `recipientFor` is the one eligibility check (not self, confirmed address, not suspended,
   category on in `User.notifications`, no block).
 - `notificationsSettled()` resolves when every started send is done. `test/setup.js` awaits it
