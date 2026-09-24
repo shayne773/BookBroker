@@ -175,6 +175,22 @@ describe("notification emails", () => {
       const thread = await api(bob.token).get(`/messages/${alice.id}`);
       expect(thread.body.map((m) => m.content)).to.deep.equal(["Hello"]);
     });
+
+    it("keeps the Vercel invocation alive until the email is sent", async () => {
+      // Where Vercel's runtime publishes the invocation's waitUntil.
+      const REQUEST_CONTEXT = Symbol.for("@vercel/request-context");
+      const kept = [];
+      globalThis[REQUEST_CONTEXT] = { get: () => ({ waitUntil: (p) => kept.push(p) }) };
+      try {
+        const res = await say(alice, bob);
+        expect(res).to.have.status(200);
+        expect(kept).to.have.length(1);
+        await kept[0];
+      } finally {
+        delete globalThis[REQUEST_CONTEXT];
+      }
+      expect(await notificationsTo(bob)).to.have.length(1);
+    });
   });
 
   describe("trades", () => {

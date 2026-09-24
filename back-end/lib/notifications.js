@@ -1,12 +1,12 @@
 // Notification emails: a new message, a move on a trade, and a wishlisted book
 // newly offered by another reader.
 //
-// Each is sent from inside the request that causes it (the API runs as
-// serverless functions, with no worker to hand the job to), but never holds that
-// request up or fails it: `notifyInBackground` starts the work without waiting
-// and only logs a failure. `notificationsSettled` resolves once every started
-// notification is done, for tests and for a serverless entry that must keep the
-// function alive until then.
+// Each is sent from inside the request that causes it (the API runs as a Vercel
+// function, with no worker to hand the job to), but never holds that request up
+// or fails it: `notifyInBackground` hands the work to `runInBackground`, which
+// keeps the invocation alive until it settles and only logs a failure.
+// `notificationsSettled` resolves once every started notification is done, for
+// tests.
 //
 // A reader is emailed only when their address is confirmed, the category is on
 // in their settings (`User.notifications`), the event is someone else's doing
@@ -15,6 +15,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import mongoose from "mongoose";
 import { Conversation, User, WISHLIST_NOTICE_INTERVAL_SECONDS, WishlistNotice } from "../Data.js";
+import { runInBackground } from "./background.js";
 import { isBlockedBetween } from "./blocks.js";
 import { matchIsbn, readersMatching } from "./matches.js";
 import { mail, resolveFrontEndBaseUrl } from "./mail.js";
@@ -106,14 +107,14 @@ const pending = new Set();
 export function notifyInBackground(work, what) {
   const job = Promise.resolve()
     .then(work)
-    .catch((err) => console.error(`Failed to send ${what} notification:`, err))
     .finally(() => pending.delete(job));
   pending.add(job);
+  runInBackground(job, `send ${what} notification`);
 }
 
 /** Resolves when every notification started so far has been sent or has failed. */
 export async function notificationsSettled() {
-  while (pending.size) await Promise.all([...pending]);
+  while (pending.size) await Promise.allSettled([...pending]);
 }
 
 const REASONS = {
