@@ -1,10 +1,11 @@
 import { vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Browse from './Browse';
 import BookList from './Browse/BookList';
 import LocationSettings from './Profile/LocationSettings';
+import UserPageOffered from './UserPageOffered';
 import WishlistMatches from './Profile/WishlistMatches';
 
 const book = (id, title, distanceMiles) => ({ _id: id, title, author: 'Tolkien', distanceMiles });
@@ -68,6 +69,25 @@ test('a book row shows its distance under the author line', () => {
   expect(screen.getByText('7 mi away')).toHaveClass('distance');
 });
 
+test('a shelf says how far each book is, and only that a farther one is beyond your distance', async () => {
+  routes['/users/u1/offered'] = () => ({
+    body: [
+      { ...book('b1', 'Near book'), distanceMiles: 4 },
+      { ...book('b2', 'Far book'), distanceLabel: 'More than 25 mi away' },
+    ],
+  });
+  render(
+    <MemoryRouter initialEntries={['/users/u1/offered']}>
+      <Routes>
+        <Route path="/users/:id/offered" element={<UserPageOffered />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  expect(await screen.findByText('More than 25 mi away')).toHaveClass('distance');
+  expect(screen.getByText('4 mi away')).toHaveClass('distance');
+});
+
 test('wishlist matches say how far each offer is', async () => {
   routes['/user/wishlist/matches'] = () => ({
     body: [
@@ -123,6 +143,21 @@ describe('where you trade', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('Enter a 5-digit US ZIP code.');
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('says when the reader has changed their ZIP code too often today', async () => {
+    routes['/user/edit'] = () => ({
+      status: 429,
+      body: { message: 'You can change your ZIP code 3 times a day. Please try again tomorrow.' },
+    });
+    render(<LocationSettings user={me} />, { wrapper: MemoryRouter });
+
+    await userEvent.type(screen.getByLabelText('New ZIP code'), '07030');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'You can change your ZIP code 3 times a day. Please try again tomorrow.'
+    );
   });
 
   test('shows the server refusal of a ZIP code it cannot place', async () => {

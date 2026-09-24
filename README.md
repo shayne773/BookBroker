@@ -126,8 +126,9 @@ emails go only to readers whose distance reaches the offer. Recommendations rank
 nearby books by the authors and genres on the reader's wishlist and shelf, then by
 how many readers want them, then by distance.
 
-Other readers see a reader's town ("Brooklyn, NY") and a rounded distance, never
-their ZIP code or coordinates. An account from before ZIP codes is asked to add
+Other readers see a reader's town ("Brooklyn, NY") and, for a book within their own
+distance, a rounded distance to it (beyond it, only "More than 25 mi away"), never
+their ZIP code or coordinates. A reader can change their ZIP code 3 times a day. An account from before ZIP codes is asked to add
 one, and until then sees every book, without distances; its own books are hidden
 from readers who have set a ZIP.
 

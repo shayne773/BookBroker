@@ -166,6 +166,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - `User.zip` and `User.geo` and `OfferedBook.ownerGeo` are `select: false` and never reach
   another reader; `User.location` is the public place name. Every new book copies its owner's
   `geo` into `ownerGeo`, and a ZIP change calls `moveOwnerBooks`.
+- A distance is a way to locate a reader, so it is sent only for books within the caller's
+  distance (`distanceFields` in `lib/nearby.js` for a single book; beyond it, only a
+  `distanceLabel`), never on a reader's profile, and ZIP changes are throttled (3 a day).
 - ZIPs resolve offline through `lib/zipCodes.js` from the bundled GeoNames table
   (`npm run build:zip-codes`; shipped to Vercel by `includeFiles` in `vercel.json`).
   Test fixtures live in Brooklyn (11201); `createUser({ zip: null })` is a pre-ZIP account.

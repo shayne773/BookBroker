@@ -7,7 +7,7 @@
 // A book's position is its owner's, copied onto the book as `ownerGeo` so the
 // queries run on OfferedBook's 2dsphere index. Positions are ZIP code points,
 // and no response carries another reader's ZIP or point: only their place name
-// and a distance rounded to whole miles.
+// and, for a book within the reader's distance, a distance rounded to whole miles.
 import { DEFAULT_DISTANCE_MILES, OfferedBook, User } from "../Data.js";
 
 export const METERS_PER_MILE = 1609.344;
@@ -54,12 +54,15 @@ export function displayMilesExpr(meters) {
 }
 
 /**
- * How far a book or reader at `point` is from `area`, in display miles, or
- * null when either position is unknown.
+ * How far a book at `point` is from `area`, as response fields: its
+ * `distanceMiles` within the reader's distance, only a `distanceLabel` saying
+ * it is farther beyond it (so no number can place its owner), and nothing when
+ * either position is unknown.
  */
-export function distanceFrom(area, point) {
-  if (!area || !point?.coordinates?.length) return null;
-  return displayMiles(metersBetween(area.point, point));
+export function distanceFields(area, point) {
+  if (!area || !point?.coordinates?.length) return {};
+  if (!withinReach(area, point)) return { distanceLabel: `More than ${area.miles} mi away` };
+  return { distanceMiles: displayMiles(metersBetween(area.point, point)) };
 }
 
 /** Whether `area` reaches `point`. A reader without an area is unrestricted. */

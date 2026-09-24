@@ -133,9 +133,9 @@ export function recommendations({ area, match, taste, limit }) {
     },
   };
   const sharesAuthor = {
-    $anyElementTrue: [{ $map: { input: bookAuthors, in: { $in: ["$$this", taste.authors] } } }],
+    $anyElementTrue: [{ $map: { input: bookAuthors, in: { $in: ["$$this", { $literal: taste.authors }] } } }],
   };
-  const sharesGenre = { $in: [normalised("$genre"), taste.genres] };
+  const sharesGenre = { $in: [normalised("$genre"), { $literal: taste.genres }] };
 
   return listBooks({
     area,

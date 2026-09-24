@@ -27,7 +27,9 @@ const UserPageOffered = () => {
       title="Offerings"
       books={offeredBooks}
       emptyLabel="No offerings"
-      renderExtra={(book) => <DistanceLabel miles={book.distanceMiles} block />}
+      renderExtra={(book) => (
+        <DistanceLabel miles={book.distanceMiles} label={book.distanceLabel} block />
+      )}
     />
   );
 };

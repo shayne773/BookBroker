@@ -20,7 +20,7 @@ import { captureCover } from "./lib/covers.js";
 import { runInBackground } from "./lib/background.js";
 import { wishlistMatches } from "./lib/matches.js";
 import { listBooks, mostWanted, NEWEST_FIRST, readerTaste, recommendations } from "./lib/listings.js";
-import { distanceFrom, moveOwnerBooks, readerArea, withinArea } from "./lib/nearby.js";
+import { distanceFields, moveOwnerBooks, readerArea, withinArea } from "./lib/nearby.js";
 import { lookupZip } from "./lib/zipCodes.js";
 import {
   NOTIFICATION_CATEGORIES,
@@ -116,6 +116,17 @@ const googleBooksThrottle = new LoginThrottle({
 });
 const GOOGLE_BOOKS_THROTTLED_MESSAGE =
   "Too many book searches. Please try again in a few minutes.";
+
+// Distances are measured from a reader's ZIP, so moving it at will would let a
+// reader work out where others are from the distances shown at each ZIP.
+const ZIP_CHANGES_PER_DAY = 3;
+const zipChangeThrottle = new LoginThrottle({
+  scope: "zip-change",
+  windowMs: 24 * HOUR,
+  lockoutMs: 24 * HOUR,
+  accountMaxAttempts: ZIP_CHANGES_PER_DAY,
+});
+const ZIP_CHANGE_THROTTLED_MESSAGE = `You can change your ZIP code ${ZIP_CHANGES_PER_DAY} times a day. Please try again tomorrow.`;
 
 // Answers 429 and returns true when the caller or the address is over its limit.
 async function mailRequestLimited(throttles, req, res, email) {
@@ -505,7 +516,7 @@ app.post("/logout", async (req, res, next) => {
 });
 
 // A direct link opens a book wherever it is, beyond the caller's distance too,
-// and says how far away it is.
+// and says how far away it is (beyond it, only that it is farther).
 app.get("/books/:id", optionalAuth, async (req, res, next) => {
   try {
     const book = await OfferedBook.findById(req.params.id).select("+ownerGeo");
@@ -522,10 +533,7 @@ app.get("/books/:id", optionalAuth, async (req, res, next) => {
     const owner = await User.findById(book.owner).select("username location");
     const { ownerGeo, ...result } = book.toObject();
     result.owner = owner ? { id: owner._id, username: owner.username, location: owner.location } : null;
-    const distanceMiles = distanceFrom(await readerArea(req.user?.userId), ownerGeo);
-    if (distanceMiles !== null) result.distanceMiles = distanceMiles;
-
-    res.json(result);
+    res.json({ ...result, ...distanceFields(await readerArea(req.user?.userId), ownerGeo) });
   } catch (err) {
     // A malformed id is simply "no such book" as far as the caller is
     // concerned; anything else is a real failure for the error handler.
@@ -758,17 +766,14 @@ app.get("/users/:id", authMiddleware, async (req, res, next) => {
       return res.status(400).json({ message: "Invalid user id" });
     }
 
-    const user = await User.findById(req.params.id).select(`${PUBLIC_USER_FIELDS} geo`).lean();
+    const user = await User.findById(req.params.id).select(PUBLIC_USER_FIELDS).lean();
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const blockedByMe = Boolean(
       await Block.exists({ blocker: req.user.userId, blocked: user._id })
     );
 
-    // Their point only gives the distance; it is not sent.
-    const { geo, ...fields } = user;
-    const distanceMiles = distanceFrom(await readerArea(req.user.userId), geo);
-    res.json({ ...fields, blockedByMe, ...(distanceMiles !== null && { distanceMiles }) });
+    res.json({ ...user, blockedByMe });
   } catch (err) {
     next(err);
   }
@@ -825,8 +830,8 @@ app.get("/users/:id/offered", authMiddleware, async (req, res) => {
 
     // Their shelf opens wherever they are, each book saying how far away it is.
     const owner = await User.findById(req.params.id).select("geo").lean();
-    const distanceMiles = distanceFrom(await readerArea(req.user.userId), owner?.geo);
-    res.json(distanceMiles === null ? books : books.map((book) => ({ ...book, distanceMiles })));
+    const distance = distanceFields(await readerArea(req.user.userId), owner?.geo);
+    res.json(books.map((book) => ({ ...book, ...distance })));
   } catch (err) {
     console.error("Error fetching offered books for user:", err);
     res.status(500).json({ error: "Failed to fetch offered books" });
@@ -1012,6 +1017,14 @@ app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
     // found by, so a new one moves every book of theirs too.
     const where = zip ? lookupZip(zip) : null;
     if (where) {
+      const current = await User.findById(userId).select("zip").lean();
+      if (current?.zip !== where.zip) {
+        const limit = await zipChangeThrottle.hit(userId);
+        if (limit.limited) {
+          res.set("Retry-After", String(limit.retryAfterSeconds));
+          return res.status(429).json({ message: ZIP_CHANGE_THROTTLED_MESSAGE });
+        }
+      }
       update.zip = where.zip;
       update.location = where.place;
       update.geo = where.point;

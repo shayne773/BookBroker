@@ -157,9 +157,11 @@ const BookPage = () => {
                 </Link>
               </p>
               {/* The owner's town, never their ZIP, and how far it is from you. */}
-              {(book.owner?.location || formatDistance(book.distanceMiles)) && (
+              {(book.owner?.location || formatDistance(book.distanceMiles, book.distanceLabel)) && (
                 <p className="hint">
-                  {[book.owner?.location, formatDistance(book.distanceMiles)].filter(Boolean).join(' · ')}
+                  {[book.owner?.location, formatDistance(book.distanceMiles, book.distanceLabel)]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </p>
               )}
             </section>

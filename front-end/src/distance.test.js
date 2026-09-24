@@ -6,6 +6,10 @@ test('a distance reads in whole miles, and under one mile as less than 1 mi', ()
   expect(formatDistance(0)).toBe('less than 1 mi away');
 });
 
+test('a book beyond your distance reads as the label the API sent', () => {
+  expect(formatDistance(undefined, 'More than 25 mi away')).toBe('More than 25 mi away');
+});
+
 test('no distance reads as nothing', () => {
   expect(formatDistance(undefined)).toBe('');
   expect(formatDistance(null)).toBe('');

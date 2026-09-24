@@ -184,11 +184,12 @@ describe("books near the reader", () => {
     expect(ids(res.body)).to.deep.equal(NEAREST().slice(0, 2));
   });
 
-  it("opens a book beyond the distance from a direct link, with how far it is", async () => {
+  it("opens a book beyond the distance from a direct link, saying only that it is farther", async () => {
     const res = await get(viewer, `/books/${books.chicago._id}`);
 
     expect(res).to.have.status(200);
-    expect(res.body.distanceMiles).to.equal(714);
+    expect(res.body).to.not.have.property("distanceMiles");
+    expect(res.body.distanceLabel).to.equal("More than 25 mi away");
     expect(res.body.owner).to.deep.equal({
       id: String(chicago._id),
       username: chicago.username,
@@ -196,12 +197,31 @@ describe("books near the reader", () => {
     });
   });
 
-  it("says how far another reader and their shelf are", async () => {
-    const profile = await get(viewer, `/users/${chicago._id}`);
-    expect(profile.body).to.include({ location: "Chicago, IL", distanceMiles: 714 });
+  it("gives a book within the distance its miles from a direct link", async () => {
+    const res = await get(viewer, `/books/${books.forestHills._id}`);
 
-    const shelf = await get(viewer, `/users/${chicago._id}/offered`);
-    expect(shelf.body.map((b) => b.distanceMiles)).to.deep.equal([714]);
+    expect(res.body.distanceMiles).to.equal(8);
+    expect(res.body).to.not.have.property("distanceLabel");
+  });
+
+  it("gives the miles to a shelf only within the distance, and a reader's page none", async () => {
+    const near = await get(viewer, `/users/${hoboken._id}/offered`);
+    expect(near.body.map((b) => b.distanceMiles)).to.deep.equal([4]);
+    expect(near.body.every((b) => !("distanceLabel" in b))).to.equal(true);
+
+    const far = await get(viewer, `/users/${chicago._id}/offered`);
+    expect(far.body.map((b) => b.distanceLabel)).to.deep.equal(["More than 25 mi away"]);
+    expect(far.body.every((b) => !("distanceMiles" in b))).to.equal(true);
+
+    await User.updateOne({ _id: viewer._id }, { maxDistanceMiles: 5 });
+    const past = await get(viewer, `/users/${forestHills._id}/offered`);
+    expect(past.body.map((b) => b.distanceLabel)).to.deep.equal(["More than 5 mi away"]);
+
+    for (const other of [hoboken, chicago]) {
+      const profile = await get(viewer, `/users/${other._id}`);
+      expect(profile).to.have.status(200);
+      expect(profile.body).to.not.have.any.keys("distanceMiles", "distanceLabel");
+    }
   });
 
   it("matches wishlisted books only within the distance, nearest first", async () => {
@@ -326,6 +346,28 @@ describe("changing ZIP code and distance", () => {
     expect((await api(reader.token).get("/user")).body.maxDistanceMiles).to.equal(50);
   });
 
+  it("allows three ZIP code changes a day, then refuses with a clear message", async () => {
+    const reader = await signUp();
+
+    for (const zip of [MANHATTAN, HOBOKEN, BROOKLYN]) {
+      const res = await api(reader.token).post("/user/edit").send({ user: { zip } });
+      expect(res, zip).to.have.status(200);
+    }
+
+    const same = await api(reader.token).post("/user/edit").send({ user: { zip: BROOKLYN, maxDistanceMiles: 50 } });
+    expect(same).to.have.status(200);
+
+    const res = await api(reader.token).post("/user/edit").send({ user: { zip: CHICAGO, maxDistanceMiles: 100 } });
+    expect(res).to.have.status(429);
+    expect(res.body.message).to.equal("You can change your ZIP code 3 times a day. Please try again tomorrow.");
+    expect(Number(res.headers["retry-after"])).to.be.above(0);
+    const me = (await api(reader.token).get("/user")).body;
+    expect(me).to.include({ zip: BROOKLYN, maxDistanceMiles: 50 });
+
+    const other = await signUp({ zip: MANHATTAN });
+    expect(await api(other.token).post("/user/edit").send({ user: { zip: HOBOKEN } })).to.have.status(200);
+  });
+
   it("refuses a ZIP code it cannot place, and leaves the old one", async () => {
     const reader = await signUp();
 
@@ -373,6 +415,18 @@ describe("recommendations", () => {
     ]);
     expect(res.body[0]).to.include({ distanceMiles: 4 });
     expect(res.body[0]).to.not.have.property("tasteScore");
+  });
+
+  it("reads authors and genres beginning with $ as text, not as expressions", async () => {
+    await WishlistBook.create({ userId: viewer._id, title: "Odd", author: "$$x", genre: "$title", isbn: "3" });
+    const near = await createUser({ zip: MANHATTAN });
+    const match = await createOfferedBook(near, { title: "Odd match", author: "$$x", genre: "Cooking" });
+    const other = await createOfferedBook(near, { title: "$title", author: "E", genre: "History" });
+
+    const res = await get(viewer, "/recommendations");
+
+    expect(res).to.have.status(200);
+    expect(res.body.map((b) => b.title)).to.deep.equal([match.title, other.title]);
   });
 
   it("leaves out the reader's own books and those the market hides from them", async () => {
