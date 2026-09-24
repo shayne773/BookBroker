@@ -11,11 +11,13 @@ import adminRouter from "./routes/admin.js";
 import { isAdmin, requireAdmin } from "./lib/admin.js";
 import { isSuspended, SUSPENDED_LOGIN_MESSAGE } from "./lib/suspensions.js";
 import { buildCorsOptions } from "./lib/cors.js";
+import { trustProxySetting } from "./lib/proxy.js";
 import { LOGIN_THROTTLED_MESSAGE, LoginThrottle } from "./lib/loginThrottle.js";
 import { consumeToken, hasLiveToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/authTokens.js";
 import { mail, resolveFrontEndBaseUrl } from "./lib/mail.js";
 import { createSession, endSession, endUserSessions, useSession } from "./lib/sessions.js";
 import { captureCover } from "./lib/covers.js";
+import { runInBackground } from "./lib/background.js";
 import {
   isBlockedBetween,
   marketFilter,
@@ -50,13 +52,7 @@ import {
 
 const app = express();
 
-// Behind a load balancer every request arrives from the balancer's address, so
-// the per-client limits below need TRUST_PROXY to read the caller from
-// X-Forwarded-For. Left unset, the header is ignored, since anyone can forge it.
-if (process.env.TRUST_PROXY) {
-  const raw = process.env.TRUST_PROXY.trim();
-  app.set("trust proxy", /^\d+$/.test(raw) ? Number(raw) : raw === "true" ? true : raw);
-}
+app.set("trust proxy", trustProxySetting());
 
 const loginThrottle = new LoginThrottle();
 
@@ -133,7 +129,7 @@ const frontEndLink = (path, token) =>
 // provider neither holds up the request nor, for the endpoints that must answer
 // identically for unknown addresses, makes a known address take longer.
 function sendInBackground(send, what) {
-  send.catch((err) => console.error(`Failed to send ${what}:`, err));
+  runInBackground(send, `send ${what}`);
 }
 
 async function sendEmailConfirmation(user) {

@@ -6,8 +6,10 @@ API in `../back-end` is a separate service; this app only talks to it over HTTP.
 ## Configuration
 
 The API base URL is a build-time value, not a runtime one: Vite substitutes
-`import.meta.env.VITE_SERVER_ADDRESS` into the bundle when it builds. Each
-environment therefore needs its own build with its own value.
+`import.meta.env.VITE_SERVER_ADDRESS` into the bundle when it builds.
+Production builds take it from `.env.production`, which sets `/api`: on Vercel
+the API is served from the site's own origin under that path (see the
+repository README).
 
 Copy `.env.example` to `.env.local` for local development:
 
@@ -15,8 +17,10 @@ Copy `.env.example` to `.env.local` for local development:
 cp .env.example .env.local
 ```
 
-On Vercel, set `VITE_SERVER_ADDRESS` per environment (production / preview /
-development) and redeploy so a new bundle is produced.
+`.env.production` outranks `.env.local`, so `npm run build` also produces a bundle
+that calls `/api`. To build one against the local API instead, set the variable
+in the environment, which outranks both:
+`VITE_SERVER_ADDRESS=http://localhost:5000 npm run build`.
 
 Only variables prefixed `VITE_` reach client code — that prefix is what makes a
 value public, so never put a secret behind it.
@@ -33,10 +37,10 @@ with hot module replacement.
 ### `npm run build`
 
 Builds the app for production into the `dist` folder, minified and with hashed
-filenames. This is the directory Vercel serves. `vercel.json` in this directory
-rewrites every path that does not match a built file to `/index.html`, so a
-refresh or a direct link to a client-side route such as `/books/:id` still loads
-the app instead of a 404.
+filenames. This is the directory Vercel serves. `vercel.json` at the repository
+root rewrites every path that neither matches a built file nor starts with `/api`
+to `/index.html`, so a refresh or a direct link to a client-side route such as
+`/books/:id` still loads the app instead of a 404.
 
 ### `npm run preview`
 

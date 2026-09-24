@@ -44,8 +44,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 ## Back end
 
-- Two independent services: `front-end/` (React, Vite) deployed on Vercel and `back-end/`
-  (Express + Mongoose) deployed on AWS. They share nothing but the HTTP contract.
+- Two independent services, `front-end/` (React, Vite) and `back-end/` (Express + Mongoose),
+  sharing nothing but the HTTP contract. Both deploy to one Vercel project on one origin; the
+  README's "Deployment" section owns the setup facts.
 - Configuration is environment-driven. `back-end/.env.example` is the authoritative
   list of variables and their defaults; `back-end/.env` is gitignored.
 - Security helpers used by `app.js` live in `back-end/lib/`: the CORS allowlist,
@@ -79,6 +80,16 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   in `app.js` looks the session up on every request, so deleting it ends the sign-in: `/logout`
   ends one, a password reset ends all of the account's. There is no `JWT_SECRET`.
 
+## Vercel deployment
+
+- Root `vercel.json` builds `front-end/` into `front-end/dist` and rewrites `/api/*` to the one
+  function, `api/index.js`, which re-exports `back-end/vercel.js`: the unchanged `app.js`
+  mounted under `/api`. `server.js` is the local entry; both connect through `connectDatabase`
+  in `back-end/lib/db.js` (one cached connection promise).
+- An instance can be frozen between any two requests: keep nothing needed in memory, and send
+  any work that outlives the response (mail, notifications) through `runInBackground` in
+  `back-end/lib/background.js`, which hands it to Vercel's `waitUntil`.
+
 ## Email, confirmation and password reset
 
 - All mail goes through `mail` in `back-end/lib/mail.js` (Resend SDK). Without
@@ -108,7 +119,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 ## Messaging
 
-- The API is meant to run as serverless functions, so live delivery is short polling, never a
+- The API runs as a Vercel function, so live delivery is short polling, never a
   WebSocket/SSE server: poll through `front-end/src/usePolling.js` (pauses while the tab is
   hidden). An open thread asks `GET /messages/:user?after=<newest fetched id>` for new
   messages only; a message it sent is shown but never moves that cursor.
@@ -142,9 +153,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Any file containing JSX must use the `.jsx` extension; Vite's esbuild transform does not
   parse JSX out of a `.js` file.
 - The API base URL is `import.meta.env.VITE_SERVER_ADDRESS`, compiled into the bundle at build
-  time, so every environment needs its own build with its own value. Only `VITE_`-prefixed
-  variables reach client code, which also makes them public - never a secret. See
-  `front-end/.env.example`.
+  time; production builds get `/api` (same origin) from `front-end/.env.production`, local
+  development sets it in `.env.local`. Only `VITE_`-prefixed variables reach client code, which
+  also makes them public - never a secret. See `front-end/.env.example`.
 - Tailwind is wired through `front-end/postcss.config.js`; react-scripts 5 did that implicitly
   from the presence of `tailwind.config.js`, Vite does not.
 

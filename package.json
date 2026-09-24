@@ -1,0 +1,6 @@
+{
+  "name": "bookbroker",
+  "private": true,
+  "description": "Deployment root for Vercel: front-end/ builds the site and api/index.js serves the back-end/ API. Each package has its own package.json.",
+  "type": "module"
+}
