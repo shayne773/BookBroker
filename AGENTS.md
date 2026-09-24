@@ -79,7 +79,6 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   and is looked up exactly, on the plain `email_1` index. `email_case_insensitive` (strength-2
   collation, `Data.js`) makes Mongo reject case variants; queries never use it. A duplicate
   surfaces as error 11000, which the routes answer with their "already in use" message.
-  `npm run ensure-indexes` builds indexes on a live database (never drops any).
 
 ## Sign-in sessions
 
