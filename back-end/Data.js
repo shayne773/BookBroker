@@ -94,6 +94,8 @@ const wishlistBookSchema = new Schema({
 
 // A reader's wishlist is read whole, for their shelf and for their matches.
 wishlistBookSchema.index({ userId: 1 });
+// A new offer looks up the readers who wishlisted its ISBN.
+wishlistBookSchema.index({ isbn: 1 });
 
 // Offered book schema
 const offeredBookSchema = new Schema({

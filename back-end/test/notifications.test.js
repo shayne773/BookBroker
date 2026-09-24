@@ -387,6 +387,40 @@ describe("notification emails", () => {
       expect(await notificationsTo(bob)).to.have.length(1);
     });
 
+    it("sends to one reader at a time, and a refused address does not stop the others", async () => {
+      const readers = [bob, await signUp(), await signUp()];
+      for (const reader of readers) await wish(reader);
+
+      const deliver = mail.deliver;
+      const consoleError = console.error;
+      let inFlight = 0;
+      let mostInFlight = 0;
+      let refused = false;
+      mail.deliver = async (message) => {
+        inFlight += 1;
+        mostInFlight = Math.max(mostInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        inFlight -= 1;
+        if (!refused) {
+          refused = true;
+          throw new Error("Resend refused the address");
+        }
+        return deliver(message);
+      };
+      console.error = () => {};
+      try {
+        await offer(alice);
+        await notificationsSettled();
+      } finally {
+        mail.deliver = deliver;
+        console.error = consoleError;
+      }
+
+      expect(mostInFlight).to.equal(1);
+      const sent = await Promise.all(readers.map((reader) => notificationsTo(reader)));
+      expect(sent.map((emails) => emails.length).sort()).to.deep.equal([0, 1, 1]);
+    });
+
     it("keeps each reader's and each ISBN's allowance separate", async () => {
       const carol = await signUp();
       await wish(bob);

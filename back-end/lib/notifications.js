@@ -268,13 +268,14 @@ export function notifyWishlistMatch(offer) {
 
     const owner = await usernameOf(offer.owner);
     const title = offer.title || "A book";
-    // One job per reader, so one refused address does not stop the others.
+    // One reader at a time, to stay within Resend's rate limit; a refused
+    // address is logged and does not stop the others.
     for (const readerId of readerIds) {
-      notifyInBackground(async () => {
+      try {
         const recipient = await recipientFor(readerId, offer.owner, "wishlist");
-        if (!recipient) return;
+        if (!recipient) continue;
         const claim = await claimWishlistNotice(readerId, matchIsbn(offer));
-        if (!claim) return;
+        if (!claim) continue;
         try {
           await send(recipient, "wishlist", {
             subject: `${title} is available`,
@@ -286,7 +287,9 @@ export function notifyWishlistMatch(offer) {
           await releaseWishlistNotice(claim);
           throw err;
         }
-      }, "wishlist match");
+      } catch (err) {
+        console.error("Failed to send wishlist match notification:", err);
+      }
     }
   }, "wishlist match");
 }
