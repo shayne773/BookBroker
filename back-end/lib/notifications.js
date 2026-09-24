@@ -27,8 +27,8 @@ const SETTINGS_PATH = "/profile#notifications";
 
 const EPOCH = new Date(0);
 
-// A reader who read or wrote in a conversation this recently is taken to be
-// following it, and is not emailed about a new message in it.
+// A reader who read a conversation this recently is taken to be following it,
+// and is not emailed about a new message in it.
 export const RECENTLY_SEEN_MS = 15 * 60 * 1000;
 
 // --------------------
@@ -163,7 +163,7 @@ const usernameOf = async (userId) =>
  * conversation until they have read it: `notifiedAt` records the message they
  * were emailed about, and the next email waits until their `readAt` reaches it.
  * Nor are they emailed while following the conversation: when their `seenAt` is
- * within RECENTLY_SEEN_MS.
+ * within RECENTLY_SEEN_MS. A failed send gives the claim back.
  */
 export function notifyNewMessage({ conversation, message, recipientId }) {
   notifyInBackground(async () => {
@@ -187,12 +187,20 @@ export function notifyNewMessage({ conversation, message, recipientId }) {
     if (!claimed.modifiedCount) return;
 
     const sender = await usernameOf(senderId);
-    await send(recipient, "messages", {
-      subject: `New message from ${sender}`,
-      sentence: `${sender} sent you a message.`,
-      action: "Read message",
-      path: `/messages/${senderId}`,
-    });
+    try {
+      await send(recipient, "messages", {
+        subject: `New message from ${sender}`,
+        sentence: `${sender} sent you a message.`,
+        action: "Read message",
+        path: `/messages/${senderId}`,
+      });
+    } catch (err) {
+      await Conversation.updateOne(
+        { _id: conversation._id, [`notifiedAt.${rid}`]: message.createdAt },
+        { $unset: { [`notifiedAt.${rid}`]: "" } }
+      );
+      throw err;
+    }
   }, "new message");
 }
 
@@ -226,21 +234,27 @@ export function notifyTrade(exchange, event, actorId) {
 // Claims the one wishlist email `readerId` may get about `isbn` in
 // WISHLIST_NOTICE_INTERVAL_SECONDS, however often the ISBN is listed. A notice
 // sent more recently leaves the filter unmatched, and the upsert then collides
-// with it on _id.
+// with it on _id. Returns the claim, for `releaseWishlistNotice`, or null.
 async function claimWishlistNotice(readerId, isbn) {
-  const now = Date.now();
+  const claim = { _id: `${readerId}:${isbn}`, sentAt: new Date() };
   try {
     await WishlistNotice.updateOne(
-      { _id: `${readerId}:${isbn}`, sentAt: { $lte: new Date(now - WISHLIST_NOTICE_INTERVAL_SECONDS * 1000) } },
-      { $set: { sentAt: new Date(now) } },
+      {
+        _id: claim._id,
+        sentAt: { $lte: new Date(claim.sentAt.getTime() - WISHLIST_NOTICE_INTERVAL_SECONDS * 1000) },
+      },
+      { $set: { sentAt: claim.sentAt } },
       { upsert: true }
     );
-    return true;
+    return claim;
   } catch (err) {
-    if (err.code === 11000) return false;
+    if (err.code === 11000) return null;
     throw err;
   }
 }
+
+// Gives back a claim whose email could not be sent, unless a later one replaced it.
+const releaseWishlistNotice = (claim) => WishlistNotice.deleteOne(claim);
 
 /**
  * `offer` was just put on the market. Each reader it matches (lib/matches.js)
@@ -258,13 +272,19 @@ export function notifyWishlistMatch(offer) {
       notifyInBackground(async () => {
         const recipient = await recipientFor(readerId, offer.owner, "wishlist");
         if (!recipient) return;
-        if (!(await claimWishlistNotice(readerId, matchIsbn(offer)))) return;
-        await send(recipient, "wishlist", {
-          subject: `${title} is available`,
-          sentence: `${owner} is offering ${title}, a book on your wishlist.`,
-          action: "View book",
-          path: `/books/${offer._id}`,
-        });
+        const claim = await claimWishlistNotice(readerId, matchIsbn(offer));
+        if (!claim) return;
+        try {
+          await send(recipient, "wishlist", {
+            subject: `${title} is available`,
+            sentence: `${owner} is offering ${title}, a book on your wishlist.`,
+            action: "View book",
+            path: `/books/${offer._id}`,
+          });
+        } catch (err) {
+          await releaseWishlistNotice(claim);
+          throw err;
+        }
       }, "wishlist match");
     }
   }, "wishlist match");

@@ -27,7 +27,7 @@ describe("notification emails", () => {
   const say = (from, to, content = "Hello") =>
     api(from.token).post(`/messages/${to.id}`).send({ content });
 
-  // Moves `reader`'s last read or send in the conversation with `other` back past
+  // Moves `reader`'s last read of the conversation with `other` back past
   // the window in which message emails are held back.
   const lookedAwayFrom = (reader, other) =>
     Conversation.updateOne(
@@ -79,16 +79,51 @@ describe("notification emails", () => {
     });
 
     it("sends nothing for the replies of a live back-and-forth", async () => {
+      // Each side's open thread marks the other's message read as its poll fetches it.
+      const read = (reader, other) => api(reader.token).post(`/messages/${other.id}/read`).send({});
+
       await say(alice, bob, "one");
       await notificationsSettled();
+      await read(alice, bob);
+      await read(bob, alice);
       await say(bob, alice, "two");
       await notificationsSettled();
+      await read(alice, bob);
       await say(alice, bob, "three");
       await notificationsSettled();
+      await read(bob, alice);
       await say(bob, alice, "four");
 
       expect(await notificationsTo(bob)).to.have.length(1);
       expect(await notificationsTo(alice)).to.have.length(0);
+    });
+
+    it("emails the reply to a reader who wrote and left without reading", async () => {
+      await say(alice, bob, "one");
+      await notificationsSettled();
+      await say(bob, alice, "two");
+
+      const [email] = await notificationsTo(alice);
+      expect(email.link).to.equal(`http://localhost:3000/messages/${bob.id}`);
+    });
+
+    it("tries again with the next message when an email could not be sent", async () => {
+      const deliver = mail.deliver;
+      const consoleError = console.error;
+      mail.deliver = async () => {
+        throw new Error("Resend is down");
+      };
+      console.error = () => {};
+      try {
+        await say(alice, bob, "one");
+        await notificationsSettled();
+      } finally {
+        mail.deliver = deliver;
+        console.error = consoleError;
+      }
+
+      await say(alice, bob, "two");
+      expect(await notificationsTo(bob)).to.have.length(1);
     });
 
     it("keeps each conversation's allowance separate", async () => {
@@ -240,6 +275,32 @@ describe("notification emails", () => {
       expect(other).to.have.status(201);
     });
 
+    it("counts counters against the same hourly allowance as proposals", async () => {
+      const id = await propose();
+      for (let i = 0; i < 19; i += 1) {
+        const countered = await api(alice.token)
+          .post(`/exchanges/${id}/counter`)
+          .send({ requesterBooks: [aliceBook.id], responderBooks: [bobBook.id] });
+        expect(countered).to.have.status(200);
+      }
+
+      const res = await api(alice.token)
+        .post(`/exchanges/${id}/counter`)
+        .send({ requesterBooks: [aliceBook.id], responderBooks: [] });
+      expect(res).to.have.status(429);
+      expect(res.body.message).to.equal(PROPOSAL_THROTTLED_MESSAGE);
+      expect(Number(res.headers["retry-after"])).to.be.greaterThan(0);
+      expect(await notificationsTo(bob)).to.have.length(20);
+
+      const ex = await api(bob.token).get(`/exchanges/${id}`);
+      expect(ex.body.responderBooks).to.have.length(1);
+
+      const bobCounters = await api(bob.token)
+        .post(`/exchanges/${id}/counter`)
+        .send({ requesterBooks: [aliceBook.id], responderBooks: [] });
+      expect(bobCounters).to.have.status(200);
+    });
+
     it("sends nothing to a reader who turned trade emails off", async () => {
       await api(bob.token).post("/user/notifications").send({ trades: false });
       await propose();
@@ -287,6 +348,27 @@ describe("notification emails", () => {
       await WishlistNotice.updateMany({}, { $set: { sentAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000) } });
       await offer(carol);
       expect(await notificationsTo(bob)).to.have.length(2);
+    });
+
+    it("gives the allowance back when the email could not be sent", async () => {
+      await wish(bob);
+      const deliver = mail.deliver;
+      const consoleError = console.error;
+      mail.deliver = async () => {
+        throw new Error("Resend is down");
+      };
+      console.error = () => {};
+      try {
+        await offer(alice);
+        await notificationsSettled();
+      } finally {
+        mail.deliver = deliver;
+        console.error = consoleError;
+      }
+
+      const carol = await signUp();
+      await offer(carol);
+      expect(await notificationsTo(bob)).to.have.length(1);
     });
 
     it("keeps each reader's and each ISBN's allowance separate", async () => {

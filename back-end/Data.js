@@ -105,7 +105,7 @@ offeredBookSchema.index({ isbn: 1, locked: 1 });
 // `lastMessageAt` / `lastMessageBy` copy the newest message so the unread count
 // is one indexed query over conversations, and `readAt` maps each participant's
 // id to the time of the newest message they have seen (routes/messages.js).
-// `seenAt` maps the id to when they last read or wrote in the conversation, by the
+// `seenAt` maps the id to when they last marked the conversation read, by the
 // clock. `notifiedAt` maps a participant's id to the message they were last
 // emailed about; no other email goes out until `readAt` reaches it.
 const conversationSchema = new Schema({
