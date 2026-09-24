@@ -3,9 +3,9 @@ import { useLocation } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from '../auth';
 
 const CATEGORIES = [
-  ['messages', 'New messages', 'When a reader messages you. One email per conversation until you read it.'],
+  ['messages', 'New messages', 'When a reader messages you. One email per conversation until you read it, and none while you have read it in the last 15 minutes.'],
   ['trades', 'Trades', 'When a reader proposes, counters, accepts, declines, cancels or completes a trade with you.'],
-  ['wishlist', 'Wishlist matches', 'When another reader offers a book on your wishlist.'],
+  ['wishlist', 'Wishlist matches', 'When another reader offers a book on your wishlist. At most one email per book every 30 days.'],
 ];
 
 // Which notification emails the reader gets, one switch per category. Every
@@ -25,10 +25,14 @@ const NotificationSettings = ({ settings }) => {
     if (loaded && hash === '#notifications') section.current?.scrollIntoView();
   }, [loaded, hash]);
 
+  // Each switch saves on its own, so a reply or a rollback touches only its own
+  // category and never undoes another switch flipped meanwhile.
+  const setCategory = (category, on) =>
+    setSaved((s) => ({ ...(s ?? settings), [category]: on }));
+
   const toggle = async (category, on) => {
     setError('');
-    const previous = current;
-    setSaved({ ...current, [category]: on });
+    setCategory(category, on);
     try {
       const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/notifications`, {
         method: 'POST',
@@ -37,11 +41,11 @@ const NotificationSettings = ({ settings }) => {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setSaved(data.notifications);
+      setCategory(category, data.notifications[category]);
     } catch (err) {
       if (isSessionExpiredError(err)) return;
       console.error('Failed to save notification setting:', err);
-      setSaved(previous);
+      setCategory(category, !on);
       setError('Your setting could not be saved. Please try again.');
     }
   };

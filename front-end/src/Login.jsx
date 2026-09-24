@@ -14,7 +14,7 @@ export default function Login() {
 
     // Where RequireAuth wanted to go before it sent us here.
     const from = location.state?.from;
-    const redirectTo = from ? `${from.pathname}${from.search || ''}` : '/home';
+    const redirectTo = from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : '/home';
     const sessionEnded = Boolean(location.state?.sessionEnded);
 
     const handleSubmit = async (e) => {

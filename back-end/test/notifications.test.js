@@ -1,8 +1,9 @@
 import { expect } from "chai";
 import { api, authHeader, createUser, offerBook, outbox, signUp } from "./helpers.js";
-import { Block, OfferedBook, User, WishlistBook } from "../Data.js";
+import { Block, Conversation, OfferedBook, User, WishlistBook, WishlistNotice } from "../Data.js";
 import { mail } from "../lib/mail.js";
-import { notificationsSettled, unsubscribeToken } from "../lib/notifications.js";
+import { notificationsSettled, RECENTLY_SEEN_MS, unsubscribeToken } from "../lib/notifications.js";
+import { PROPOSAL_THROTTLED_MESSAGE } from "../routes/exchanges.js";
 
 // The notification emails sent to `user` so far, once every background send
 // has finished. Account emails (confirmation and the like) are left out.
@@ -25,6 +26,14 @@ describe("notification emails", () => {
 
   const say = (from, to, content = "Hello") =>
     api(from.token).post(`/messages/${to.id}`).send({ content });
+
+  // Moves `reader`'s last read or send in the conversation with `other` back past
+  // the window in which message emails are held back.
+  const lookedAwayFrom = (reader, other) =>
+    Conversation.updateOne(
+      { users: { $all: [reader.id, other.id] } },
+      { $set: { [`seenAt.${reader.id}`]: new Date(Date.now() - RECENTLY_SEEN_MS - 60 * 1000) } }
+    );
 
   describe("messages", () => {
     it("emails the recipient a link to the conversation, and never the sender", async () => {
@@ -50,9 +59,36 @@ describe("notification emails", () => {
 
       const read = await api(bob.token).post(`/messages/${alice.id}/read`).send({});
       expect(read).to.have.status(204);
+      await lookedAwayFrom(bob, alice);
 
       await say(alice, bob, "four");
       expect(await notificationsTo(bob)).to.have.length(2);
+    });
+
+    it("sends nothing while the recipient has read the conversation in the last 15 minutes", async () => {
+      await say(alice, bob, "one");
+      await notificationsSettled();
+      await api(bob.token).post(`/messages/${alice.id}/read`).send({});
+
+      await say(alice, bob, "two");
+      expect(await notificationsTo(bob)).to.have.length(1);
+
+      await lookedAwayFrom(bob, alice);
+      await say(alice, bob, "three");
+      expect(await notificationsTo(bob)).to.have.length(2);
+    });
+
+    it("sends nothing for the replies of a live back-and-forth", async () => {
+      await say(alice, bob, "one");
+      await notificationsSettled();
+      await say(bob, alice, "two");
+      await notificationsSettled();
+      await say(alice, bob, "three");
+      await notificationsSettled();
+      await say(bob, alice, "four");
+
+      expect(await notificationsTo(bob)).to.have.length(1);
+      expect(await notificationsTo(alice)).to.have.length(0);
     });
 
     it("keeps each conversation's allowance separate", async () => {
@@ -185,6 +221,25 @@ describe("notification emails", () => {
       expect(await notificationsTo(alice)).to.have.length(0);
     });
 
+    it("limits a reader to 20 proposals an hour, with a message saying so", async () => {
+      for (let i = 0; i < 20; i += 1) await propose();
+
+      const res = await api(alice.token)
+        .post("/exchanges")
+        .send({ responderId: bob.id, requesterBooks: [aliceBook.id], responderBooks: [bobBook.id] });
+      expect(res).to.have.status(429);
+      expect(res.body.message).to.equal(PROPOSAL_THROTTLED_MESSAGE);
+      expect(Number(res.headers["retry-after"])).to.be.greaterThan(0);
+      expect(await notificationsTo(bob)).to.have.length(20);
+
+      const carol = await signUp();
+      const carolBook = await offerBook(carol, { isbn: "3333333333333" });
+      const other = await api(carol.token)
+        .post("/exchanges")
+        .send({ responderId: bob.id, requesterBooks: [carolBook.id], responderBooks: [bobBook.id] });
+      expect(other).to.have.status(201);
+    });
+
     it("sends nothing to a reader who turned trade emails off", async () => {
       await api(bob.token).post("/user/notifications").send({ trades: false });
       await propose();
@@ -214,6 +269,36 @@ describe("notification emails", () => {
       const book = await OfferedBook.findOne({ owner: alice.id });
       expect(emails[0].link).to.equal(`http://localhost:3000/books/${book._id}`);
       expect(emails[0].text).to.include(`${alice.username} is offering The Hobbit, a book on your wishlist.`);
+    });
+
+    it("emails a reader about an ISBN at most once in 30 days, however often it is listed again", async () => {
+      const carol = await signUp();
+      await wish(bob);
+
+      await offer(alice);
+      await notificationsSettled();
+      const listed = await OfferedBook.findOne({ owner: alice.id });
+      const removed = await api(alice.token).delete(`/user/offered/${listed._id}`);
+      expect(removed).to.have.status(200);
+      await offer(alice);
+      await offer(carol);
+      expect(await notificationsTo(bob)).to.have.length(1);
+
+      await WishlistNotice.updateMany({}, { $set: { sentAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000) } });
+      await offer(carol);
+      expect(await notificationsTo(bob)).to.have.length(2);
+    });
+
+    it("keeps each reader's and each ISBN's allowance separate", async () => {
+      const carol = await signUp();
+      await wish(bob);
+      await wish(carol);
+      await wish(bob, { isbn: "9780000000001" });
+
+      await offer(alice);
+      await offer(alice, { isbn: "9780000000001" });
+      expect(await notificationsTo(bob)).to.have.length(2);
+      expect(await notificationsTo(carol)).to.have.length(1);
     });
 
     it("does not email the reader about their own offer", async () => {

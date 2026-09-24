@@ -14,9 +14,9 @@
 // that turns its category off without signing in, and a link to the settings.
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import mongoose from "mongoose";
-import { Conversation, User } from "../Data.js";
+import { Conversation, User, WISHLIST_NOTICE_INTERVAL_SECONDS, WishlistNotice } from "../Data.js";
 import { isBlockedBetween } from "./blocks.js";
-import { readersMatching } from "./matches.js";
+import { matchIsbn, readersMatching } from "./matches.js";
 import { mail, resolveFrontEndBaseUrl } from "./mail.js";
 
 export const NOTIFICATION_CATEGORIES = ["messages", "trades", "wishlist"];
@@ -26,6 +26,10 @@ const frontEnd = (path) => `${FRONTEND_BASE_URL}${path}`;
 const SETTINGS_PATH = "/profile#notifications";
 
 const EPOCH = new Date(0);
+
+// A reader who read or wrote in a conversation this recently is taken to be
+// following it, and is not emailed about a new message in it.
+export const RECENTLY_SEEN_MS = 15 * 60 * 1000;
 
 // --------------------
 // Settings
@@ -158,6 +162,8 @@ const usernameOf = async (userId) =>
  * `message` was just sent in `conversation`. Its recipient is emailed once per
  * conversation until they have read it: `notifiedAt` records the message they
  * were emailed about, and the next email waits until their `readAt` reaches it.
+ * Nor are they emailed while following the conversation: when their `seenAt` is
+ * within RECENTLY_SEEN_MS.
  */
 export function notifyNewMessage({ conversation, message, recipientId }) {
   notifyInBackground(async () => {
@@ -170,7 +176,10 @@ export function notifyNewMessage({ conversation, message, recipientId }) {
       {
         _id: conversation._id,
         $expr: {
-          $lte: [{ $ifNull: [`$notifiedAt.${rid}`, EPOCH] }, { $ifNull: [`$readAt.${rid}`, EPOCH] }],
+          $and: [
+            { $lte: [{ $ifNull: [`$notifiedAt.${rid}`, EPOCH] }, { $ifNull: [`$readAt.${rid}`, EPOCH] }] },
+            { $lte: [{ $ifNull: [`$seenAt.${rid}`, EPOCH] }, new Date(Date.now() - RECENTLY_SEEN_MS)] },
+          ],
         },
       },
       { $set: { [`notifiedAt.${rid}`]: message.createdAt } }
@@ -214,9 +223,28 @@ export function notifyTrade(exchange, event, actorId) {
   }, `trade ${event}`);
 }
 
+// Claims the one wishlist email `readerId` may get about `isbn` in
+// WISHLIST_NOTICE_INTERVAL_SECONDS, however often the ISBN is listed. A notice
+// sent more recently leaves the filter unmatched, and the upsert then collides
+// with it on _id.
+async function claimWishlistNotice(readerId, isbn) {
+  const now = Date.now();
+  try {
+    await WishlistNotice.updateOne(
+      { _id: `${readerId}:${isbn}`, sentAt: { $lte: new Date(now - WISHLIST_NOTICE_INTERVAL_SECONDS * 1000) } },
+      { $set: { sentAt: new Date(now) } },
+      { upsert: true }
+    );
+    return true;
+  } catch (err) {
+    if (err.code === 11000) return false;
+    throw err;
+  }
+}
+
 /**
  * `offer` was just put on the market. Each reader it matches (lib/matches.js)
- * is emailed once about it.
+ * is emailed about it, at most once per ISBN in WISHLIST_NOTICE_INTERVAL_SECONDS.
  */
 export function notifyWishlistMatch(offer) {
   notifyInBackground(async () => {
@@ -230,6 +258,7 @@ export function notifyWishlistMatch(offer) {
       notifyInBackground(async () => {
         const recipient = await recipientFor(readerId, offer.owner, "wishlist");
         if (!recipient) return;
+        if (!(await claimWishlistNotice(readerId, matchIsbn(offer)))) return;
         await send(recipient, "wishlist", {
           subject: `${title} is available`,
           sentence: `${owner} is offering ${title}, a book on your wishlist.`,

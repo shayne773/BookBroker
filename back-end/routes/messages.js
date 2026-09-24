@@ -225,6 +225,7 @@ router.get("/:user", async (req, res, next) => {
 // POST /messages/:user/read   body: { upTo?: messageId }
 // Marks the conversation read up to `upTo` (the newest message the client has
 // fetched), or up to its newest message. The marker only ever moves forward.
+// `seenAt` records when, which holds back message emails for a while.
 // --------------------
 router.post("/:user/read", async (req, res, next) => {
   try {
@@ -241,7 +242,7 @@ router.post("/:user/read", async (req, res, next) => {
 
     await Conversation.updateOne(
       { _id: conversation._id },
-      { $max: { [`readAt.${userId}`]: readAt } }
+      { $max: { [`readAt.${userId}`]: readAt, [`seenAt.${userId}`]: new Date() } }
     );
 
     res.status(204).end();
@@ -285,8 +286,8 @@ router.post("/:user", async (req, res, next) => {
       createdAt: new Date(),
     });
 
-    // The sender has read their own message. `lastMessage*` only moves forward,
-    // so a slower concurrent send cannot wind it back.
+    // The sender has read their own message, just now. `lastMessage*` only moves
+    // forward, so a slower concurrent send cannot wind it back.
     await Promise.all([
       Conversation.updateOne(
         {
@@ -300,7 +301,12 @@ router.post("/:user", async (req, res, next) => {
       ),
       Conversation.updateOne(
         { _id: conversation._id },
-        { $max: { [`readAt.${userId}`]: message.createdAt } }
+        {
+          $max: {
+            [`readAt.${userId}`]: message.createdAt,
+            [`seenAt.${userId}`]: message.createdAt,
+          },
+        }
       ),
     ]);
 
