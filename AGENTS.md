@@ -73,6 +73,13 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Tests never reach the network: `test/setup.js` makes `http.get` (`lib/http.js`) throw,
   and `mockHttp` in `test/helpers.js` answers it for one test.
 
+## Account emails
+
+- Every stored or queried address goes through `normalizeEmail` (`back-end/lib/validation.js`)
+  and is looked up exactly, on the plain `email_1` index. `email_case_insensitive` (strength-2
+  collation, `Data.js`) makes Mongo reject case variants; queries never use it. A duplicate
+  surfaces as error 11000, which the routes answer as "User already exists" / "Email already in use".
+
 ## Sign-in sessions
 
 - A sign-in token is opaque, not a JWT: `back-end/lib/sessions.js` stores its SHA-256 hash as a

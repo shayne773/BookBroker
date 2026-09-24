@@ -19,6 +19,9 @@ const SUSPENSION_NOTE_MAX_LENGTH = 1000;
 // User schema
 const userSchema = new Schema({
   username: { type: String, required: true },
+  // Always stored through normalizeEmail (lib/validation.js), so every lookup is an
+  // exact match on this plain unique index. The case-insensitive index below makes
+  // the database itself refuse an address differing only in capitalization.
   email:    { type: String, required: true, unique: true },
   password: { type: String, required: true },
   location: String,
@@ -50,6 +53,16 @@ const userSchema = new Schema({
   wishlist: [{ type: Schema.Types.ObjectId, ref: "WishlistBook" }],
   offered:  [{ type: Schema.Types.ObjectId, ref: "OfferedBook" }],
 });
+
+// Unique under a strength-2 collation, so `Bob@x.com` cannot be stored beside
+// `bob@x.com` even by a write that skips normalization. Queries do not use it (they
+// would have to name the same collation); they use the plain `email_1` index above.
+// A second index on the same key needs its own name. It is only ever added, so
+// Mongoose's autoIndex builds it on an existing collection without dropping anything.
+userSchema.index(
+  { email: 1 },
+  { name: "email_case_insensitive", unique: true, collation: { locale: "en", strength: 2 } }
+);
 
 // The suspended accounts are few, and every market listing looks them up.
 userSchema.index({ suspended: 1 }, { partialFilterExpression: { suspended: true } });
