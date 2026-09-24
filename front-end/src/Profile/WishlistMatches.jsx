@@ -1,5 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import BookCover from '../BookCover';
+import DistanceLabel from '../DistanceLabel';
+import { formatDistance } from '../distance';
 import { readerMeta } from '../rating';
 import useWishlistMatches from './useWishlistMatches';
 
@@ -59,6 +61,12 @@ const WishlistMatches = () => {
                           <span className="offer-line__who">{offer.owner.username}</span>
                           {readerMeta(offer.owner) && (
                             <span className="offer-line__meta"> · {readerMeta(offer.owner)}</span>
+                          )}
+                          {formatDistance(offer.distanceMiles) && (
+                            <>
+                              {' · '}
+                              <DistanceLabel miles={offer.distanceMiles} />
+                            </>
                           )}
                         </span>
                         <span className="textlink-arrow__mark" aria-hidden="true">&rarr;</span>

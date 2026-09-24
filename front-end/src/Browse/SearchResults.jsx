@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import BookCover from '../BookCover';
+import DistanceLabel from '../DistanceLabel';
 
 // The live suggestion list under the Google Books field.
 export const GoogleSuggestions = ({ results, onPick }) => (
@@ -98,6 +99,7 @@ export const MarketResults = ({ books }) => {
               {book.author || '[NO AUTHOR]'}
               {book.year ? ` · ${book.year}` : ''}
             </p>
+            <DistanceLabel miles={book.distanceMiles} block />
           </div>
 
           {book._id ? (

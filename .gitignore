@@ -19,6 +19,8 @@
 *.rar
 *.tar
 *.zip
+# The offline ZIP code table (back-end/scripts/build-zip-codes.js) ships with the API.
+!back-end/data/us-zip-codes.tsv.gz
 
 # Logs and databases #
 ######################

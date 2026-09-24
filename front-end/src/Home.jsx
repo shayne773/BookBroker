@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from './auth';
 import BookCover from './BookCover';
+import DistanceLabel from './DistanceLabel';
+import LocationPrompt from './LocationPrompt';
+import useReaderArea from './useReaderArea';
 
 const Home = () => {
     const [books, setBooks] = useState([]);
@@ -10,6 +13,7 @@ const Home = () => {
     // ISBNs on the reader's wishlist, so a book they already want is flagged
     // rather than offered to them again.
     const [wishlistIsbns, setWishlistIsbns] = useState(() => new Set());
+    const area = useReaderArea();
 
     useEffect(() => {
         // Fetch real offered books from backend
@@ -105,6 +109,8 @@ const Home = () => {
             </div>
         </div>
 
+        <LocationPrompt area={area} />
+
         {/* success toast for adding book */}
         {showToast && (
         <div className="toast" role="status">
@@ -134,6 +140,7 @@ const Home = () => {
                         <p className="lead__byline">
                             {lead.author || "[NO AUTHOR]"} &middot; {lead.year || "[NO DATE]"}
                         </p>
+                        <DistanceLabel miles={lead.distanceMiles} block />
 
                         {lead.desc && <p className="prose lead__desc">{lead.desc}</p>}
 
@@ -188,6 +195,7 @@ const Home = () => {
                                             <br />
                                             {book.year || "[NO DATE]"}
                                         </span>
+                                        <DistanceLabel miles={book.distanceMiles} block />
                                     </Link>
 
                                     {onWishlist(book) ? (

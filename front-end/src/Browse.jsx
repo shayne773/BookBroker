@@ -2,13 +2,27 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { authFetch, isSessionExpiredError } from "./auth";
 import BookCover from "./BookCover";
+import DistanceLabel from "./DistanceLabel";
+import LocationPrompt from "./LocationPrompt";
 
 const Browse = () => {
   const [query, setQuery] = useState("");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Fetched once, apart from the search-driven payload.
+  const [recommended, setRecommended] = useState(null);
 
   const server = import.meta.env.VITE_SERVER_ADDRESS;
+
+  useEffect(() => {
+    authFetch(`${server}/recommendations`)
+      .then((r) => r.json())
+      .then((books) => setRecommended(Array.isArray(books) ? books : []))
+      .catch((err) => {
+        if (isSessionExpiredError(err)) return;
+        setRecommended([]);
+      });
+  }, [server]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -58,6 +72,8 @@ const Browse = () => {
         </div>
       </div>
 
+      <LocationPrompt area={data?.area} />
+
       <nav className="browse-links" aria-label="Browse sections">
         <Link to="/browse/newly-added" className="textlink-quiet">Newly added</Link>
         <Link to="/browse/popular" className="textlink-quiet">Most wanted</Link>
@@ -78,7 +94,7 @@ const Browse = () => {
           {!showSearch && (
             <>
               <Section title="Recommended for you">
-                <BookRow books={data.recommended} />
+                <BookRow books={recommended} />
               </Section>
 
               <Section title="Most wanted">
@@ -129,6 +145,7 @@ const BookRow = ({ books }) => {
 
           <span className="book-tile__title">{b.title || "[NO TITLE]"}</span>
           <span className="book-tile__meta">{b.author || "[NO AUTHOR]"}</span>
+          <DistanceLabel miles={b.distanceMiles} block />
         </Link>
       ))}
     </div>

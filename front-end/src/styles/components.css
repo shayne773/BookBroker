@@ -1157,6 +1157,15 @@ a.book-tile:focus-visible .book-tile__title {
   font-size: var(--text-sm);
 }
 
+/* How far away a book or reader is ("3 mi away"): small, quiet sans, beside
+   or under the text it qualifies, never a badge. */
+.distance {
+  color: var(--color-ink-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
 .notice {
   display: inline-flex;
   align-items: center;
@@ -1304,11 +1313,6 @@ a.book-tile:focus-visible .book-tile__title {
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
-}
-
-/* A field that appears in response to another (e.g. "Other" city). */
-.field--enter {
-  animation: page-enter var(--duration-base) var(--ease-out) both;
 }
 
 /* The native arrow is replaced by one drawn in ink, so a select sits on the

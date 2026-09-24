@@ -1,8 +1,8 @@
 import Popup from 'reactjs-popup';
 
-// The account details form, opened from the profile head. The city choice is
-// held by Profile, so it survives the popup closing.
-const EditProfileDialog = ({ location, setLocation, customLocation, setCustomLocation, onSubmit }) => (
+// The account details form, opened from the profile head. Where the reader
+// trades is set in its own section of the profile (LocationSettings).
+const EditProfileDialog = ({ onSubmit }) => (
   <Popup
     trigger={<button type="button" className="button button--secondary">Edit profile</button>}
     modal
@@ -27,37 +27,6 @@ const EditProfileDialog = ({ location, setLocation, customLocation, setCustomLoc
             <span className="field__label">Email</span>
             <input className="input" type="text" name="email" id="email" />
           </label>
-
-          <label className="field">
-            <span className="field__label">City</span>
-            <select
-              className="input"
-              id="location"
-              name="location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-            >
-              <option value="">--Choose a city--</option>
-              <option value="New York">New York, NY</option>
-              <option value="Los Angeles">Los Angeles, CA</option>
-              <option value="Other">Other</option>
-            </select>
-          </label>
-
-          {location === 'Other' && (
-            <label className="field field--enter">
-              <span className="field__label">Enter your city</span>
-              <input
-                className="input"
-                type="text"
-                id="customLocation"
-                name="customLocation"
-                value={customLocation}
-                onChange={(e) => setCustomLocation(e.target.value)}
-                required
-              />
-            </label>
-          )}
 
           <div className="dialog__foot">
             <button type="button" className="button button--quiet" onClick={close}>

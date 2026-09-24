@@ -2,6 +2,7 @@ import ShelfPage from './ShelfPage';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from './auth';
+import DistanceLabel from './DistanceLabel';
 
 const UserPageOffered = () => {
   const { id } = useParams(); // user id
@@ -26,6 +27,7 @@ const UserPageOffered = () => {
       title="Offerings"
       books={offeredBooks}
       emptyLabel="No offerings"
+      renderExtra={(book) => <DistanceLabel miles={book.distanceMiles} block />}
     />
   );
 };

@@ -157,9 +157,10 @@ describe("blocking", () => {
         const res = await api(me.token).get("/browse?q=hobbit");
 
         expect(res).to.have.status(200);
-        const { searchResults, popular, newlyAdded, recommended, genreRows } = res.body;
-        const all = [searchResults, popular, newlyAdded, recommended, ...Object.values(genreRows)].flat();
+        const { searchResults, popular, newlyAdded, genreRows } = res.body;
+        const all = [searchResults, popular, newlyAdded, ...Object.values(genreRows)].flat();
         expect(ids(all)).to.not.include(theirBook.id);
+        expect(ids((await api(me.token).get("/recommendations")).body)).to.not.include(theirBook.id);
       });
 
       it("hides each other's books from the public lists when signed in", async () => {

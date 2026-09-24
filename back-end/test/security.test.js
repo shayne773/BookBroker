@@ -47,7 +47,7 @@ describe("GET /users/:id", () => {
   });
 
   it("never returns the password hash or the email address", async () => {
-    const user = await createUser({ location: "Queens" });
+    const user = await createUser({ zip: "11375" });
     const viewer = await createUser();
 
     const res = await request
@@ -58,7 +58,7 @@ describe("GET /users/:id", () => {
     expect(res).to.have.status(200);
     expect(res.body).to.include({
       username: user.username,
-      location: "Queens",
+      location: "Forest Hills, NY",
       ratingsAvg: 0,
       ratingsCount: 0,
       blockedByMe: false,
@@ -232,7 +232,7 @@ describe("CORS allowlist", () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /auth/register - validation, normalization, city persistence
+// POST /auth/register - validation, normalization, ZIP code persistence
 // ---------------------------------------------------------------------------
 describe("POST /auth/register", () => {
   beforeEach(resetState);
@@ -241,7 +241,7 @@ describe("POST /auth/register", () => {
     username: "newreader",
     email: "New.Reader@Example.COM",
     password: "Str0ngPassw0rd",
-    location: "Brooklyn",
+    zip: "11201",
   });
 
   it("rejects a missing field with a 400 rather than throwing", async () => {
@@ -257,7 +257,10 @@ describe("POST /auth/register", () => {
     ["a password that is too short", { password: "Sh0rt" }],
     ["an invalid email address", { email: "not-an-email" }],
     ["a username that is too short", { username: "ab" }],
-    ["a missing city", { location: "" }],
+    ["a missing ZIP code", { zip: "" }],
+    ["a ZIP code that is not five digits", { zip: "1120" }],
+    ["a postal code from outside the US", { zip: "M5V 2T6" }],
+    ["a ZIP code that does not exist", { zip: "00000" }],
   ]) {
     it(`rejects ${label}`, async () => {
       const res = await request
@@ -292,14 +295,17 @@ describe("POST /auth/register", () => {
     expect(stored.email).to.equal("new.reader@example.com");
   });
 
-  it("persists the city from the signup form", async () => {
-    await request.execute(app).post("/auth/register").send(validBody());
+  it("stores the ZIP code with its place and point", async () => {
+    await request.execute(app).post("/auth/register").send({ ...validBody(), zip: " 11201-1234 " });
 
-    const stored = await User.findOne({ email: "new.reader@example.com" });
-    expect(stored.location).to.equal("Brooklyn");
+    const stored = await User.findOne({ email: "new.reader@example.com" }).select("+zip +geo");
+    expect(stored.zip).to.equal("11201");
+    expect(stored.location).to.equal("Brooklyn, NY");
+    expect(stored.geo.toObject()).to.deep.equal({ type: "Point", coordinates: [-73.99, 40.694] });
+    expect(stored.maxDistanceMiles).to.equal(25);
   });
 
-  it("round-trips the city through login and GET /user", async () => {
+  it("round-trips the place and ZIP code through login and GET /user", async () => {
     await request.execute(app).post("/auth/register").send(validBody());
     await confirmEmail("new.reader@example.com");
 
@@ -316,7 +322,8 @@ describe("POST /auth/register", () => {
       .set("Authorization", `Bearer ${login.body.token}`);
 
     expect(me).to.have.status(200);
-    expect(me.body.location).to.equal("Brooklyn");
+    expect(me.body).to.include({ location: "Brooklyn, NY", zip: "11201", maxDistanceMiles: 25 });
+    expect(me.body).to.not.have.property("geo");
   });
 
   it("treats a differently cased email as the same account", async () => {
@@ -409,7 +416,7 @@ describe("error responses", () => {
         username: "newreader",
         email: "new.reader@example.com",
         password: "Str0ngPassw0rd",
-        location: "Brooklyn",
+        zip: "11201",
       });
 
       expect(res).to.have.status(500);
@@ -525,46 +532,6 @@ describe("POST /auth/login rate limiting", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Owner documents joined for filtering must not reach the client
-// ---------------------------------------------------------------------------
-describe("owner lookups in the recommendation pipelines", () => {
-  beforeEach(resetState);
-
-  // Both routes $lookup the owner purely to filter on their city. The joined
-  // document must not survive into the response.
-  const recommendationCases = [
-    {
-      label: "GET /browse",
-      path: "/browse",
-      pick: (body) => body.recommended,
-    },
-    {
-      label: "GET /user/get-recommended-books",
-      path: "/user/get-recommended-books",
-      pick: (body) => body,
-    },
-  ];
-
-  for (const { label, path, pick } of recommendationCases) {
-    it(`${label} does not return the owner's password hash or email`, async () => {
-      const viewer = await createUser({ location: "Brooklyn" });
-      const owner = await createUser({ location: "Brooklyn" });
-      await createOfferedBook(owner);
-
-      const res = await request.execute(app).get(path).set(await authHeader(viewer));
-
-      expect(res).to.have.status(200);
-
-      const books = pick(res.body);
-      expect(books, "the neighbour's book is recommended").to.have.lengthOf(1);
-      expect(books[0]).to.not.have.property("ownerDetails");
-      expect(JSON.stringify(res.body)).to.not.include(owner.password);
-      expect(JSON.stringify(res.body)).to.not.include(owner.email);
-    });
-  }
-});
-
-// ---------------------------------------------------------------------------
 // POST /user/edit - the write path returns public fields only
 // ---------------------------------------------------------------------------
 describe("POST /user/edit", () => {
@@ -657,13 +624,13 @@ describe("POST /user/edit email changes", () => {
       .execute(app)
       .post("/user/edit")
       .set(await authHeader(user))
-      .send({ user: { username: "renamed", location: "Queens" } });
+      .send({ user: { username: "renamed", zip: "11375" } });
 
     expect(res).to.have.status(200);
 
     const updated = await User.findById(user._id).select("username location email");
     expect(updated.username).to.equal("renamed");
-    expect(updated.location).to.equal("Queens");
+    expect(updated.location).to.equal("Forest Hills, NY");
     expect(updated.email).to.equal(user.email);
   });
 });

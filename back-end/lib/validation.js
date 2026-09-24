@@ -1,5 +1,7 @@
 // Shared input validation / sanitization helpers for the BookBroker API.
 import { body, validationResult } from "express-validator";
+import { DISTANCE_CHOICES_MILES } from "../Data.js";
+import { lookupZip, normalizeZip, ZIP_FORMAT_MESSAGE, ZIP_UNKNOWN_MESSAGE } from "./zipCodes.js";
 
 // Characters that carry special meaning inside a regular expression. User input
 // is interpolated into Mongo `$regex` queries in a few places, so it has to be
@@ -36,7 +38,6 @@ export const PASSWORD_REQUIREMENTS_MESSAGE =
 
 export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 30;
-export const LOCATION_MAX_LENGTH = 100;
 
 const emailChain = (field) =>
   body(field)
@@ -52,6 +53,24 @@ const emailChain = (field) =>
     .bail()
     .isLength({ max: 254 })
     .withMessage("Please enter a valid email address.");
+
+// A US ZIP code the offline table knows (lib/zipCodes.js), sanitized to its
+// five digits; the route looks it up again for the place and point.
+const zipChain = (field) =>
+  body(field)
+    .exists({ values: "falsy" })
+    .withMessage("ZIP code is required.")
+    .bail()
+    .isString()
+    .withMessage(ZIP_FORMAT_MESSAGE)
+    .bail()
+    .custom((value) => normalizeZip(value) !== null)
+    .withMessage(ZIP_FORMAT_MESSAGE)
+    .bail()
+    .custom((value) => lookupZip(value) !== null)
+    .withMessage(ZIP_UNKNOWN_MESSAGE)
+    .bail()
+    .customSanitizer(normalizeZip);
 
 // The rules for choosing a password, shared by sign-up and password reset.
 const newPasswordChain = (field) =>
@@ -92,24 +111,19 @@ export const registerValidators = [
 
   newPasswordChain("password"),
 
-  // The signup form always collects a city and the location-based
-  // recommendations are useless without one, so it is required here too.
-  body("location")
-    .exists({ values: "falsy" })
-    .withMessage("City is required.")
-    .bail()
-    .isString()
-    .withMessage("City is required.")
-    .bail()
-    .trim()
-    .isLength({ min: 1, max: LOCATION_MAX_LENGTH })
-    .withMessage(`City must be between 1 and ${LOCATION_MAX_LENGTH} characters.`),
+  // Where the reader trades decides which books they see, so it is required.
+  zipChain("zip"),
 ];
 
 // The profile form submits the whole user object and leaves fields it is not
-// changing blank, so the address is validated only when one is actually sent.
+// changing blank, so each field is validated only when one is actually sent.
 export const userEditValidators = [
   emailChain("user.email").optional({ values: "falsy" }),
+  zipChain("user.zip").optional({ values: "falsy" }),
+  body("user.maxDistanceMiles")
+    .optional({ values: "null" })
+    .custom((value) => DISTANCE_CHOICES_MILES.includes(value))
+    .withMessage(`Choose a distance of ${DISTANCE_CHOICES_MILES.join(", ")} miles.`),
 ];
 
 export const loginValidators = [

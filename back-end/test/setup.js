@@ -43,6 +43,9 @@ export const mochaHooks = {
     this.timeout(120000);
     replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
     await mongoose.connect(replSet.getUri(), { dbName: "bookbroker-test" });
+    // Distance queries need OfferedBook's 2dsphere index, which Mongoose builds
+    // in the background on connect.
+    await Promise.all(mongoose.modelNames().map((name) => mongoose.model(name).init()));
   },
 
   beforeEach() {

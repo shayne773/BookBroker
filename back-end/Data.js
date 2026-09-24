@@ -16,6 +16,19 @@ const { Schema } = mongoose;
 
 const SUSPENSION_NOTE_MAX_LENGTH = 1000;
 
+// How far a reader will go to trade in person, in miles (lib/nearby.js).
+const DISTANCE_CHOICES_MILES = [5, 10, 25, 50, 100];
+const DEFAULT_DISTANCE_MILES = 25;
+
+// A GeoJSON point, [longitude, latitude]: where a reader trades, from their ZIP code.
+const pointSchema = new Schema(
+  {
+    type: { type: String, enum: ["Point"], required: true },
+    coordinates: { type: [Number], required: true },
+  },
+  { _id: false }
+);
+
 // User schema
 const userSchema = new Schema({
   username: { type: String, required: true },
@@ -24,7 +37,16 @@ const userSchema = new Schema({
   // the database itself refuse an address differing only in capitalization.
   email:    { type: String, required: true, unique: true },
   password: { type: String, required: true },
+  // The reader's place as others see it, "Brooklyn, NY", set from their ZIP code
+  // (lib/zipCodes.js). An account from before ZIP codes keeps the city it typed
+  // and has no `zip` or `geo` until the reader adds one.
   location: String,
+  // Where the reader trades: private to them, never sent to anyone else, and
+  // unselected unless a query names them. Their books carry `geo` as `ownerGeo`.
+  zip: { type: String, select: false },
+  geo: { type: pointSchema, select: false },
+  // Books farther than this from `geo` are hidden from the reader.
+  maxDistanceMiles: { type: Number, enum: DISTANCE_CHOICES_MILES, default: DEFAULT_DISTANCE_MILES },
   // Sign-up stores false until the emailed link is used. Accounts created before
   // email confirmation existed have no such field and read as confirmed: the
   // default applies when they are loaded, and the login check only refuses an
@@ -111,7 +133,15 @@ const offeredBookSchema = new Schema({
   locked: { type: Boolean, default: false },
   lockedByExchange: { type: mongoose.Schema.Types.ObjectId, ref: "Exchange", default: null },
   createdAt: { type: Date, default: Date.now },
+  // A copy of the owner's `geo`, so distance queries run on this collection's
+  // index. Set when the book is offered and rewritten when the owner changes
+  // ZIP (lib/nearby.js); absent while the owner has none. Never sent to a client.
+  ownerGeo: { type: pointSchema, select: false },
 });
+
+// $geoNear and $geoWithin on the owner's point. A 2dsphere index skips books
+// without one, which is why they never appear to a reader who has a ZIP.
+offeredBookSchema.index({ ownerGeo: "2dsphere" });
 
 // Wishlist matching looks offers up by ISBN among the books still on the market.
 offeredBookSchema.index({ isbn: 1, locked: 1 });
@@ -243,6 +273,8 @@ export {
   REPORT_REASONS,
   REPORT_DETAILS_MAX_LENGTH,
   SUSPENSION_NOTE_MAX_LENGTH,
+  DISTANCE_CHOICES_MILES,
+  DEFAULT_DISTANCE_MILES,
 
   // optional legacy exports
   injectBookModel,

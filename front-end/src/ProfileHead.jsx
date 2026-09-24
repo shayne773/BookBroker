@@ -1,3 +1,4 @@
+import DistanceLabel from './DistanceLabel';
 import { formatRating } from './rating';
 
 // The head of a reader's page - your own profile or someone else's: their
@@ -29,7 +30,13 @@ const ProfileHead = ({ kicker, user, children }) => (
       </div>
       <div>
         <dt className="fact__term">Location</dt>
-        <dd className="fact__value">{user?.location ?? 'N/A'}</dd>
+        <dd className="fact__value">{user?.location || 'N/A'}</dd>
+        {/* Another reader's distance from you; your own page has none. */}
+        {user?.distanceMiles !== undefined && (
+          <dd>
+            <DistanceLabel miles={user.distanceMiles} />
+          </dd>
+        )}
       </div>
       <div>
         <dt className="fact__term">Rating</dt>

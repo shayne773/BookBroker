@@ -265,8 +265,9 @@ async function claimWishlistNotice(readerId, isbn) {
 const releaseWishlistNotice = (claim) => WishlistNotice.deleteOne(claim);
 
 /**
- * `offer` was just put on the market. Each reader it matches (lib/matches.js)
- * is emailed about it, at most once per ISBN in WISHLIST_NOTICE_INTERVAL_SECONDS.
+ * `offer` was just put on the market. Each reader it matches (lib/matches.js),
+ * which takes only readers whose distance reaches it, is emailed about it,
+ * nearest first, at most once per ISBN in WISHLIST_NOTICE_INTERVAL_SECONDS.
  */
 export function notifyWishlistMatch(offer) {
   notifyInBackground(async () => {
