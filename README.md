@@ -128,9 +128,9 @@ how many readers want them, then by distance.
 
 Other readers see a reader's town ("Brooklyn, NY") and, for a book within their own
 distance, a rounded distance to it (beyond it, only "More than 25 mi away"), never
-their ZIP code or coordinates. A reader can change their ZIP code 3 times a day. An account from before ZIP codes is asked to add
-one, and until then sees every book, without distances; its own books are hidden
-from readers who have set a ZIP.
+their ZIP code or coordinates. A reader can change their ZIP code 3 times a day. An
+account from before ZIP codes is asked to add one, and until then sees every book,
+without distances; its own books are hidden from readers who have set a ZIP.
 
 ZIP codes are resolved offline from `back-end/data/us-zip-codes.tsv.gz`, with no
 geocoding service at runtime. It is built from the
