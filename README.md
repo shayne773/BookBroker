@@ -73,8 +73,8 @@ not a JWT.
 
 Without `RESEND_API_KEY` the API sends no email — sign-up confirmation, password
 reset and email-change links, and notification emails, are logged to the back-end
-console instead, so you can follow them locally. Without `GOOGLE_BOOKS_API_KEY`, book search reports that it is
-temporarily unavailable.
+console instead, so you can follow them locally. Without `GOOGLE_BOOKS_API_KEY`,
+book search reports that it is temporarily unavailable.
 
 **Admins.** There is no admin sign-up and no role editing. An account is an admin
 when its confirmed email is listed in `ADMIN_EMAILS` (compared case-insensitively);
