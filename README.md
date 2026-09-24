@@ -123,6 +123,19 @@ It fetches every book, cover included, before deleting the previous seed, so a
 Google failure leaves the existing data in place. Covers are stored as https; a book
 Google has no image for falls back to Open Library's cover where one exists.
 
+## Database indexes
+
+The API builds its indexes when it starts, but only logs a failed build. To build
+them explicitly and see the result (safe to repeat; it never drops an index):
+
+```
+cd back-end
+npm run ensure-indexes              # database "bookbroker"; add -- <dbName> for another
+```
+
+It refuses, listing them, if two accounts hold addresses that differ only in
+capitalization, which the case-insensitive unique index on email would reject.
+
 ## Tests
 
 The checks every pull request must pass are pinned in `.no-mistakes.yaml` and run by

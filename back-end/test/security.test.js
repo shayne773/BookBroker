@@ -346,48 +346,48 @@ describe("POST /auth/register", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Accounts stored before emails were normalized keep a mixed-case address
+// Email lookups are exact matches on the normalized address
 // ---------------------------------------------------------------------------
-describe("accounts with a mixed-case stored email", () => {
+describe("email addresses and the database", () => {
   beforeEach(resetState);
 
-  it("lets a legacy account sign in", async () => {
-    const legacy = await createUser({ email: "Legacy.Reader@Example.COM" });
+  it("signs in with the exact stored address", async () => {
+    const user = await createUser({ email: "reader@example.com" });
 
     const res = await request
       .execute(app)
       .post("/auth/login")
-      .send({ email: "legacy.reader@example.com", password: TEST_PASSWORD });
+      .send({ email: "reader@example.com", password: TEST_PASSWORD });
 
     expect(res).to.have.status(200);
-    expect(res.body).to.have.property("token");
-    expect(res.body.user.id).to.equal(legacy._id.toString());
+    expect(res.body.user.id).to.equal(user._id.toString());
   });
 
-  it("does not rewrite the stored address on sign-in", async () => {
-    await createUser({ email: "Legacy.Reader@Example.COM" });
+  it("signs in a differently cased address through normalization", async () => {
+    const user = await createUser({ email: "reader@example.com" });
 
-    await request
+    const res = await request
       .execute(app)
       .post("/auth/login")
-      .send({ email: "legacy.reader@example.com", password: TEST_PASSWORD });
+      .send({ email: " Reader@Example.COM ", password: TEST_PASSWORD });
 
-    const stored = await User.findOne({ email: "Legacy.Reader@Example.COM" });
-    expect(stored).to.exist;
+    expect(res).to.have.status(200);
+    expect(res.body.user.id).to.equal(user._id.toString());
   });
 
-  it("refuses a signup that would duplicate a legacy account", async () => {
-    await createUser({ email: "Legacy.Reader@Example.COM" });
+  it("refuses to store an address differing only in capitalization", async () => {
+    await User.init();
+    await User.create({ username: "bob", email: "bob@x.com", password: "x" });
 
-    const res = await request.execute(app).post("/auth/register").send({
-      username: "newreader",
-      email: "legacy.reader@example.com",
-      password: "Str0ngPassw0rd",
-      location: "Brooklyn",
-    });
+    let error;
+    try {
+      // Written directly, skipping normalization, to reach the index itself.
+      await User.create({ username: "bob2", email: "Bob@X.com", password: "x" });
+    } catch (err) {
+      error = err;
+    }
 
-    expect(res).to.have.status(400);
-    expect(res.body.message).to.equal("User already exists");
+    expect(error?.code).to.equal(11000);
     expect(await User.countDocuments({})).to.equal(1);
   });
 });
@@ -592,22 +592,23 @@ describe("POST /user/edit", () => {
 describe("POST /user/edit email changes", () => {
   beforeEach(resetState);
 
-  it("refuses an address a legacy mixed-case account already holds", async () => {
-    const legacy = await createUser({ email: "Bob@X.com" });
+  it("refuses an address another account already holds, whatever its casing", async () => {
+    const owner = await createUser({ email: "bob@x.com" });
     const attacker = await createUser();
 
     const res = await request
       .execute(app)
       .post("/user/edit")
       .set(await authHeader(attacker))
-      .send({ user: { email: "bob@x.com" } });
+      .send({ user: { email: "Bob@X.com" } });
 
-    expect(res.status, "the edit is rejected").to.be.within(400, 499);
+    expect(res).to.have.status(409);
+    expect(res.body.message).to.equal("Email already in use");
 
     const stillMine = await User.findById(attacker._id).select("email");
     expect(stillMine.email).to.equal(attacker.email);
 
-    // The legacy owner can still sign in with the address they registered.
+    // The owner can still sign in with the address they registered.
     const signIn = await request
       .execute(app)
       .post("/auth/login")
@@ -615,7 +616,7 @@ describe("POST /user/edit email changes", () => {
 
     expect(signIn).to.have.status(200);
     expect(signIn.body).to.have.property("token");
-    expect(signIn.body.user.id).to.equal(legacy._id.toString());
+    expect(signIn.body.user.id).to.equal(owner._id.toString());
   });
 
   it("rejects an address that is not a valid email", async () => {

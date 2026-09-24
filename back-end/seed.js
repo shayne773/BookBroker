@@ -14,6 +14,7 @@ import { hasGoogleBooksKey, mapVolume, searchVolumes } from "./lib/googleBooks.j
 import { captureCover } from "./lib/covers.js";
 import { pause } from "./lib/http.js";
 import { DB_NAME } from "./lib/db.js";
+import { normalizeEmail } from "./lib/validation.js";
 
 const SEED_PREFIX = "seed_user_";
 const USER_COUNT = 10;
@@ -114,7 +115,7 @@ export async function seed({ pauseMs = 250, log = console.log } = {}) {
   const createdUsers = await User.insertMany(
     Array.from({ length: USER_COUNT }, (_, i) => ({
       username: `${SEED_PREFIX}${i + 1}`,
-      email: `${SEED_PREFIX}${i + 1}@example.com`,
+      email: normalizeEmail(`${SEED_PREFIX}${i + 1}@example.com`),
       password: hashed,
       location: LOCATIONS[i % LOCATIONS.length],
     }))

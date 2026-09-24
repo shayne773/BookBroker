@@ -7,6 +7,7 @@ import { OfferedBook, User } from "../Data.js";
 import { outbox } from "./setup.js";
 import { http } from "../lib/http.js";
 import { createSession } from "../lib/sessions.js";
+import { normalizeEmail } from "../lib/validation.js";
 
 use(chaiHttp);
 
@@ -97,16 +98,17 @@ export async function clearDatabase() {
   await Promise.all(Object.values(collections).map((c) => c.deleteMany({})));
 }
 
+// Stores the email normalized, as every route does.
 export async function createUser(overrides = {}) {
   const { password = TEST_PASSWORD, ...rest } = overrides;
   const suffix = new mongoose.Types.ObjectId().toString();
 
   return User.create({
     username: `user_${suffix.slice(-6)}`,
-    email: `user_${suffix}@example.com`,
     password: await bcrypt.hash(password, 10),
     location: "Brooklyn",
     ...rest,
+    email: normalizeEmail(rest.email ?? `user_${suffix}@example.com`),
   });
 }
 

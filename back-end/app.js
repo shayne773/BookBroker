@@ -140,20 +140,6 @@ async function sendEmailConfirmation(user) {
   );
 }
 
-// New emails are stored normalized, but accounts created before that still hold
-// whatever casing the user typed. A strength-2 collation compares case- and
-// accent-insensitively inside Mongo, so those accounts stay reachable without
-// rewriting them and without building a regex out of an address.
-const CASE_INSENSITIVE = { locale: "en", strength: 2 };
-
-// The unique index on `email` uses the simple collation, so this lookup cannot
-// use it and scans the collection. Deliberate for now: every alternative is a
-// live-database operation (a collation index, or a normalized field plus a
-// backfill) and is tracked separately.
-function findUserByEmail(email) {
-  return User.findOne({ email }).collation(CASE_INSENSITIVE);
-}
-
 // A pending email counts only while the link mailed to it can still be used.
 // Once that token has expired or been spent, the stale address is dropped; the
 // filter on its value keeps a newer request made meanwhile.
@@ -246,7 +232,7 @@ app.post("/auth/register", registerValidators, async (req, res, next) => {
   const { username, email, password, location } = matchedData(req);
 
   try {
-    const existingUser = await findUserByEmail(email);
+    const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ message: "User already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -289,7 +275,7 @@ app.post("/auth/login", loginValidators, async (req, res, next) => {
       return res.status(429).json({ message: LOGIN_THROTTLED_MESSAGE });
     }
 
-    const user = (await User.findOne({ email })) ?? (await findUserByEmail(email));
+    const user = await User.findOne({ email });
 
     const isMatch = user?.password
       ? await bcrypt.compare(password, user.password)
@@ -363,7 +349,7 @@ app.post("/auth/confirm-email-change", async (req, res, next) => {
     }
 
     // Another account may have taken the address since the link was sent.
-    const owner = await findUserByEmail(user.pendingEmail);
+    const owner = await User.findOne({ email: user.pendingEmail });
     if (owner && !owner._id.equals(user._id)) {
       await User.updateOne({ _id: user._id }, { $unset: { pendingEmail: 1 } });
       return res.status(409).json({ message: "Email already in use" });
@@ -398,7 +384,7 @@ app.post("/auth/resend-confirmation", emailOnlyValidators, async (req, res, next
   try {
     if (await mailRequestLimited(resendConfirmationThrottles, req, res, email)) return;
 
-    const user = await findUserByEmail(email);
+    const user = await User.findOne({ email });
     if (user && user.emailVerified === false) await sendEmailConfirmation(user);
 
     res.json({
@@ -419,7 +405,7 @@ app.post("/auth/forgot-password", emailOnlyValidators, async (req, res, next) =>
   try {
     if (await mailRequestLimited(forgotPasswordThrottles, req, res, email)) return;
 
-    const user = await findUserByEmail(email);
+    const user = await User.findOne({ email });
     if (user) {
       const token = await issueToken(TOKEN_PURPOSES.resetPassword, user._id);
       sendInBackground(
@@ -1069,9 +1055,7 @@ app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
     // is followed; until then it is held as pending.
     let pendingEmail = null;
     if (email) {
-      // The lookup is case-insensitive, so this also refuses an address that
-      // only differs in casing from an account stored before normalization.
-      const owner = await findUserByEmail(email);
+      const owner = await User.findOne({ email });
       if (owner && owner._id.toString() !== userId) {
         return res.status(409).json({ message: "Email already in use" });
       }

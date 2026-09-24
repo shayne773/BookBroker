@@ -414,7 +414,7 @@ describe("changing the account email", () => {
     await createUser({ email: "Taken@Example.com" });
     const user = await createUser();
 
-    const res = await requestChange(user, "taken@example.com");
+    const res = await requestChange(user, "TAKEN@example.com");
 
     expect(res).to.have.status(409);
     expect(outbox).to.have.length(0);
