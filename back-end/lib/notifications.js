@@ -32,6 +32,10 @@ const EPOCH = new Date(0);
 // and is not emailed about a new message in it.
 export const RECENTLY_SEEN_MS = 15 * 60 * 1000;
 
+// Resend accepts about 2 requests a second, so the emails about one new offer
+// start at least `gapMs` apart. Tests set it to 0.
+export const wishlistPacing = { gapMs: 600 };
+
 // --------------------
 // Settings
 // --------------------
@@ -268,8 +272,9 @@ export function notifyWishlistMatch(offer) {
 
     const owner = await usernameOf(offer.owner);
     const title = offer.title || "A book";
-    // One reader at a time, to stay within Resend's rate limit; a refused
+    // One reader at a time, each send spaced by wishlistPacing.gapMs; a refused
     // address is logged and does not stop the others.
+    let lastSentAt = -Infinity;
     for (const readerId of readerIds) {
       try {
         const recipient = await recipientFor(readerId, offer.owner, "wishlist");
@@ -277,6 +282,9 @@ export function notifyWishlistMatch(offer) {
         const claim = await claimWishlistNotice(readerId, matchIsbn(offer));
         if (!claim) continue;
         try {
+          const wait = lastSentAt + wishlistPacing.gapMs - Date.now();
+          if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+          lastSentAt = Date.now();
           await send(recipient, "wishlist", {
             subject: `${title} is available`,
             sentence: `${owner} is offering ${title}, a book on your wishlist.`,

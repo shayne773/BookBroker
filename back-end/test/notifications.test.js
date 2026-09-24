@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { api, authHeader, createUser, offerBook, outbox, signUp } from "./helpers.js";
 import { Block, Conversation, OfferedBook, User, WishlistBook, WishlistNotice } from "../Data.js";
 import { mail } from "../lib/mail.js";
-import { notificationsSettled, RECENTLY_SEEN_MS, unsubscribeToken } from "../lib/notifications.js";
+import { notificationsSettled, RECENTLY_SEEN_MS, unsubscribeToken, wishlistPacing } from "../lib/notifications.js";
 import { PROPOSAL_THROTTLED_MESSAGE } from "../routes/exchanges.js";
 
 // The notification emails sent to `user` so far, once every background send
@@ -387,16 +387,20 @@ describe("notification emails", () => {
       expect(await notificationsTo(bob)).to.have.length(1);
     });
 
-    it("sends to one reader at a time, and a refused address does not stop the others", async () => {
+    it("sends to one reader at a time, spaced apart, and a refused address does not stop the others", async () => {
       const readers = [bob, await signUp(), await signUp()];
       for (const reader of readers) await wish(reader);
 
       const deliver = mail.deliver;
       const consoleError = console.error;
+      const gapMs = wishlistPacing.gapMs;
+      const startedAt = [];
       let inFlight = 0;
       let mostInFlight = 0;
       let refused = false;
+      wishlistPacing.gapMs = 100;
       mail.deliver = async (message) => {
+        startedAt.push(Date.now());
         inFlight += 1;
         mostInFlight = Math.max(mostInFlight, inFlight);
         await new Promise((resolve) => setTimeout(resolve, 20));
@@ -414,9 +418,14 @@ describe("notification emails", () => {
       } finally {
         mail.deliver = deliver;
         console.error = consoleError;
+        wishlistPacing.gapMs = gapMs;
       }
 
       expect(mostInFlight).to.equal(1);
+      expect(startedAt).to.have.length(3);
+      for (let i = 1; i < startedAt.length; i += 1) {
+        expect(startedAt[i] - startedAt[i - 1]).to.be.at.least(95);
+      }
       const sent = await Promise.all(readers.map((reader) => notificationsTo(reader)));
       expect(sent.map((emails) => emails.length).sort()).to.deep.equal([0, 1, 1]);
     });
