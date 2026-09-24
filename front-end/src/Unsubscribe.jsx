@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import AuthShell from './AuthShell';
 import { postPublic } from './publicApi';
@@ -9,39 +9,32 @@ const CATEGORY_NAMES = {
   wishlist: 'wishlist matches',
 };
 
-// Landing page for the unsubscribe link in every notification email: following
-// it turns that category of email off, with no sign-in. The ref keeps React's
-// development double-mount from sending it twice.
+// Landing page for the unsubscribe link in every notification email. It names
+// the category the link turns off (the token's second part) and turns it off,
+// with no sign-in, only when the reader presses the button: mail scanners open
+// links, and must not unsubscribe anyone by doing so.
 export default function Unsubscribe() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
-  const [state, setState] = useState(token ? { status: 'pending' } : {
-    status: 'failed',
-    message: 'This unsubscribe link is incomplete.',
-  });
-  const sent = useRef(false);
+  const category = token?.split('.')[1];
+  const [state, setState] = useState(
+    token && CATEGORY_NAMES[category]
+      ? { status: 'ready' }
+      : { status: 'failed', message: 'This unsubscribe link is incomplete.' }
+  );
 
-  useEffect(() => {
-    if (!token || sent.current) return;
-    sent.current = true;
-
-    postPublic('/notifications/unsubscribe', { token })
-      .then(({ ok, data }) => setState(ok
-        ? { status: 'done', category: data.category }
-        : { status: 'failed', message: data.message || 'This unsubscribe link did not work.' }))
-      .catch((err) => {
-        console.error('Error unsubscribing:', err);
-        setState({ status: 'failed', message: 'An error occurred. Please try again.' });
-      });
-  }, [token]);
-
-  if (state.status === 'pending') {
-    return (
-      <AuthShell kicker="Email settings" title="Unsubscribing…">
-        <p className="hint" role="status">Checking your link.</p>
-      </AuthShell>
-    );
-  }
+  const unsubscribe = async () => {
+    setState({ status: 'sending' });
+    try {
+      const { ok, data } = await postPublic('/notifications/unsubscribe', { token });
+      setState(ok
+        ? { status: 'done' }
+        : { status: 'failed', message: data.message || 'This unsubscribe link did not work.' });
+    } catch (err) {
+      console.error('Error unsubscribing:', err);
+      setState({ status: 'failed', message: 'An error occurred. Please try again.' });
+    }
+  };
 
   const settings = (
     <p className="auth__switch">
@@ -50,11 +43,28 @@ export default function Unsubscribe() {
     </p>
   );
 
+  if (state.status === 'ready' || state.status === 'sending') {
+    return (
+      <AuthShell kicker="Email settings" title="Unsubscribe">
+        <p className="prose">Stop getting emails about {CATEGORY_NAMES[category]}?</p>
+        <button
+          className="button button--primary button--block"
+          type="button"
+          onClick={unsubscribe}
+          disabled={state.status === 'sending'}
+        >
+          Unsubscribe
+        </button>
+        {settings}
+      </AuthShell>
+    );
+  }
+
   if (state.status === 'done') {
     return (
       <AuthShell kicker="Email settings" title="Unsubscribed">
         <p className="prose">
-          You will no longer get emails about {CATEGORY_NAMES[state.category] || 'this'}.
+          You will no longer get emails about {CATEGORY_NAMES[category]}.
         </p>
         {settings}
       </AuthShell>

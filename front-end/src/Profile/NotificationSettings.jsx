@@ -25,8 +25,8 @@ const NotificationSettings = ({ settings }) => {
     if (loaded && hash === '#notifications') section.current?.scrollIntoView();
   }, [loaded, hash]);
 
-  // Each switch saves on its own, so a reply or a rollback touches only its own
-  // category and never undoes another switch flipped meanwhile.
+  // Each switch saves on its own and shows the reader's choice at once; only a
+  // failure touches it again, and then only its own category.
   const setCategory = (category, on) =>
     setSaved((s) => ({ ...(s ?? settings), [category]: on }));
 
@@ -39,9 +39,7 @@ const NotificationSettings = ({ settings }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [category]: on }),
       });
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setCategory(category, data.notifications[category]);
     } catch (err) {
       if (isSessionExpiredError(err)) return;
       console.error('Failed to save notification setting:', err);

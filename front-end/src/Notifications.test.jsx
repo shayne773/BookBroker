@@ -29,9 +29,14 @@ const renderUnsubscribe = (path) =>
     </StrictMode>
   );
 
-test('the unsubscribe link turns its category off once, without signing in', async () => {
+test('the unsubscribe link names its category and turns it off only when asked, without signing in', async () => {
   global.fetch.mockResolvedValue(respond(200, { category: 'trades' }));
-  renderUnsubscribe('/unsubscribe?token=abc');
+  renderUnsubscribe('/unsubscribe?token=u1.trades.mac');
+
+  expect(screen.getByText('Stop getting emails about trades?')).toBeInTheDocument();
+  expect(global.fetch).not.toHaveBeenCalled();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Unsubscribe' }));
 
   expect(await screen.findByRole('heading', { name: 'Unsubscribed' })).toBeInTheDocument();
   expect(screen.getByText('You will no longer get emails about trades.')).toBeInTheDocument();
@@ -39,15 +44,24 @@ test('the unsubscribe link turns its category off once, without signing in', asy
   const [url, init] = global.fetch.mock.calls[0];
   expect(url).toMatch(/\/notifications\/unsubscribe$/);
   expect(init.headers).not.toHaveProperty('Authorization');
-  expect(JSON.parse(init.body)).toEqual({ token: 'abc' });
+  expect(JSON.parse(init.body)).toEqual({ token: 'u1.trades.mac' });
   expect(screen.getByRole('link', { name: 'Email settings' })).toHaveAttribute('href', '/profile#notifications');
 });
 
 test('an invalid unsubscribe link says so', async () => {
   global.fetch.mockResolvedValue(respond(400, { message: 'This unsubscribe link is not valid.' }));
-  renderUnsubscribe('/unsubscribe?token=bad');
+  renderUnsubscribe('/unsubscribe?token=u1.trades.forged');
+
+  await userEvent.click(screen.getByRole('button', { name: 'Unsubscribe' }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent('This unsubscribe link is not valid.');
+});
+
+test('an unsubscribe link naming no category sends nothing', async () => {
+  renderUnsubscribe('/unsubscribe?token=bad');
+
+  expect(screen.getByRole('alert')).toHaveTextContent('This unsubscribe link is incomplete.');
+  expect(global.fetch).not.toHaveBeenCalled();
 });
 
 test('an unsubscribe link without a token sends nothing', async () => {
@@ -122,4 +136,34 @@ test('a failed switch flips back alone, keeping another switch saved meanwhile',
   expect(await screen.findByRole('alert')).toHaveTextContent('Your setting could not be saved.');
   expect(trades).toBeChecked();
   expect(wishlist).not.toBeChecked();
+});
+
+test('a reply that arrives late never undoes a newer choice', async () => {
+  const replies = [];
+  global.fetch.mockImplementation(
+    (url, init) =>
+      new Promise((resolve) => {
+        const trades = JSON.parse(init.body).trades;
+        replies.push(() =>
+          resolve(respond(200, { notifications: { messages: true, trades, wishlist: true } }))
+        );
+      })
+  );
+  render(
+    <NotificationSettings settings={{ messages: true, trades: true, wishlist: true }} />,
+    { wrapper: MemoryRouter }
+  );
+
+  const trades = screen.getByRole('checkbox', { name: /Trades/ });
+  await userEvent.click(trades);
+  await userEvent.click(trades);
+  await waitFor(() => expect(replies).toHaveLength(2));
+  expect(trades).toBeChecked();
+
+  replies[1]();
+  replies[0]();
+
+  await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+  await new Promise((r) => setTimeout(r, 0));
+  expect(trades).toBeChecked();
 });
