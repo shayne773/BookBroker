@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import ProposeTradeDialog from './MessagesDetail/ProposeTradeDialog';
 
 const LIMIT_MESSAGE =
-  'You have proposed a lot of trades in the last hour. Please wait a while before proposing another.';
+  'You have sent a lot of trade offers in the last hour. Please wait a while before sending another.';
 
 beforeEach(() => {
   localStorage.clear();

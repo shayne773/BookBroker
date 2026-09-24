@@ -128,9 +128,10 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   to the platform's wait-until so the function is not frozen mid-send.
 - One message email per conversation until read: `Conversation.notifiedAt[recipient]` holds the
   emailed message's time and is claimed atomically only once `readAt` has reached it and the
-  recipient's `seenAt` (wall-clock time of their last read or send) is over 15 minutes old.
+  recipient's `seenAt` (wall-clock time of their last `/read`) is over 15 minutes old.
 - A wishlist email is claimed per reader and ISBN in `WishlistNotice` (30-day TTL), so re-listing
-  does not repeat it; trade proposals are limited per proposer by a `trade-proposal` throttle.
+  does not repeat it; proposals and counters share a per-reader `trade-proposal` throttle. A
+  failed send gives its claim back.
 - Unsubscribe links are `userId.category.HMAC` under a per-user `User.notificationKey`
   (`select: false`), with no expiry and no sign-in; `POST /notifications/unsubscribe` and the
   front end's `/unsubscribe` page. Wishlist matching for both directions is `lib/matches.js`.

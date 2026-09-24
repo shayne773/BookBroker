@@ -19,6 +19,7 @@ export default function ExchangeDetail() {
 
   // counter modal state
   const [showCounter, setShowCounter] = useState(false);
+  const [counterError, setCounterError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
 
   // rating state
@@ -140,9 +141,15 @@ export default function ExchangeDetail() {
     }
   }
 
+  function openCounter() {
+    setCounterError("");
+    setShowCounter(true);
+  }
+
   async function onSubmitCounter({ requesterBooks, responderBooks, message }) {
     try {
       setActionBusy(true);
+      setCounterError("");
       await post(`/exchanges/${exchangeId}/counter`, {
         requesterBooks,
         responderBooks,
@@ -152,8 +159,9 @@ export default function ExchangeDetail() {
       setShowCounter(false);
       await refresh();
     } catch (e) {
+      if (isSessionExpiredError(e)) return;
       console.error(e);
-      popToast(e.message);
+      setCounterError(e.message);
     } finally {
       setActionBusy(false);
     }
@@ -244,7 +252,7 @@ export default function ExchangeDetail() {
             )}
 
             {canRespond && (
-              <button disabled={actionBusy} className="button button--secondary" onClick={() => setShowCounter(true)}>
+              <button disabled={actionBusy} className="button button--secondary" onClick={openCounter}>
                 Counter
               </button>
             )}
@@ -289,6 +297,7 @@ export default function ExchangeDetail() {
           meIsRequester={meIsRequester}
           otherUser={otherUser}
           busy={actionBusy}
+          error={counterError}
           onClose={() => setShowCounter(false)}
           onSubmit={onSubmitCounter}
         />

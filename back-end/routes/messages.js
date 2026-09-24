@@ -286,8 +286,8 @@ router.post("/:user", async (req, res, next) => {
       createdAt: new Date(),
     });
 
-    // The sender has read their own message, just now. `lastMessage*` only moves
-    // forward, so a slower concurrent send cannot wind it back.
+    // The sender has read their own message. `lastMessage*` only moves forward,
+    // so a slower concurrent send cannot wind it back.
     await Promise.all([
       Conversation.updateOne(
         {
@@ -301,12 +301,7 @@ router.post("/:user", async (req, res, next) => {
       ),
       Conversation.updateOne(
         { _id: conversation._id },
-        {
-          $max: {
-            [`readAt.${userId}`]: message.createdAt,
-            [`seenAt.${userId}`]: message.createdAt,
-          },
-        }
+        { $max: { [`readAt.${userId}`]: message.createdAt } }
       ),
     ]);
 

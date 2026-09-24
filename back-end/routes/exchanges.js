@@ -52,8 +52,9 @@ function proposerOf(exchange) {
   return exchange.status === "PENDING" ? String(exchange.requester) : null;
 }
 
-// Every proposal emails the responder, so one reader cannot propose (or cancel
-// and propose again) without limit.
+// Every proposal and counter emails the other side, so one reader cannot propose
+// (or cancel and propose again, or counter again and again) without limit. Both
+// count against the same hourly allowance.
 const HOUR = 60 * 60 * 1000;
 const proposalThrottle = new LoginThrottle({
   scope: "trade-proposal",
@@ -62,7 +63,17 @@ const proposalThrottle = new LoginThrottle({
   accountMaxAttempts: 20,
 });
 export const PROPOSAL_THROTTLED_MESSAGE =
-  "You have proposed a lot of trades in the last hour. Please wait a while before proposing another.";
+  "You have sent a lot of trade offers in the last hour. Please wait a while before sending another.";
+
+// Answers 429 and returns true when `userId` has used up their hourly offers.
+async function proposalLimited(userId, res) {
+  const limit = await proposalThrottle.hit(userId);
+  if (!limit.limited) return false;
+
+  res.set("Retry-After", String(limit.retryAfterSeconds));
+  res.status(429).json({ message: PROPOSAL_THROTTLED_MESSAGE });
+  return true;
+}
 
 // --------------------
 // POST /exchanges  (create + send invite)
@@ -92,11 +103,7 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Some responderBooks invalid / not theirs / locked" });
     }
 
-    const limit = await proposalThrottle.hit(userId);
-    if (limit.limited) {
-      res.set("Retry-After", String(limit.retryAfterSeconds));
-      return res.status(429).json({ message: PROPOSAL_THROTTLED_MESSAGE });
-    }
+    if (await proposalLimited(userId, res)) return;
 
     const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
 
@@ -205,6 +212,8 @@ router.post("/:id/counter", async (req, res) => {
 
     if (reqBooks.length !== requesterBooks.length) return res.status(400).json({ message: "Invalid requesterBooks" });
     if (resBooks.length !== responderBooks.length) return res.status(400).json({ message: "Invalid responderBooks" });
+
+    if (await proposalLimited(userId, res)) return;
 
     ex.requesterBooks = requesterBooks;
     ex.responderBooks = responderBooks;
