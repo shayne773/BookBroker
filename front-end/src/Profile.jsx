@@ -8,6 +8,7 @@ import EditProfileDialog from './Profile/EditProfileDialog';
 import useBookSearch from './Profile/useBookSearch';
 import useWishlistMatches from './Profile/useWishlistMatches';
 import BlockedReaders from './Profile/BlockedReaders';
+import NotificationSettings from './Profile/NotificationSettings';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -218,6 +219,8 @@ const Profile = () => {
           onAdd={() => setShowAddOfferingsModal(true)}
         />
       </div>
+
+      <NotificationSettings settings={user.notifications} />
 
       <BlockedReaders />
 

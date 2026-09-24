@@ -7,6 +7,7 @@ import { MongoMemoryReplSet } from "mongodb-memory-server";
 import { mail } from "../lib/mail.js";
 import { http } from "../lib/http.js";
 import { clearGoogleBooksCache } from "../lib/googleBooks.js";
+import { notificationsSettled, wishlistPacing } from "../lib/notifications.js";
 
 // The CORS allowlist is read when app.js is imported, which happens after this file.
 process.env.CORS_ALLOWED_ORIGINS =
@@ -20,6 +21,10 @@ export const unmockedDeliver = mail.deliver;
 mail.deliver = async (message) => {
   outbox.push(message);
 };
+
+// Wishlist emails are paced to Resend's rate limit; tests that check the pacing
+// set their own gap.
+wishlistPacing.gapMs = 0;
 
 // No test may reach Google Books or Open Library either: every external GET
 // fails unless a test installs its own `http.get` (see mockHttp in helpers.js).
@@ -45,6 +50,8 @@ export const mochaHooks = {
   },
 
   async afterEach() {
+    // Notifications are sent in the background; none may outlive its test.
+    await notificationsSettled();
     outbox.length = 0;
     http.get = refuseNetwork;
     clearGoogleBooksCache();

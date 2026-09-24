@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { Conversation, Message, User } from "../Data.js";
 import { BLOCKED_MESSAGE_MESSAGE, isBlockedBetween } from "../lib/blocks.js";
 import { isSuspended } from "../lib/suspensions.js";
+import { notifyNewMessage } from "../lib/notifications.js";
 
 // Conversations are addressed by the other participant's id, so a user can only
 // ever reach the conversations they are part of.
@@ -224,6 +225,7 @@ router.get("/:user", async (req, res, next) => {
 // POST /messages/:user/read   body: { upTo?: messageId }
 // Marks the conversation read up to `upTo` (the newest message the client has
 // fetched), or up to its newest message. The marker only ever moves forward.
+// `seenAt` records when, which holds back message emails for a while.
 // --------------------
 router.post("/:user/read", async (req, res, next) => {
   try {
@@ -240,7 +242,7 @@ router.post("/:user/read", async (req, res, next) => {
 
     await Conversation.updateOne(
       { _id: conversation._id },
-      { $max: { [`readAt.${userId}`]: readAt } }
+      { $max: { [`readAt.${userId}`]: readAt, [`seenAt.${userId}`]: new Date() } }
     );
 
     res.status(204).end();
@@ -302,6 +304,8 @@ router.post("/:user", async (req, res, next) => {
         { $max: { [`readAt.${userId}`]: message.createdAt } }
       ),
     ]);
+
+    notifyNewMessage({ conversation, message, recipientId: otherUserId });
 
     res.status(200).json({ messageId: message._id, message: formatMessage(message) });
   } catch (err) {

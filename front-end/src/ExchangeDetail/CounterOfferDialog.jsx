@@ -4,7 +4,7 @@ import PickableBook from "../PickableBook";
 
 // Rework the books on both sides and send the offer back. Opens with the
 // exchange's current books and message already chosen.
-export default function CounterOfferDialog({ ex, meIsRequester, otherUser, busy, onClose, onSubmit }) {
+export default function CounterOfferDialog({ ex, meIsRequester, otherUser, busy, error, onClose, onSubmit }) {
   const titleId = useId();
   const userId = localStorage.getItem("userId");
   const server = import.meta.env.VITE_SERVER_ADDRESS;
@@ -80,6 +80,8 @@ export default function CounterOfferDialog({ ex, meIsRequester, otherUser, busy,
         </div>
 
         <div className="dialog__body">
+          {error && <p className="notice notice--error" role="alert">{error}</p>}
+
           <div className="split">
             <div>
               <p className="fact__term">Your offered books</p>

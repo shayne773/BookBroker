@@ -4,6 +4,8 @@ import Exchange from "../Exchange.js";
 import { OfferedBook, User } from "../Data.js";
 import { BLOCKED_TRADE_MESSAGE, isBlockedBetween } from "../lib/blocks.js";
 import { isSuspended } from "../lib/suspensions.js";
+import { LoginThrottle } from "../lib/loginThrottle.js";
+import { notifyTrade } from "../lib/notifications.js";
 
 const router = express.Router();
 
@@ -50,6 +52,29 @@ function proposerOf(exchange) {
   return exchange.status === "PENDING" ? String(exchange.requester) : null;
 }
 
+// Every proposal and counter emails the other side, so one reader cannot propose
+// (or cancel and propose again, or counter again and again) without limit. Both
+// count against the same hourly allowance.
+const HOUR = 60 * 60 * 1000;
+const proposalThrottle = new LoginThrottle({
+  scope: "trade-proposal",
+  windowMs: HOUR,
+  lockoutMs: HOUR,
+  accountMaxAttempts: 20,
+});
+export const PROPOSAL_THROTTLED_MESSAGE =
+  "You have sent a lot of trade offers in the last hour. Please wait a while before sending another.";
+
+// Answers 429 and returns true when `userId` has used up their hourly offers.
+async function proposalLimited(userId, res) {
+  const limit = await proposalThrottle.hit(userId);
+  if (!limit.limited) return false;
+
+  res.set("Retry-After", String(limit.retryAfterSeconds));
+  res.status(429).json({ message: PROPOSAL_THROTTLED_MESSAGE });
+  return true;
+}
+
 // --------------------
 // POST /exchanges  (create + send invite)
 // body: { responderId, requesterBooks: [], responderBooks: [], message, expiresInHours }
@@ -78,6 +103,8 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Some responderBooks invalid / not theirs / locked" });
     }
 
+    if (await proposalLimited(userId, res)) return;
+
     const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
 
     const ex = await Exchange.create({
@@ -91,6 +118,7 @@ router.post("/", async (req, res) => {
       expiresAt,
     });
 
+    notifyTrade(ex, "proposed", userId);
     res.status(201).json(ex);
   } catch (err) {
     console.error("CREATE EXCHANGE error:", err);
@@ -185,6 +213,8 @@ router.post("/:id/counter", async (req, res) => {
     if (reqBooks.length !== requesterBooks.length) return res.status(400).json({ message: "Invalid requesterBooks" });
     if (resBooks.length !== responderBooks.length) return res.status(400).json({ message: "Invalid responderBooks" });
 
+    if (await proposalLimited(userId, res)) return;
+
     ex.requesterBooks = requesterBooks;
     ex.responderBooks = responderBooks;
     ex.message = message;
@@ -194,6 +224,7 @@ router.post("/:id/counter", async (req, res) => {
     ex.responderConfirmedComplete = false;
 
     await ex.save();
+    notifyTrade(ex, "countered", userId);
     res.json(ex);
   } catch (err) {
     console.error("COUNTER error:", err);
@@ -250,6 +281,7 @@ router.post("/:id/accept", async (req, res) => {
     await ex.save({ session });
 
     await session.commitTransaction();
+    notifyTrade(ex, "accepted", userId);
     res.json({ message: "Exchange accepted", exchangeId: ex._id });
   } catch (err) {
     await session.abortTransaction();
@@ -279,6 +311,7 @@ router.post("/:id/decline", async (req, res) => {
 
     ex.status = "DECLINED";
     await ex.save();
+    notifyTrade(ex, "declined", userId);
     res.json({ message: "Exchange declined" });
   } catch (err) {
     console.error("DECLINE error:", err);
@@ -328,6 +361,7 @@ router.post("/:id/cancel", async (req, res) => {
     await ex.save({ session });
 
     await session.commitTransaction();
+    notifyTrade(ex, "cancelled", userId);
     res.json({ message: "Exchange cancelled" });
   } catch (err) {
     await session.abortTransaction();
@@ -382,6 +416,7 @@ router.post("/:id/confirm-complete", async (req, res) => {
     await ex.save({ session });
 
     await session.commitTransaction();
+    if (ex.status === "COMPLETED") notifyTrade(ex, "completed", userId);
     res.json({ message: "Completion recorded", status: ex.status });
   } catch (err) {
     await session.abortTransaction();

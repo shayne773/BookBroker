@@ -23,6 +23,7 @@ import ConfirmEmail from './ConfirmEmail';
 import ConfirmEmailChange from './ConfirmEmailChange';
 import ForgotPassword from './ForgotPassword';
 import ResetPassword from './ResetPassword';
+import Unsubscribe from './Unsubscribe';
 import Navbar from './Navbar';
 import RequireAuth from './RequireAuth';
 import ExchangesList from "./ExchangesList";
@@ -33,7 +34,7 @@ const AppContent = () => {
 
   // The sign-in screens carry no navigation.
   const location = useLocation();
-  const hideNavbarRoutes = ['/login', '/signup', '/confirm-email', '/confirm-email-change', '/forgot-password', '/reset-password'];
+  const hideNavbarRoutes = ['/login', '/signup', '/confirm-email', '/confirm-email-change', '/forgot-password', '/reset-password', '/unsubscribe'];
   const shouldHideNavbar = hideNavbarRoutes.includes(location.pathname);
 
   return (
@@ -49,6 +50,7 @@ const AppContent = () => {
           <Route path="confirm-email-change" element={<ConfirmEmailChange />} />
           <Route path="forgot-password" element={<ForgotPassword />} />
           <Route path="reset-password" element={<ResetPassword />} />
+          <Route path="unsubscribe" element={<Unsubscribe />} />
 
           {/* Everything below needs a signed-in user. */}
           <Route element={<RequireAuth />}>

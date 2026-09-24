@@ -116,6 +116,27 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `outbox`; `emailedToken` / `confirmEmail` in `test/helpers.js` read links from it, and
   `signUp` confirms through the real route.
 
+## Notification emails
+
+- `back-end/lib/notifications.js` owns them: `notifyNewMessage`, `notifyTrade` and
+  `notifyWishlistMatch` are called from the route that causes the event, after its write (after
+  commit in a transaction), and never awaited: `notifyInBackground` hands each event's sends to
+  `runInBackground` (Vercel's `waitUntil`), which logs a failure; a new offer's wishlist emails
+  go one at a time, paced and capped by `wishlistPacing` to fit Resend's rate limit. Its
+  `recipientFor` is the one eligibility check (not self, confirmed address, not suspended,
+  category on in `User.notifications`, no block).
+- `notificationsSettled()` resolves when every started send is done. `test/setup.js` awaits it
+  after each test; tests await it before reading the `outbox`.
+- One message email per conversation until read: `Conversation.notifiedAt[recipient]` holds the
+  emailed message's time and is claimed atomically only once `readAt` has reached it and the
+  recipient's `seenAt` (wall-clock time of their last `/read`) is over 15 minutes old.
+- A wishlist email is claimed per reader and ISBN in `WishlistNotice` (30-day TTL), so re-listing
+  does not repeat it; proposals and counters share a per-reader `trade-proposal` throttle. A
+  failed send gives its claim back.
+- Unsubscribe links are `userId.category.HMAC` under a per-user `User.notificationKey`
+  (`select: false`), with no expiry and no sign-in; `POST /notifications/unsubscribe` and the
+  front end's `/unsubscribe` page. Wishlist matching for both directions is `lib/matches.js`.
+
 ## Back-end trades
 
 - A route in `back-end/routes/exchanges.js` that opens a transaction signals every early
