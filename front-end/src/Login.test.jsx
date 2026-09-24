@@ -1,8 +1,10 @@
 import { vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import Login from './Login';
+
+const ProfileStub = () => <div>Profile page at {useLocation().hash || 'the top'}</div>;
 
 const renderLogin = (entry = { pathname: '/login' }) =>
   render(
@@ -11,6 +13,7 @@ const renderLogin = (entry = { pathname: '/login' }) =>
         <Route path="/login" element={<Login />} />
         <Route path="/home" element={<div>Home page</div>} />
         <Route path="/messages" element={<div>Messages page</div>} />
+        <Route path="/profile" element={<ProfileStub />} />
       </Routes>
     </MemoryRouter>
   );
@@ -70,6 +73,22 @@ test('returns to the page the visitor was sent away from', async () => {
   await fillAndSubmit();
 
   expect(await screen.findByText('Messages page')).toBeInTheDocument();
+});
+
+test('keeps the section the visitor was sent away from', async () => {
+  global.fetch.mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ token: 't0ken', user: { id: 'u1', username: 'reader' } })
+  });
+
+  renderLogin({
+    pathname: '/login',
+    state: { from: { pathname: '/profile', search: '', hash: '#notifications' } }
+  });
+  await fillAndSubmit();
+
+  expect(await screen.findByText('Profile page at #notifications')).toBeInTheDocument();
 });
 
 test('clears a previous error when the next attempt succeeds', async () => {

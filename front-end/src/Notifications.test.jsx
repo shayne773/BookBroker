@@ -90,3 +90,36 @@ test('a setting that could not be saved flips back and says so', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Your setting could not be saved. Please try again.');
   expect(wishlist).toBeChecked();
 });
+
+test('a failed switch flips back alone, keeping another switch saved meanwhile', async () => {
+  let failTrades;
+  global.fetch.mockImplementation((url, init) => {
+    const body = JSON.parse(init.body);
+    if ('trades' in body) {
+      return new Promise((resolve) => {
+        failTrades = () => resolve(respond(500, { message: 'Internal server error' }));
+      });
+    }
+    return Promise.resolve(
+      respond(200, { notifications: { messages: true, trades: true, wishlist: false } })
+    );
+  });
+  render(
+    <NotificationSettings settings={{ messages: true, trades: true, wishlist: true }} />,
+    { wrapper: MemoryRouter }
+  );
+
+  const trades = screen.getByRole('checkbox', { name: /Trades/ });
+  const wishlist = screen.getByRole('checkbox', { name: /Wishlist matches/ });
+  await userEvent.click(trades);
+  await userEvent.click(wishlist);
+  await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+  expect(trades).not.toBeChecked();
+  expect(wishlist).not.toBeChecked();
+
+  failTrades();
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Your setting could not be saved.');
+  expect(trades).toBeChecked();
+  expect(wishlist).not.toBeChecked();
+});

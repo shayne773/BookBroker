@@ -80,8 +80,9 @@ export default function ProposeTradeDialog({ otherUserId, otherUser, onClose }) 
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        // A refusal the reader can act on, such as a block, is shown as the API words it.
-        if (res.status === 403 && body.message) {
+        // A refusal the reader can act on, such as a block or the hourly proposal
+        // limit, is shown as the API words it.
+        if ((res.status === 403 || res.status === 429) && body.message) {
           setTradeError(body.message);
           return;
         }

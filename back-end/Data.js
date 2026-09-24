@@ -118,13 +118,15 @@ offeredBookSchema.index({ isbn: 1, locked: 1 });
 // `lastMessageAt` / `lastMessageBy` copy the newest message so the unread count
 // is one indexed query over conversations, and `readAt` maps each participant's
 // id to the time of the newest message they have seen (routes/messages.js).
-// `notifiedAt` maps a participant's id to the message they were last emailed
-// about; no other email goes out until `readAt` reaches it.
+// `seenAt` maps the id to when they last read or wrote in the conversation, by the
+// clock. `notifiedAt` maps a participant's id to the message they were last
+// emailed about; no other email goes out until `readAt` reaches it.
 const conversationSchema = new Schema({
   users: [{ type: Schema.Types.ObjectId, ref: "User" }],
   lastMessageAt: { type: Date },
   lastMessageBy: { type: Schema.Types.ObjectId, ref: "User" },
   readAt: { type: Map, of: Date, default: {} },
+  seenAt: { type: Map, of: Date, default: {} },
   notifiedAt: { type: Map, of: Date, default: {} },
 });
 conversationSchema.index({ users: 1, lastMessageAt: -1 });
@@ -138,6 +140,20 @@ const messageSchema = new Schema({
 // Serves the thread, its incremental fetch (createdAt, then _id to break ties)
 // and the per-conversation unread count.
 messageSchema.index({ conversation: 1, createdAt: 1, _id: 1 });
+
+// Wishlist notices
+// One per reader and ISBN, keyed "<readerId>:<isbn>", holding when the reader was
+// last emailed that the ISBN is offered (lib/notifications.js). The TTL index
+// drops a notice once it no longer holds anything back.
+const WISHLIST_NOTICE_INTERVAL_SECONDS = 30 * 24 * 60 * 60;
+const wishlistNoticeSchema = new Schema(
+  {
+    _id: { type: String },
+    sentAt: { type: Date, required: true },
+  },
+  { versionKey: false }
+);
+wishlistNoticeSchema.index({ sentAt: 1 }, { expireAfterSeconds: WISHLIST_NOTICE_INTERVAL_SECONDS });
 
 // Blocks and reports
 // A block works both ways: neither reader can message or propose a trade to the
@@ -182,6 +198,8 @@ const Conversation =
   mongoose.models.Conversation || mongoose.model("Conversation", conversationSchema);
 const Message =
   mongoose.models.Message || mongoose.model("Message", messageSchema);
+const WishlistNotice =
+  mongoose.models.WishlistNotice || mongoose.model("WishlistNotice", wishlistNoticeSchema);
 const Block = mongoose.models.Block || mongoose.model("Block", blockSchema);
 const Report = mongoose.models.Report || mongoose.model("Report", reportSchema);
 
@@ -216,6 +234,8 @@ export {
   OfferedBook,
   Conversation,
   Message,
+  WishlistNotice,
+  WISHLIST_NOTICE_INTERVAL_SECONDS,
   Block,
   Report,
   REPORT_REASONS,

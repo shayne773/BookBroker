@@ -4,6 +4,7 @@ import Exchange from "../Exchange.js";
 import { OfferedBook, User } from "../Data.js";
 import { BLOCKED_TRADE_MESSAGE, isBlockedBetween } from "../lib/blocks.js";
 import { isSuspended } from "../lib/suspensions.js";
+import { LoginThrottle } from "../lib/loginThrottle.js";
 import { notifyTrade } from "../lib/notifications.js";
 
 const router = express.Router();
@@ -51,6 +52,18 @@ function proposerOf(exchange) {
   return exchange.status === "PENDING" ? String(exchange.requester) : null;
 }
 
+// Every proposal emails the responder, so one reader cannot propose (or cancel
+// and propose again) without limit.
+const HOUR = 60 * 60 * 1000;
+const proposalThrottle = new LoginThrottle({
+  scope: "trade-proposal",
+  windowMs: HOUR,
+  lockoutMs: HOUR,
+  accountMaxAttempts: 20,
+});
+export const PROPOSAL_THROTTLED_MESSAGE =
+  "You have proposed a lot of trades in the last hour. Please wait a while before proposing another.";
+
 // --------------------
 // POST /exchanges  (create + send invite)
 // body: { responderId, requesterBooks: [], responderBooks: [], message, expiresInHours }
@@ -77,6 +90,12 @@ router.post("/", async (req, res) => {
     const theirBooks = await OfferedBook.find({ _id: { $in: responderBooks }, owner: responderId, locked: false });
     if (theirBooks.length !== responderBooks.length) {
       return res.status(400).json({ message: "Some responderBooks invalid / not theirs / locked" });
+    }
+
+    const limit = await proposalThrottle.hit(userId);
+    if (limit.limited) {
+      res.set("Retry-After", String(limit.retryAfterSeconds));
+      return res.status(429).json({ message: PROPOSAL_THROTTLED_MESSAGE });
     }
 
     const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
