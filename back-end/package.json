@@ -15,7 +15,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "seed": "node seed.js",
-    "build:zip-codes": "node scripts/build-zip-codes.js"
+    "build:zip-codes": "node scripts/build-zip-codes.js",
+    "place-books": "node scripts/place-books.js"
   },
   "dependencies": {
     "@vercel/functions": "^3.9.9",

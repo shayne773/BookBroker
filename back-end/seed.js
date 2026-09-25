@@ -16,6 +16,7 @@ import { pause } from "./lib/http.js";
 import { DB_NAME } from "./lib/db.js";
 import { normalizeEmail } from "./lib/validation.js";
 import { lookupZip } from "./lib/zipCodes.js";
+import { bookPosition } from "./lib/nearby.js";
 
 const SEED_PREFIX = "seed_user_";
 const USER_COUNT = 10;
@@ -144,7 +145,7 @@ export async function seed({ pauseMs = 250, log = console.log } = {}) {
 
   const offeredDocs = books.map((book, i) => {
     const owner = createdUsers[Math.floor(i / BOOKS_PER_USER)];
-    return { ...book, owner: owner._id, ownerGeo: owner.geo };
+    return { ...book, owner: owner._id, ...bookPosition(owner) };
   });
   await OfferedBook.insertMany(offeredDocs);
   log(`✅ Inserted ${offeredDocs.length} offered books linked to users`);

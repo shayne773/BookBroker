@@ -8,6 +8,7 @@ import { body, matchedData, validationResult } from "express-validator";
 import exchangesRouter from "./routes/exchanges.js";
 import messagesRouter from "./routes/messages.js";
 import adminRouter from "./routes/admin.js";
+import mapRouter from "./routes/map.js";
 import { isAdmin, requireAdmin } from "./lib/admin.js";
 import { isSuspended, SUSPENDED_LOGIN_MESSAGE } from "./lib/suspensions.js";
 import { buildCorsOptions } from "./lib/cors.js";
@@ -20,7 +21,7 @@ import { captureCover } from "./lib/covers.js";
 import { runInBackground } from "./lib/background.js";
 import { wishlistMatches } from "./lib/matches.js";
 import { listBooks, mostWanted, NEWEST_FIRST, readerTaste, recommendations } from "./lib/listings.js";
-import { distanceFields, moveOwnerBooks, readerArea, withinArea } from "./lib/nearby.js";
+import { bookPosition, distanceFields, moveOwnerBooks, readerArea, withinArea } from "./lib/nearby.js";
 import { lookupZip } from "./lib/zipCodes.js";
 import {
   NOTIFICATION_CATEGORIES,
@@ -240,6 +241,9 @@ const OWN_USER_FIELDS = `${PUBLIC_USER_FIELDS} email pendingEmail zip maxDistanc
 
 //exchange routes
 app.use("/exchanges", authMiddleware, exchangesRouter);
+
+// Books by place, for the map page.
+app.use("/map", authMiddleware, mapRouter);
 
 // Reports and suspensions, for the accounts named by ADMIN_EMAILS only.
 app.use("/admin", authMiddleware, requireAdmin, adminRouter);
@@ -933,11 +937,11 @@ app.post(
     const { title, author, publisher, year, cover, isbn, genre, desc } = req.body;
 
     try {
-      // The book is placed where its owner is, for distance queries.
-      const owner = await User.findById(req.user.userId).select("geo").lean();
+      // The book is placed where its owner is, for distance queries and the map.
+      const owner = await User.findById(req.user.userId).select("geo location").lean();
       const book = new OfferedBook({
         owner: req.user.userId, // ✅ from token
-        ownerGeo: owner?.geo,
+        ...bookPosition(owner),
         title,
         author,
         publisher,
@@ -1050,7 +1054,9 @@ app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
       { $set: update },
       { new: true }
     ).select(OWN_USER_FIELDS);
-    if (where && updatedUser) await moveOwnerBooks(userId, where.point);
+    if (where && updatedUser) {
+      await moveOwnerBooks(userId, { geo: where.point, location: where.place });
+    }
 
     if (pendingEmail && updatedUser) {
       const token = await issueToken(TOKEN_PURPOSES.changeEmail, updatedUser._id);

@@ -161,14 +161,18 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   (`User.maxDistanceMiles`, default 25) around their ZIP. Build it with `listBooks`,
   `mostWanted` or `recommendations` (`back-end/lib/listings.js`) and `readerArea(userId)`
   (`lib/nearby.js`): `$geoNear` must open the pipeline and does not cast its query, and
-  `presentStages` adds the rounded `distanceMiles` and strips `ownerGeo`. A reader without a
-  ZIP has a null area: unfiltered, no distances.
+  `presentStages` adds the rounded `distanceMiles` and strips the book's position fields.
+  A reader without a ZIP has a null area: unfiltered, no distances.
 - `User.zip` and `User.geo` and `OfferedBook.ownerGeo` are `select: false` and never reach
-  another reader; `User.location` is the public place name. Every new book copies its owner's
-  `geo` into `ownerGeo`, and a ZIP change calls `moveOwnerBooks`.
+  another reader; `User.location` is the public place name. A book's position fields come only
+  from `bookPosition` (`lib/nearby.js`): the add-offered-book route, `moveOwnerBooks` on a ZIP
+  change, the seed, test fixtures and `npm run place-books` all go through it.
 - A distance is a way to locate a reader, so it is sent only for books within the caller's
   distance (`distanceFields` in `lib/nearby.js` for a single book; beyond it, only a
   `distanceLabel`), never on a reader's profile, and ZIP changes are throttled (3 a day).
+- The map (`routes/map.js`, `lib/map.js`) groups books by `OfferedBook.ownerPlace` (the owner's
+  public place name) at `ownerPlacePoint` (`placePoint` in `lib/zipCodes.js`, the mean of the
+  place's ZIP points, 2d-indexed for bbox queries), never at `ownerGeo`; it shows any distance.
 - ZIPs resolve offline through `lib/zipCodes.js` from the bundled GeoNames table
   (`npm run build:zip-codes`; shipped to Vercel by `includeFiles` in `vercel.json`).
   Test fixtures live in Brooklyn (11201); `createUser({ zip: null })` is a pre-ZIP account.
@@ -202,6 +206,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   time; production builds get `/api` (same origin) from `front-end/.env.production`, local
   development sets it in `.env.local`. Only `VITE_`-prefixed variables reach client code, which
   also makes them public - never a secret. See `front-end/.env.example`.
+- The map page (`src/BookMap.jsx`) is lazy-loaded because MapLibre is large; markers are React
+  buttons portalled into MapLibre markers (`BookMap/MapMarker.jsx`) and clustered client-side with
+  supercluster (`src/bookMap.js`). Tests mock `maplibre-gl` (`src/BookMap.test.jsx`).
 - Tailwind is wired through `front-end/postcss.config.js`; react-scripts 5 did that implicitly
   from the presence of `tailwind.config.js`, Vite does not.
 

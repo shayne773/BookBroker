@@ -9,6 +9,7 @@
 // and no response carries another reader's ZIP or point: only their place name
 // and, for a book within the reader's distance, a distance rounded to whole miles.
 import { DEFAULT_DISTANCE_MILES, OfferedBook, User } from "../Data.js";
+import { placePoint } from "./zipCodes.js";
 
 export const METERS_PER_MILE = 1609.344;
 // The radius MongoDB's spherical geometry uses, so a distance worked out here
@@ -98,21 +99,41 @@ export function geoNearStage(area, query) {
 }
 
 // A pipeline's last stages: the distance as display miles (when there is one)
-// and the owner's point removed. Every book listed from a pipeline ends here.
+// and the book's position fields removed. Every book listed from a pipeline ends here.
 export function presentStages(area) {
   return [
     ...(area ? [{ $set: { distanceMiles: displayMilesExpr("$distance") } }] : []),
-    { $unset: ["distance", "ownerGeo"] },
+    { $unset: ["distance", "ownerGeo", "ownerPlace", "ownerPlacePoint"] },
   ];
 }
 
 /**
- * Points every book of `userId` at `geo`, their new position; `geo` null takes
- * the position away. Called whenever a reader's ZIP changes.
+ * Where a book of `owner` (a User's `geo` and `location`) is: its owner's
+ * point, for distances, and their place name and that place's point, for the
+ * map. Empty for an owner without a ZIP.
  */
-export async function moveOwnerBooks(userId, geo) {
-  await OfferedBook.updateMany(
-    { owner: userId },
-    geo ? { $set: { ownerGeo: geo } } : { $unset: { ownerGeo: 1 } }
+export function bookPosition(owner) {
+  if (!owner?.geo?.coordinates?.length) return {};
+  const point = placePoint(owner.location);
+  return {
+    ownerGeo: owner.geo,
+    ownerPlace: owner.location,
+    ...(point ? { ownerPlacePoint: point } : {}),
+  };
+}
+
+const POSITION_FIELDS = { ownerGeo: 1, ownerPlace: 1, ownerPlacePoint: 1 };
+
+/**
+ * Moves every book of `userId` to `owner` (`{ geo, location }`), their new
+ * position; null takes the position away. Called whenever a reader's ZIP changes.
+ */
+export async function moveOwnerBooks(userId, owner) {
+  const position = bookPosition(owner);
+  const unset = Object.fromEntries(
+    Object.keys(POSITION_FIELDS).filter((field) => !(field in position)).map((field) => [field, 1])
   );
+  const update = { $set: position };
+  if (Object.keys(unset).length) update.$unset = unset;
+  await OfferedBook.updateMany({ owner: userId }, update);
 }
