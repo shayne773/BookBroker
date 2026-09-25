@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import BookMap from './BookMap';
 import Navbar from './Navbar';
 import { boundsAround, searchBounds, US_BOUNDS } from './bookMap';
@@ -118,12 +118,14 @@ afterEach(() => {
   delete global.fetch;
 });
 
-// The page's own address, as the router has it.
+// The page's own address, as the router has it, and the browser's history.
 const location = {};
 const LocationProbe = () => {
   const current = useLocation();
+  const navigate = useNavigate();
   useEffect(() => {
     location.search = current.search;
+    location.navigate = navigate;
   });
   return null;
 };
@@ -375,6 +377,21 @@ test('keeps the view and says so plainly when nothing matches anywhere', async (
   const panel = await screen.findByRole('complementary', { name: 'No matches' });
   expect(within(panel).getByText(/No books on the market match this search anywhere/)).toBeInTheDocument();
   expect(map.fitBounds).not.toHaveBeenCalled();
+});
+
+test('closes a place chosen under a search when history leaves that search', async () => {
+  searchingServer();
+  await openMap();
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Genre' }), 'Mystery');
+  await userEvent.click(await screen.findByRole('button', { name: 'Brooklyn, NY: 2 books' }));
+  const panel = screen.getByRole('complementary', { name: 'Brooklyn, NY' });
+  expect(within(panel).getByText('2 books')).toBeInTheDocument();
+
+  await act(async () => location.navigate(-1));
+
+  expect(location.search).toBe('');
+  expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: 'Brooklyn, NY: 3 books' })).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('clearing the search restores the normal map', async () => {

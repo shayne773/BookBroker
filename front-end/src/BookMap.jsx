@@ -234,7 +234,8 @@ const BookMap = () => {
   const [home, setHome] = useState(undefined);
   const [homeFailed, setHomeFailed] = useState(false);
   const [areasFailed, setAreasFailed] = useState(false);
-  const [selected, setSelected] = useState(null);
+  // The place chosen under the search `key`.
+  const [selection, setSelection] = useState(null);
   const [map, setMap] = useState(null);
   const [genres, setGenres] = useState([]);
   // The nearest matches for the search `key`: { key, places, placeCount,
@@ -244,6 +245,8 @@ const BookMap = () => {
   const [params, setParams] = useSearchParams();
   const search = useMemo(() => readSearch(params), [params]);
   const searchKey = searchQuery(search);
+  const selected = selection?.key === searchKey ? selection : null;
+  const select = (choice) => setSelection({ ...choice, key: searchKey });
 
   useEffect(() => {
     let live = true;
@@ -292,7 +295,7 @@ const BookMap = () => {
   const onAreasError = useCallback((failed) => setAreasFailed(failed), []);
 
   const applySearch = (next) => {
-    setSelected(null);
+    setSelection(null);
     setParams(searchParams(next));
   };
 
@@ -304,7 +307,7 @@ const BookMap = () => {
   // A place chosen from the results is brought into view and its matching
   // books listed.
   const chooseResult = ({ place, point, count }) => {
-    setSelected({ place, count });
+    select({ place, count });
     map?.easeTo({ center: point, zoom: Math.max(map.getZoom(), PLACE_ZOOM) });
   };
 
@@ -328,7 +331,7 @@ const BookMap = () => {
               home={home}
               searchKey={searchKey}
               selectedPlace={selected?.place}
-              onSelect={setSelected}
+              onSelect={select}
               onError={onAreasError}
               onReady={setMap}
             />
@@ -356,7 +359,7 @@ const BookMap = () => {
           place={selected.place}
           count={selected.count}
           searchKey={searchKey}
-          onClose={() => setSelected(null)}
+          onClose={() => setSelection(null)}
         />
       ) : (
         searchKey && (
