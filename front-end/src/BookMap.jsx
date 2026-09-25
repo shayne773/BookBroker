@@ -36,6 +36,10 @@ const PLACE_ZOOM = 10;
 // Where the map opens, and where clearing a search takes it back to.
 const homeBounds = (home) => (home ? boundsAround(home.point, home.miles) : US_BOUNDS);
 const MAP_PADDING = 48;
+// A search's matches sit at the edges of its view, and a place marker is a
+// pill centred on its point, far wider than tall: the sides keep room for
+// half of one, so the outermost match's count stays on the map.
+const SEARCH_PADDING = { top: MAP_PADDING, bottom: MAP_PADDING, left: 112, right: 112 };
 
 const getJson = async (url, options) => {
   const res = await authFetch(url, options);
@@ -282,7 +286,7 @@ const BookMap = () => {
       .then((found) => {
         setResults({ key: searchKey, ...found });
         const bounds = searchBounds(origin, found.places);
-        if (bounds) map.fitBounds(bounds, { padding: MAP_PADDING, maxZoom: SEARCH_MAX_ZOOM });
+        if (bounds) map.fitBounds(bounds, { padding: SEARCH_PADDING, maxZoom: SEARCH_MAX_ZOOM });
       })
       .catch((err) => {
         if (controller.signal.aborted || isSessionExpiredError(err)) return;

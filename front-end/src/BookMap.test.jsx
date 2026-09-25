@@ -304,7 +304,9 @@ test('searches by keyword: the markers, the view and the results all follow the 
   await waitFor(() => expect(map.fitBounds).toHaveBeenCalledTimes(1));
   const [bounds, options] = map.fitBounds.mock.calls[0];
   expect(bounds).toEqual(searchBounds(HOME.point, NEAREST.places));
-  expect(options).toMatchObject({ padding: 48 });
+  // The sides leave room for half a place marker, so the outermost match's
+  // count is not cut off at the edge.
+  expect(options).toMatchObject({ padding: { top: 48, bottom: 48, left: 112, right: 112 } });
 
   const panel = screen.getByRole('complementary', { name: '8 books in 3 places' });
   const results = within(panel).getByRole('list', { name: 'Places with matching books, nearest first' });
