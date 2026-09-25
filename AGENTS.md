@@ -161,8 +161,8 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   (`User.maxDistanceMiles`, default 25) around their ZIP. Build it with `listBooks`,
   `mostWanted` or `recommendations` (`back-end/lib/listings.js`) and `readerArea(userId)`
   (`lib/nearby.js`): `$geoNear` must open the pipeline and does not cast its query, and
-  `presentStages` adds the rounded `distanceMiles` and strips `ownerGeo`. A reader without a
-  ZIP has a null area: unfiltered, no distances.
+  `presentStages` adds the rounded `distanceMiles` and strips the book's position fields.
+  A reader without a ZIP has a null area: unfiltered, no distances.
 - `User.zip` and `User.geo` and `OfferedBook.ownerGeo` are `select: false` and never reach
   another reader; `User.location` is the public place name. A book's position fields come only
   from `bookPosition` (`lib/nearby.js`): the add-offered-book route, `moveOwnerBooks` on a ZIP

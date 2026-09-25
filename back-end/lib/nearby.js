@@ -99,7 +99,7 @@ export function geoNearStage(area, query) {
 }
 
 // A pipeline's last stages: the distance as display miles (when there is one)
-// and the owner's point removed. Every book listed from a pipeline ends here.
+// and the book's position fields removed. Every book listed from a pipeline ends here.
 export function presentStages(area) {
   return [
     ...(area ? [{ $set: { distanceMiles: displayMilesExpr("$distance") } }] : []),
