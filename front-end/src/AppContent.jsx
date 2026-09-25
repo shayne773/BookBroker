@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Home from './Home';
 import Feed from './Feed';
@@ -29,6 +30,9 @@ import RequireAuth from './RequireAuth';
 import ExchangesList from "./ExchangesList";
 import ExchangeDetail from "./ExchangeDetail";
 import AdminReports from "./AdminReports";
+
+// The map library is large, so the map page loads only when it is opened.
+const BookMap = lazy(() => import('./BookMap'));
 
 const AppContent = () => {
 
@@ -66,6 +70,14 @@ const AppContent = () => {
                 <Route path=":genre" element={<Genre />} />
               </Route>
             </Route>
+            <Route
+              path="map"
+              element={
+                <Suspense fallback={<main className="map-page" aria-busy="true" />}>
+                  <BookMap />
+                </Suspense>
+              }
+            />
             <Route path="/exchanges" element={<ExchangesList />} />
             <Route path="/exchanges/:exchangeId" element={<ExchangeDetail />} />
             <Route path="profile">

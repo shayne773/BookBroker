@@ -8,6 +8,7 @@ import { useUnreadCount } from './unread';
 const LINKS = [
   { to: '/home', label: 'Home' },
   { to: '/browse', label: 'Browse' },
+  { to: '/map', label: 'Map' },
   { to: '/exchanges', label: 'Exchanges' },
   { to: '/messages', label: 'Messages' },
   { to: '/profile', label: 'Profile' },

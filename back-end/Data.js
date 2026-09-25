@@ -137,6 +137,11 @@ const offeredBookSchema = new Schema({
   // index. Set when the book is offered and rewritten when the owner changes
   // ZIP (lib/nearby.js); absent while the owner has none. Never sent to a client.
   ownerGeo: { type: pointSchema, select: false },
+  // Where the map shows the book (routes/map.js): the owner's public place name
+  // and that place's point, [longitude, latitude] (placePoint in
+  // lib/zipCodes.js), never the owner's own. Set and moved with `ownerGeo`.
+  ownerPlace: { type: String, select: false },
+  ownerPlacePoint: { type: [Number], default: undefined, select: false },
 });
 
 // $geoNear and $geoWithin on the owner's point. A 2dsphere index skips books
@@ -145,6 +150,10 @@ offeredBookSchema.index({ ownerGeo: "2dsphere" });
 
 // Wishlist matching looks offers up by ISBN among the books still on the market.
 offeredBookSchema.index({ isbn: 1, locked: 1 });
+
+// The map counts the books in view by place, and lists one place's books newest first.
+offeredBookSchema.index({ ownerPlacePoint: "2d" });
+offeredBookSchema.index({ ownerPlace: 1, createdAt: -1, _id: -1 });
 
 // Conversations + Messages
 // `lastMessageAt` / `lastMessageBy` copy the newest message so the unread count

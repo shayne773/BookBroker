@@ -62,6 +62,7 @@ test('a signed-in visit renders the shell: primary navigation around the page', 
   expect(links.map((link) => link.textContent)).toEqual([
     'Home',
     'Browse',
+    'Map',
     'Exchanges',
     'Messages',
     'Profile',

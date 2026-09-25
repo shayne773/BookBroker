@@ -9,6 +9,7 @@ import { http } from "../lib/http.js";
 import { createSession } from "../lib/sessions.js";
 import { normalizeEmail } from "../lib/validation.js";
 import { lookupZip } from "../lib/zipCodes.js";
+import { bookPosition } from "../lib/nearby.js";
 
 use(chaiHttp);
 
@@ -78,14 +79,15 @@ export async function signUp(overrides = {}) {
   };
 }
 
-// Where `userId` is, as a book of theirs records it (see the add-offered-book route).
-const ownerGeo = async (userId) => (await User.findById(userId).select("geo").lean())?.geo;
+// Where a book of `userId` is, as the add-offered-book route records it.
+const ownerPosition = async (userId) =>
+  bookPosition(await User.findById(userId).select("geo location").lean());
 
 // Inserts an offered book owned by `owner` directly, so tests get real document ids.
 export async function offerBook(owner, fields = {}) {
   return OfferedBook.create({
     owner: owner.id,
-    ownerGeo: await ownerGeo(owner.id),
+    ...(await ownerPosition(owner.id)),
     title: "The Hobbit",
     author: "J. R. R. Tolkien",
     publisher: "Allen & Unwin",
@@ -131,7 +133,7 @@ export async function authHeader(user) {
 export async function createOfferedBook(owner, overrides = {}) {
   return OfferedBook.create({
     owner: owner._id,
-    ownerGeo: await ownerGeo(owner._id),
+    ...(await ownerPosition(owner._id)),
     title: "The Hobbit",
     author: "J.R.R. Tolkien",
     publisher: "Allen & Unwin",

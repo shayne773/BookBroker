@@ -16,7 +16,8 @@ as static files and the API as a Vercel Function under `/api` (see
 What it does today: sign up with a US ZIP code and email confirmation, sign in and
 password reset, browse and search the books within your chosen distance, nearest
 first, with recommendations drawn from your wishlist and shelf (see
-[Location](#location)), find books to add via a server-side Google Books proxy, keep
+[Location](#location)), explore the books on a map of the country by place (see
+[Map](#map)), find books to add via a server-side Google Books proxy, keep
 a shelf of offered books and a wishlist, see which wishlist books other readers
 nearby are offering,
 propose and accept trades, message other users, rate a trading partner and see each
@@ -143,6 +144,37 @@ cd back-end
 npm run build:zip-codes
 ```
 
+## Map
+
+The Map page (`/map`) shows the books on the market by place, anywhere in the
+country: it pans and zooms like any web map, nearby places merge into one marker
+with their combined count when zoomed out, and choosing a place lists its books
+with the same distance labels as everywhere else ("More than 25 mi away" beyond
+the reader's distance). It opens on the reader's place with their distance drawn
+around it, or on the whole country for a reader without a ZIP code.
+
+A book is counted under its owner's town ("Brooklyn, NY"), which every book page
+already shows, and drawn at that town's point: the average of the town's ZIP code
+points in the table above, never the owner's own ZIP or position. The map's API
+(`back-end/routes/map.js`) returns only place names, those points and book counts.
+
+The map is drawn with [MapLibre GL JS](https://maplibre.org/) (BSD-3-Clause) on
+[OpenFreeMap](https://openfreemap.org/)'s "positron" style, a free public tile
+service that needs no account or API key and sets no limit on map views. Its
+[terms](https://openfreemap.org/tos/) require attribution, which the map shows in
+its corner: OpenFreeMap, © OpenMapTiles, data from © OpenStreetMap contributors.
+The service comes with no warranty and may change; the style URL is
+`MAP_STYLE_URL` in `front-end/src/bookMap.js`.
+
+Books offered before the map existed have no place yet. After deploying it, place
+them once, with `MONGODB_URI` pointing at the database (it is safe to rerun, and is
+needed again only if the ZIP code table is rebuilt):
+
+```
+cd back-end
+npm run place-books
+```
+
 ## Demo data
 
 The seed needs `MONGODB_URI` and `GOOGLE_BOOKS_API_KEY` in `back-end/.env`.
@@ -236,6 +268,8 @@ gets a preview deployment.
 
 To load or refresh the demo data in the cluster, run the seed from your machine
 with `MONGODB_URI` pointing at it (see [Demo data](#demo-data)).
+After the first deployment of the map, run `npm run place-books` the same way (see
+[Map](#map)).
 
 ### Things to know
 

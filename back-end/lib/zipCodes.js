@@ -12,6 +12,7 @@ export const ZIP_FORMAT_MESSAGE = "Enter a 5-digit US ZIP code.";
 export const ZIP_UNKNOWN_MESSAGE = "We don't recognise that ZIP code. Check it and try again.";
 
 let table = null;
+let places = null;
 
 function load() {
   if (table) return table;
@@ -22,6 +23,25 @@ function load() {
     table.set(zip, { latitude: Number(latitude), longitude: Number(longitude), place });
   }
   return table;
+}
+
+// Place name -> [longitude, latitude]: the mean of the place's ZIP code points.
+function placeIndex() {
+  if (places) return places;
+  const sums = new Map();
+  for (const { latitude, longitude, place } of load().values()) {
+    const sum = sums.get(place) ?? { latitude: 0, longitude: 0, count: 0 };
+    sum.latitude += latitude;
+    sum.longitude += longitude;
+    sum.count += 1;
+    sums.set(place, sum);
+  }
+  const round = (degrees) => Math.round(degrees * 1000) / 1000;
+  places = new Map();
+  for (const [place, sum] of sums) {
+    places.set(place, [round(sum.longitude / sum.count), round(sum.latitude / sum.count)]);
+  }
+  return places;
 }
 
 /** The 5-digit ZIP in `input` ("12345" or ZIP+4 "12345-6789"), or null. */
@@ -45,4 +65,14 @@ export function lookupZip(input) {
     place: entry.place,
     point: { type: "Point", coordinates: [entry.longitude, entry.latitude] },
   };
+}
+
+/**
+ * Where the map puts `place` ("Brooklyn, NY"): `[longitude, latitude]`, the
+ * mean of that place's ZIP code points, or null for a name the table does not
+ * have. It depends on the place name alone, so it tells no one more than the
+ * name does, even for a place with a single ZIP code.
+ */
+export function placePoint(place) {
+  return placeIndex().get(place) ?? null;
 }
