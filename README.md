@@ -158,8 +158,9 @@ stay merged at the deepest zoom are listed under their marker to choose from.
 A book is counted under its owner's town ("Brooklyn, NY"), which every book page
 already shows, and drawn at that town's point: the average of the town's ZIP code
 points in the table above, never the owner's own ZIP or position. The map's API
-(`back-end/routes/map.js`) returns only place names, those points and book counts,
-plus the caller's own point.
+(`back-end/routes/map.js`) returns only place names, those points, book counts and
+the genres on the market, plus the caller's own point; a search's nearest places
+carry only the distance labels their books already have.
 
 A search bar over the map finds books by keyword (title, author, publisher or
 ISBN) and filters: genre (from the genres on the market), author, publication
@@ -168,9 +169,11 @@ The terms combine, and the search is kept in the page's address, so it survives 
 reload and can be shared. While a search is on, the markers count only the
 matching books, the side panel lists the matching places nearest the reader first
 (with the same distance labels), and each new search moves the map to fit the
-reader's point and the nearest matches, zooming out as far as it takes. Every map
-endpoint narrows the market with the one filter in `back-end/lib/mapSearch.js`,
-so the counts, the panel and the nearest places always agree.
+reader's point and the nearest matches, zooming out as far as it takes (for a
+reader without a ZIP code, "nearest" is measured from the middle of their view).
+Every map endpoint narrows the market with the one filter in
+`back-end/lib/mapSearch.js`, so the counts, the panel and the nearest places
+always agree.
 
 The map is drawn with [MapLibre GL JS](https://maplibre.org/) (BSD-3-Clause) on
 [OpenFreeMap](https://openfreemap.org/)'s "positron" style, a free public tile
