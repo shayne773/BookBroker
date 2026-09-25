@@ -2130,9 +2130,17 @@ a.list-row:focus-visible .textlink-arrow__mark {
 }
 
 .map-page__map {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The map under the search, holding the notes that float over it. */
+.map-page__view {
   position: relative;
   flex: 1 1 auto;
-  min-width: 0;
+  min-height: 0;
   background: var(--color-paper-sunken);
 }
 
@@ -2140,6 +2148,79 @@ a.list-row:focus-visible .textlink-arrow__mark {
 .map-page__canvas {
   width: 100%;
   height: 100%;
+}
+
+/* The search over the map: the keyword on its own line, the filters in a
+   row of labelled controls under it, ruled off from the map. */
+.map-search {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6) var(--space-5);
+  border-bottom: var(--border-hairline);
+  background: var(--color-paper);
+}
+
+.map-search__row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+}
+
+.map-search__keyword {
+  flex: 1 1 auto;
+  font-family: var(--font-serif);
+  font-size: var(--text-h4);
+}
+
+.map-search__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-6);
+}
+
+.map-search__field {
+  flex: 0 1 12rem;
+  min-width: 8rem;
+}
+
+.map-search__field .input {
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.map-search__field .input:focus-visible {
+  padding-bottom: calc(var(--space-2) - 1px);
+}
+
+/* Two years either side of a dash, under one label. */
+.map-search__years {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-2);
+}
+
+.map-search__years > span {
+  color: var(--color-ink-muted);
+}
+
+.map-search__check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  color: var(--color-ink-secondary);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.map-search__check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-ink);
 }
 
 /* Notes float over the map's top-left corner, clear of the controls. */
@@ -2334,6 +2415,47 @@ a.list-row:focus-visible .textlink-arrow__mark {
 }
 
 .map-book__meta {
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+}
+
+/* A search's places, nearest first: each a ruled row that opens the place. */
+.map-results {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.map-result {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-4) 0;
+  border: 0;
+  border-bottom: var(--border-hairline);
+  background: transparent;
+  color: var(--color-ink);
+  cursor: pointer;
+  text-align: left;
+  transition: var(--transition-colors);
+}
+
+.map-result:hover,
+.map-result:focus-visible {
+  background: var(--color-paper-raised);
+}
+
+.map-result__place {
+  font-family: var(--font-serif);
+  font-size: var(--text-h4);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+}
+
+.map-result__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
   color: var(--color-ink-muted);
   font-size: var(--text-sm);
 }

@@ -1,10 +1,11 @@
+import { useEffect } from 'react';
 import { vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import BookMap from './BookMap';
 import Navbar from './Navbar';
-import { boundsAround, US_BOUNDS } from './bookMap';
+import { boundsAround, searchBounds, US_BOUNDS } from './bookMap';
 
 // A stand-in for MapLibre: no canvas or tiles, just the calls the page makes.
 // A test moves the view by setting `view` and firing 'moveend'; markers are
@@ -19,6 +20,7 @@ vi.mock('maplibre-gl', () => {
       this.sources = {};
       this.view = { bounds: [-74.3, 40.5, -73.7, 40.95], zoom: 10 };
       this.easeTo = vi.fn();
+      this.fitBounds = vi.fn();
       this.touchZoomRotate = { disableRotation: vi.fn() };
       this.keyboard = { disableRotation: vi.fn() };
       maps.push(this);
@@ -41,6 +43,10 @@ vi.mock('maplibre-gl', () => {
     }
     getZoom() {
       return this.view.zoom;
+    }
+    getCenter() {
+      const [west, south, east, north] = this.view.bounds;
+      return { lng: (west + east) / 2, lat: (south + north) / 2 };
     }
     remove() {}
   }
@@ -83,6 +89,8 @@ beforeEach(() => {
   routes = {
     '/map': () => ({ body: { home: HOME } }),
     '/map/areas': () => ({ body: { areas: [BROOKLYN, NEW_YORK] } }),
+    '/map/genres': () => ({ body: { genres: ['Mystery', 'Poetry'] } }),
+    '/map/nearest': () => ({ body: { places: [], placeCount: 0, bookCount: 0 } }),
     '/map/area': (params) => ({
       body:
         params.get('offset') === '20'
@@ -110,9 +118,24 @@ afterEach(() => {
   delete global.fetch;
 });
 
-// Renders the page and lets the map finish loading.
-const openMap = async () => {
-  render(<BookMap />, { wrapper: MemoryRouter });
+// The page's own address, as the router has it.
+const location = {};
+const LocationProbe = () => {
+  const current = useLocation();
+  useEffect(() => {
+    location.search = current.search;
+  });
+  return null;
+};
+
+// Renders the page at `path` and lets the map finish loading.
+const openMap = async (path = '/map') => {
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <BookMap />
+      <LocationProbe />
+    </MemoryRouter>
+  );
   await waitFor(() => expect(maps).toHaveLength(1));
   const map = maps[0];
   await act(async () => map.fire('load'));
@@ -234,6 +257,158 @@ test('says so when the places cannot be loaded', async () => {
   await openMap();
 
   expect(await screen.findByRole('alert')).toHaveTextContent('We couldn’t load the books on the map.');
+});
+
+// A search's nearest matching places, as GET /map/nearest lists them.
+const NEAREST = {
+  places: [
+    { place: 'Brooklyn, NY', point: [-73.955, 40.652], count: 2, distanceMiles: 0 },
+    { place: 'New York, NY', point: [-73.982, 40.759], count: 1, distanceMiles: 4 },
+    { place: 'Chicago, IL', point: [-87.68, 41.84], count: 5, distanceLabel: 'More than 25 mi away' },
+  ],
+  placeCount: 3,
+  bookCount: 8,
+};
+
+// Answers the map's endpoints as a server that has only mysteries would: the
+// markers and a place's books narrow to the search.
+const searchingServer = () => {
+  routes['/map/areas'] = (params) => ({
+    body: { areas: params.get('genre') === 'Mystery' ? [{ ...BROOKLYN, count: 2 }] : [BROOKLYN, NEW_YORK] },
+  });
+  routes['/map/nearest'] = () => ({ body: NEAREST });
+};
+
+const lastRequest = (path) => requests.filter((r) => r.path === path).at(-1);
+
+test('searches by keyword: the markers, the view and the results all follow the search', async () => {
+  searchingServer();
+  const map = await openMap();
+  await screen.findByRole('button', { name: 'New York, NY: 1 book' });
+
+  const bar = screen.getByRole('search', { name: 'Search the map' });
+  await userEvent.type(within(bar).getByRole('searchbox', { name: 'Keyword' }), 'C++ & sons');
+  await userEvent.click(within(bar).getByRole('button', { name: 'Search' }));
+
+  // The search is kept in the page's address, as the API reads it.
+  expect(location.search).toBe('?q=C%2B%2B+%26+sons');
+  await waitFor(() => expect(lastRequest('/map/areas').params.get('q')).toBe('C++ & sons'));
+  const nearest = lastRequest('/map/nearest');
+  expect(nearest.params.get('q')).toBe('C++ & sons');
+  // The API measures from the reader's own point, which it knows.
+  expect(nearest.params.has('near')).toBe(false);
+
+  // The map moves to the reader and the nearest matches.
+  await waitFor(() => expect(map.fitBounds).toHaveBeenCalledTimes(1));
+  const [bounds, options] = map.fitBounds.mock.calls[0];
+  expect(bounds).toEqual(searchBounds(HOME.point, NEAREST.places));
+  expect(options).toMatchObject({ padding: 48 });
+
+  const panel = screen.getByRole('complementary', { name: '8 books in 3 places' });
+  const results = within(panel).getByRole('list', { name: 'Places with matching books, nearest first' });
+  const rows = within(results).getAllByRole('button');
+  expect(rows.map((row) => row.textContent)).toEqual([
+    'Brooklyn, NY2 booksless than 1 mi away',
+    'New York, NY1 book4 mi away',
+    'Chicago, IL5 booksMore than 25 mi away',
+  ]);
+
+  // Choosing a place brings it into view and lists its matching books.
+  await userEvent.click(rows[1]);
+  expect(map.easeTo).toHaveBeenCalledWith({ center: [-73.982, 40.759], zoom: 10 });
+  const placePanel = screen.getByRole('complementary', { name: 'New York, NY' });
+  expect(within(placePanel).getByText('Matching books in')).toBeInTheDocument();
+  expect(within(placePanel).getByText('1 book')).toBeInTheDocument();
+  await within(placePanel).findByRole('list', { name: 'Books in New York, NY' });
+  const area = lastRequest('/map/area');
+  expect(area.params.get('place')).toBe('New York, NY');
+  expect(area.params.get('q')).toBe('C++ & sons');
+
+  // And back to the results.
+  await userEvent.click(within(placePanel).getByRole('button', { name: 'All results' }));
+  expect(screen.getByRole('complementary', { name: '8 books in 3 places' })).toBeInTheDocument();
+});
+
+test('applies a chosen filter at once, showing only the matching places', async () => {
+  searchingServer();
+  await openMap();
+  await screen.findByRole('button', { name: 'New York, NY: 1 book' });
+
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Genre' }), 'Mystery');
+
+  expect(location.search).toBe('?genre=Mystery');
+  expect(await screen.findByRole('button', { name: 'Brooklyn, NY: 2 books' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /New York, NY:/ })).not.toBeInTheDocument();
+});
+
+test('combines the filters in the address', async () => {
+  searchingServer();
+  await openMap();
+
+  await userEvent.type(screen.getByRole('textbox', { name: 'Author' }), 'Christie');
+  await userEvent.type(screen.getByRole('textbox', { name: 'Published from' }), '1990');
+  await userEvent.type(screen.getByRole('textbox', { name: 'Published to' }), '1920');
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Listed' }), 'Past week');
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Only my wishlist matches' }));
+
+  expect(location.search).toBe('?author=Christie&from=1920&to=1990&listed=week&wishlist=1');
+  await waitFor(() => expect(lastRequest('/map/nearest').params.toString()).toBe(location.search.slice(1)));
+});
+
+test('opens on a search from its address, which survives a reload', async () => {
+  searchingServer();
+  const map = await openMap('/map?genre=Mystery&from=1930');
+
+  expect(screen.getByRole('combobox', { name: 'Genre' })).toHaveValue('Mystery');
+  expect(screen.getByRole('textbox', { name: 'Published from' })).toHaveValue('1930');
+  expect(await screen.findByRole('button', { name: 'Brooklyn, NY: 2 books' })).toBeInTheDocument();
+  expect(requests.filter((r) => r.path === '/map/areas').every((r) => r.params.get('genre') === 'Mystery')).toBe(
+    true
+  );
+  await waitFor(() => expect(map.fitBounds).toHaveBeenCalledTimes(1));
+  expect(screen.getByRole('complementary', { name: '8 books in 3 places' })).toBeInTheDocument();
+});
+
+test('keeps the view and says so plainly when nothing matches anywhere', async () => {
+  const map = await openMap('/map?q=zzzz');
+
+  const panel = await screen.findByRole('complementary', { name: 'No matches' });
+  expect(within(panel).getByText(/No books on the market match this search anywhere/)).toBeInTheDocument();
+  expect(map.fitBounds).not.toHaveBeenCalled();
+});
+
+test('clearing the search restores the normal map', async () => {
+  searchingServer();
+  const map = await openMap('/map?genre=Mystery');
+  await screen.findByRole('button', { name: 'Brooklyn, NY: 2 books' });
+
+  await userEvent.click(within(screen.getByRole('search')).getByRole('button', { name: 'Clear' }));
+
+  expect(location.search).toBe('');
+  expect(screen.getByRole('combobox', { name: 'Genre' })).toHaveValue('');
+  expect(await screen.findByRole('button', { name: 'New York, NY: 1 book' })).toBeInTheDocument();
+  expect(lastRequest('/map/areas').params.has('genre')).toBe(false);
+  expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+  expect(map.fitBounds).toHaveBeenLastCalledWith(boundsAround(HOME.point, 25), { padding: 48 });
+});
+
+test('searches from where the map is looking for a reader without a ZIP', async () => {
+  routes['/map'] = () => ({ body: { home: null } });
+  searchingServer();
+  const map = await openMap('/map?q=dune');
+
+  await waitFor(() => expect(map.fitBounds).toHaveBeenCalledTimes(1));
+  const centre = map.getCenter();
+  expect(lastRequest('/map/nearest').params.get('near')).toBe(`${centre.lng},${centre.lat}`);
+  expect(map.fitBounds.mock.calls[0][0]).toEqual(searchBounds([centre.lng, centre.lat], NEAREST.places));
+});
+
+test('offers the genres on the market', async () => {
+  await openMap();
+  const genre = screen.getByRole('combobox', { name: 'Genre' });
+  await waitFor(() =>
+    expect(within(genre).getAllByRole('option').map((o) => o.textContent)).toEqual(['Any genre', 'Mystery', 'Poetry'])
+  );
 });
 
 test('the top bar links to the map', () => {

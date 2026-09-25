@@ -154,6 +154,10 @@ offeredBookSchema.index({ isbn: 1, locked: 1 });
 // The map counts the books in view by place, and lists one place's books newest first.
 offeredBookSchema.index({ ownerPlacePoint: "2d" });
 offeredBookSchema.index({ ownerPlace: 1, createdAt: -1, _id: -1 });
+// A map search (lib/mapSearch.js) counts the matching books of every place for
+// its nearest places; a genre or how recently a book was listed narrows that by index.
+offeredBookSchema.index({ genre: 1, locked: 1 });
+offeredBookSchema.index({ createdAt: -1 });
 
 // Conversations + Messages
 // `lastMessageAt` / `lastMessageBy` copy the newest message so the unread count

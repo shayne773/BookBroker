@@ -161,6 +161,17 @@ points in the table above, never the owner's own ZIP or position. The map's API
 (`back-end/routes/map.js`) returns only place names, those points and book counts,
 plus the caller's own point.
 
+A search bar over the map finds books by keyword (title, author, publisher or
+ISBN) and filters: genre (from the genres on the market), author, publication
+years, how recently a book was listed, and only the reader's wishlist matches.
+The terms combine, and the search is kept in the page's address, so it survives a
+reload and can be shared. While a search is on, the markers count only the
+matching books, the side panel lists the matching places nearest the reader first
+(with the same distance labels), and each new search moves the map to fit the
+reader's point and the nearest matches, zooming out as far as it takes. Every map
+endpoint narrows the market with the one filter in `back-end/lib/mapSearch.js`,
+so the counts, the panel and the nearest places always agree.
+
 The map is drawn with [MapLibre GL JS](https://maplibre.org/) (BSD-3-Clause) on
 [OpenFreeMap](https://openfreemap.org/)'s "positron" style, a free public tile
 service that needs no account or API key and sets no limit on map views. Its
