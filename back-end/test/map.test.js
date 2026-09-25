@@ -172,19 +172,18 @@ describe("the map", () => {
     expect((await areasIn(viewer, US_VIEW)).find((a) => a.place === "Chicago, IL").count).to.equal(1);
   });
 
-  it("opens on the reader's place and distance, or on nothing without a ZIP", async () => {
+  it("opens on the reader's own point and distance, or on nothing without a ZIP", async () => {
     await User.updateOne({ _id: viewer._id }, { maxDistanceMiles: 50 });
     expect((await get(viewer, "/map")).body).to.deep.equal({
-      home: { place: "Brooklyn, NY", point: placePoint("Brooklyn, NY"), miles: 50 },
+      home: { place: "Brooklyn, NY", point: lookupZip(BROOKLYN).point.coordinates, miles: 50 },
     });
 
     const legacy = await createUser({ zip: null, location: "NYC" });
     expect((await get(legacy, "/map")).body).to.deep.equal({ home: null });
   });
 
-  it("never sends a reader's ZIP code or position", async () => {
+  it("never sends a reader's ZIP code or position to anyone else", async () => {
     const responses = [
-      await get(viewer, "/map"),
       await get(viewer, `/map/areas?bbox=${NEW_YORK_VIEW}`),
       await get(viewer, `/map/areas?bbox=${US_VIEW}`),
       await get(viewer, "/map/area?place=Brooklyn%2C%20NY"),

@@ -67,7 +67,8 @@ vi.mock('maplibre-gl', () => {
 
 const BROOKLYN = { place: 'Brooklyn, NY', point: [-73.955, 40.652], count: 3 };
 const NEW_YORK = { place: 'New York, NY', point: [-73.982, 40.759], count: 1 };
-const HOME = { place: 'Brooklyn, NY', point: [-73.955, 40.652], miles: 25 };
+// The reader's own ZIP point, not Brooklyn's place point.
+const HOME = { place: 'Brooklyn, NY', point: [-73.99, 40.694], miles: 25 };
 
 const book = (id, title, distance) => ({ _id: id, title, author: 'An Author', cover: '', ...distance });
 
@@ -123,7 +124,7 @@ const moveTo = async (map, view) => {
   await act(async () => map.fire('moveend'));
 };
 
-test('opens on the reader’s place with their distance drawn around it', async () => {
+test('opens on the reader’s own point with their distance drawn around it', async () => {
   const map = await openMap();
 
   expect(map.options.bounds).toEqual(boundsAround(HOME.point, 25));
@@ -131,7 +132,9 @@ test('opens on the reader’s place with their distance drawn around it', async 
   const [lng, lat] = circle[0];
   expect(lat).toBeCloseTo(HOME.point[1] + 25 / 69.055, 1);
   expect(lng).toBeCloseTo(HOME.point[0], 5);
-  expect(screen.getByText('The circle is your 25 mi around Brooklyn, NY. Choose a place to see its books.')).toBeInTheDocument();
+  expect(
+    screen.getByText('The circle is your 25 mi from your ZIP code in Brooklyn, NY. Choose a place to see its books.')
+  ).toBeInTheDocument();
 });
 
 test('shows a marker for each place with books, with its count', async () => {
@@ -158,6 +161,29 @@ test('merges nearby places at a wide zoom, and zooms into a cluster when it is c
   expect(map.easeTo).toHaveBeenCalledTimes(1);
   const [{ zoom }] = map.easeTo.mock.calls[0];
   expect(zoom).toBeGreaterThan(4);
+});
+
+test('lists the places of a cluster the deepest zoom cannot split, to choose from', async () => {
+  const DARTMOUTH = { place: 'Dartmouth, MA', point: [-71.02, 41.61], count: 2 };
+  const RAYNHAM = { place: 'Raynham Center, MA', point: [-71.02, 41.61], count: 1 };
+  routes['/map/areas'] = () => ({ body: { areas: [BROOKLYN, DARTMOUTH, RAYNHAM] } });
+  const map = await openMap();
+  await moveTo(map, { bounds: [-71.03, 41.6, -71.01, 41.62], zoom: 16 });
+
+  const cluster = await screen.findByRole('button', { name: '3 books in 2 places. Choose a place' });
+  expect(cluster).toHaveAttribute('aria-expanded', 'false');
+  await userEvent.click(cluster);
+  expect(map.easeTo).not.toHaveBeenCalled();
+  expect(cluster).toHaveAttribute('aria-expanded', 'true');
+
+  await userEvent.click(screen.getByRole('button', { name: 'Dartmouth, MA: 2 books' }));
+  const panel = screen.getByRole('complementary', { name: 'Dartmouth, MA' });
+  expect(await within(panel).findByRole('list', { name: 'Books in Dartmouth, MA' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Dartmouth, MA: 2 books' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Raynham Center, MA: 1 book' })).toHaveAttribute('aria-pressed', 'false');
+
+  await userEvent.click(cluster);
+  expect(screen.queryByRole('button', { name: /Raynham Center, MA:/ })).not.toBeInTheDocument();
 });
 
 test('asks for places again only when the view leaves the part already fetched', async () => {

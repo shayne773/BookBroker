@@ -45,18 +45,6 @@ export const covers = (outer, inner) =>
   outer[2] >= inner[2] &&
   outer[3] >= inner[3];
 
-/**
- * `box` as Supercluster reads one: longitudes within ±180, west past east when
- * it crosses the antimeridian.
- */
-export const clusterBox = ([west, south, east, north]) => {
-  if (east - west >= 360) return [-180, south, 180, north];
-  const shift = Math.floor((west + 180) / 360) * 360;
-  const from = west - shift;
-  const to = east - shift;
-  return [from, south, to > 180 ? to - 360 : to, north];
-};
-
 /** The box, [[west, south], [east, north]], around a circle of `miles` at `point`. */
 export const boundsAround = ([longitude, latitude], miles) => {
   const dLat = miles / MILES_PER_DEGREE_LATITUDE;

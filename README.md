@@ -150,13 +150,16 @@ The Map page (`/map`) shows the books on the market by place, anywhere in the
 country: it pans and zooms like any web map, nearby places merge into one marker
 with their combined count when zoomed out, and choosing a place lists its books
 with the same distance labels as everywhere else ("More than 25 mi away" beyond
-the reader's distance). It opens on the reader's place with their distance drawn
-around it, or on the whole country for a reader without a ZIP code.
+the reader's distance). It opens on the reader's own ZIP point with their distance
+drawn around it (the point their distances are measured from, sent only to them),
+or on the whole country for a reader without a ZIP code. Places so close that they
+stay merged at the deepest zoom are listed under their marker to choose from.
 
 A book is counted under its owner's town ("Brooklyn, NY"), which every book page
 already shows, and drawn at that town's point: the average of the town's ZIP code
 points in the table above, never the owner's own ZIP or position. The map's API
-(`back-end/routes/map.js`) returns only place names, those points and book counts.
+(`back-end/routes/map.js`) returns only place names, those points and book counts,
+plus the caller's own point.
 
 The map is drawn with [MapLibre GL JS](https://maplibre.org/) (BSD-3-Clause) on
 [OpenFreeMap](https://openfreemap.org/)'s "positron" style, a free public tile

@@ -1,4 +1,4 @@
-import { clusterAreas, clusterBox, covers, paddedBox } from './bookMap';
+import { clusterAreas, covers, paddedBox } from './bookMap';
 
 const bounds = ([west, south, east, north]) => ({
   getWest: () => west,
@@ -16,13 +16,6 @@ test('knows when a view is already covered', () => {
   expect(covers([-75, 39, -72, 42], [-74, 40, -73, 41])).toBe(true);
   expect(covers([-75, 39, -72, 42], [-76, 40, -73, 41])).toBe(false);
   expect(covers(null, [-74, 40, -73, 41])).toBe(false);
-});
-
-test('brings a view back within ±180 for clustering, across the antimeridian too', () => {
-  expect(clusterBox([-74, 40, -73, 41])).toEqual([-74, 40, -73, 41]);
-  expect(clusterBox([-434, 40, -433, 41])).toEqual([-74, 40, -73, 41]);
-  expect(clusterBox([170, 50, 190, 55])).toEqual([170, 50, -170, 55]);
-  expect(clusterBox([-400, -90, 400, 90])).toEqual([-180, -90, 180, 90]);
 });
 
 test('clusters sum their places’ books', () => {

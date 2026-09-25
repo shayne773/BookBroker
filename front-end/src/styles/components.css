@@ -2252,6 +2252,25 @@ a.list-row:focus-visible .textlink-arrow__mark {
   color: var(--color-ink-inverse);
 }
 
+/* A cluster the deepest zoom cannot split lists its places below it instead,
+   over the markers around it. */
+.maplibregl-marker:has(.map-cluster__places) {
+  z-index: 1;
+}
+
+.map-cluster__places {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 50%;
+  display: grid;
+  justify-items: start;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  transform: translateX(-50%);
+}
+
 /* The chosen place's books, in a column beside the map. */
 .map-panel {
   flex: 0 0 400px;

@@ -9,7 +9,6 @@ import {
   booksCount,
   boundsAround,
   clusterAreas,
-  clusterBox,
   covers,
   distanceCircle,
   MAP_STYLE_URL,
@@ -19,7 +18,8 @@ import {
 
 const API = import.meta.env.VITE_SERVER_ADDRESS;
 
-// The deepest the map zooms to, and to which a cluster's click can take it.
+// The deepest the map zooms to. A cluster still merged there is split by
+// choosing one of its places from a list instead.
 const MAX_ZOOM = 16;
 
 // A token's value, for the map's own drawing (the distance circle), which is
@@ -27,7 +27,8 @@ const MAX_ZOOM = 16;
 const token = (name) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-// The reader's distance, drawn faintly around their place (not their own point).
+// The reader's distance, drawn faintly around their own point, from which the
+// distances beside their books are measured.
 const drawDistance = (map, home) => {
   const ink = token('--color-ink');
   map.addSource('home-distance', { type: 'geojson', data: distanceCircle(home.point, home.miles) });
@@ -57,6 +58,7 @@ const BooksMap = ({ home, selectedPlace, onSelect, onError }) => {
   const [map, setMap] = useState(null);
   const [view, setView] = useState(null);
   const [fetched, setFetched] = useState({ box: null, areas: [] });
+  const [picking, setPicking] = useState(null);
 
   useEffect(() => {
     const instance = new maplibregl.Map({
@@ -114,11 +116,11 @@ const BooksMap = ({ home, selectedPlace, onSelect, onError }) => {
   }, [needsAreas, padded, onError]);
 
   const index = useMemo(() => clusterAreas(fetched.areas), [fetched.areas]);
-  const markers = view ? index.getClusters(clusterBox(view.padded), Math.floor(view.zoom)) : [];
+  const markers = view ? index.getClusters(view.padded, Math.floor(view.zoom)) : [];
 
-  const zoomInto = (clusterId, center) => {
-    const zoom = Math.min(index.getClusterExpansionZoom(clusterId), MAX_ZOOM);
-    map.easeTo({ center, zoom });
+  const splitZoom = (clusterId) => {
+    const zoom = index.getClusterExpansionZoom(clusterId);
+    return view.zoom < MAX_ZOOM && zoom <= MAX_ZOOM ? zoom : null;
   };
 
   return (
@@ -129,16 +131,41 @@ const BooksMap = ({ home, selectedPlace, onSelect, onError }) => {
 
           if (properties.cluster) {
             const { cluster_id: id, count, point_count: places } = properties;
+            const zoom = splitZoom(id);
+            const open = zoom === null && picking?.index === index && picking.id === id;
             return (
               <MapMarker key={`cluster-${id}`} map={map} lng={lng} lat={lat}>
                 <button
                   type="button"
                   className={`map-cluster map-cluster--${clusterSize(count)}`}
-                  onClick={() => zoomInto(id, [lng, lat])}
-                  aria-label={`${booksCount(count)} in ${places} places. Zoom in`}
+                  onClick={() =>
+                    zoom === null
+                      ? setPicking(open ? null : { index, id })
+                      : map.easeTo({ center: [lng, lat], zoom })
+                  }
+                  aria-label={`${booksCount(count)} in ${places} places. ${zoom === null ? 'Choose a place' : 'Zoom in'}`}
+                  aria-expanded={zoom === null ? open : undefined}
                 >
                   {count}
                 </button>
+                {open && (
+                  <ul className="map-cluster__places">
+                    {index.getLeaves(id, Infinity).map(({ properties: leaf }) => (
+                      <li key={leaf.place}>
+                        <button
+                          type="button"
+                          className={`map-place${leaf.place === selectedPlace ? ' is-selected' : ''}`}
+                          aria-pressed={leaf.place === selectedPlace}
+                          aria-label={`${leaf.place}: ${booksCount(leaf.count)}`}
+                          onClick={() => onSelect({ place: leaf.place, count: leaf.count })}
+                        >
+                          <span className="map-place__count" aria-hidden="true">{leaf.count}</span>
+                          <span className="map-place__name" aria-hidden="true">{leaf.place}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </MapMarker>
             );
           }
@@ -165,8 +192,8 @@ const BooksMap = ({ home, selectedPlace, onSelect, onError }) => {
 };
 
 // The map page: books by place, anywhere, under the top bar, with the chosen
-// place's books in a panel on the right. It opens on the reader's place, with
-// their distance around it, or on the whole country for a reader without a ZIP.
+// place's books in a panel on the right. It opens on the reader's own point,
+// with their distance around it, or on the whole country for a reader without a ZIP.
 const BookMap = () => {
   // undefined while loading; null for a reader without a ZIP.
   const [home, setHome] = useState(undefined);
@@ -209,7 +236,7 @@ const BookMap = () => {
         <div className="map-page__notes">
           {home && (
             <p className="map-page__note">
-              The circle is your {home.miles} mi around {home.place}. Choose a place to see its books.
+              The circle is your {home.miles} mi from your ZIP code in {home.place}. Choose a place to see its books.
             </p>
           )}
           {home === null && !homeFailed && <LocationPrompt area={null} />}

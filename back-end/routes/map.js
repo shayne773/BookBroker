@@ -2,7 +2,6 @@ import express from "express";
 import { marketFilter } from "../lib/blocks.js";
 import { areasWithin, BBOX_MESSAGE, booksInPlace, parseBbox, parseOffset } from "../lib/map.js";
 import { readerArea } from "../lib/nearby.js";
-import { placePoint } from "../lib/zipCodes.js";
 
 // The map page's API. Mounted in app.js behind authMiddleware. Books are shown
 // by their owner's place (lib/map.js), at any distance: the map is for
@@ -17,14 +16,13 @@ const PLACE_MAX_LENGTH = 100;
 // Filters on the map will narrow this further from the query string.
 const mapFilter = (req) => marketFilter(req.user.userId);
 
-// GET /map  where the map opens: `home` is the caller's place, its point and
-// their distance in miles, or null for a reader without a ZIP. The point is the
-// place's (lib/zipCodes.js), not the reader's own.
+// GET /map  where the map opens: `home` is the caller's place, their own ZIP
+// point (the one their distances are measured from, sent only to them) and
+// their distance in miles, or null for a reader without a ZIP.
 router.get("/", async (req, res, next) => {
   try {
     const area = await readerArea(req.user.userId);
-    const point = area && placePoint(area.place);
-    res.json({ home: point ? { place: area.place, point, miles: area.miles } : null });
+    res.json({ home: area ? { place: area.place, point: area.point.coordinates, miles: area.miles } : null });
   } catch (err) {
     next(err);
   }
