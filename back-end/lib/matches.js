@@ -15,6 +15,12 @@ const MATCHES_MAX_OFFERS = 200;
 // The ISBN a book is matched on, "" when it has none.
 export const matchIsbn = (book) => (book?.isbn || "").trim();
 
+// The ISBNs on `userId`'s wishlist, each once: what their offers are matched on.
+export async function wishlistIsbns(userId, wishlist) {
+  const books = wishlist ?? (await WishlistBook.find({ userId }).select("isbn").lean());
+  return [...new Set(books.map(matchIsbn).filter(Boolean))];
+}
+
 // The caller's wishlisted books that other readers are offering right now: one
 // entry per wishlist book with at least one offer, in wishlist order, each
 // offer carrying its owner with `ownerFields` and, when the caller has an area,
@@ -22,7 +28,7 @@ export const matchIsbn = (book) => (book?.isbn || "").trim();
 // then the offers by position and ISBN.
 export async function wishlistMatches(userId, ownerFields) {
   const wishlist = await WishlistBook.find({ userId }).select("title author cover isbn").lean();
-  const isbns = [...new Set(wishlist.map(matchIsbn).filter(Boolean))];
+  const isbns = await wishlistIsbns(userId, wishlist);
   if (!isbns.length) return [];
 
   const offers = await OfferedBook.populate(

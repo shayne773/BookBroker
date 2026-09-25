@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { authFetch, isSessionExpiredError } from './auth';
 import LocationPrompt from './LocationPrompt';
 import AreaPanel from './BookMap/AreaPanel';
 import MapMarker from './BookMap/MapMarker';
+import ResultsPanel from './BookMap/ResultsPanel';
+import SearchBar from './BookMap/SearchBar';
 import {
   booksCount,
   boundsAround,
@@ -13,14 +16,36 @@ import {
   distanceCircle,
   MAP_STYLE_URL,
   paddedBox,
+  searchBounds,
   US_BOUNDS,
 } from './bookMap';
+import { readSearch, searchParams, searchQuery } from './mapSearch';
 
 const API = import.meta.env.VITE_SERVER_ADDRESS;
 
 // The deepest the map zooms to. A cluster still merged there is split by
 // choosing one of its places from a list instead.
 const MAX_ZOOM = 16;
+
+// A search's view is fitted around the reader and the nearest matches no
+// closer than this, so a single match nearby still shows its surroundings.
+const SEARCH_MAX_ZOOM = 12;
+// How close choosing a place in the results brings the map, at least.
+const PLACE_ZOOM = 10;
+
+// Where the map opens, and where clearing a search takes it back to.
+const homeBounds = (home) => (home ? boundsAround(home.point, home.miles) : US_BOUNDS);
+const MAP_PADDING = 48;
+// A search's matches sit at the edges of its view, and a place marker is a
+// pill centred on its point, far wider than tall: the sides keep room for
+// half of one, so the outermost match's count stays on the map.
+const SEARCH_PADDING = { top: MAP_PADDING, bottom: MAP_PADDING, left: 112, right: 112 };
+
+const getJson = async (url, options) => {
+  const res = await authFetch(url, options);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+};
 
 // A token's value, for the map's own drawing (the distance circle), which is
 // painted on the canvas rather than styled by CSS.
@@ -46,26 +71,30 @@ const drawDistance = (map, home) => {
   });
 };
 
+const NO_AREAS = [];
+
 // The size step of a cluster marker, by how many books it holds.
 const clusterSize = (count) => (count >= 100 ? 'large' : count >= 10 ? 'medium' : 'small');
 
 // The map itself: the basemap, the reader's distance, and a marker for every
-// place with books, merged into clusters where they would crowd each other.
-// Places are fetched for the view (widened) as it moves, and only when the
-// view leaves the part already fetched.
-const BooksMap = ({ home, selectedPlace, onSelect, onError }) => {
+// place with books (only those matching the search, `searchKey`, when one is
+// on), merged into clusters where they would crowd each other. Places are
+// fetched for the view (widened) as it moves, and only when the view leaves
+// the part already fetched or the search changes. `onReady` is given the map
+// once it has loaded, for the page to move it.
+const BooksMap = ({ home, searchKey, selectedPlace, onSelect, onError, onReady }) => {
   const container = useRef(null);
   const [map, setMap] = useState(null);
   const [view, setView] = useState(null);
-  const [fetched, setFetched] = useState({ box: null, areas: [] });
+  const [fetched, setFetched] = useState({ box: null, key: '', areas: [] });
   const [picking, setPicking] = useState(null);
 
   useEffect(() => {
     const instance = new maplibregl.Map({
       container: container.current,
       style: MAP_STYLE_URL,
-      bounds: home ? boundsAround(home.point, home.miles) : US_BOUNDS,
-      fitBoundsOptions: { padding: 48 },
+      bounds: homeBounds(home),
+      fitBoundsOptions: { padding: MAP_PADDING },
       maxZoom: MAX_ZOOM,
       // A flat map: no rotation or tilt to get lost in.
       dragRotate: false,
@@ -88,24 +117,29 @@ const BooksMap = ({ home, selectedPlace, onSelect, onError }) => {
       if (home) drawDistance(instance, home);
       track();
       setMap(instance);
+      onReady(instance);
     });
     instance.on('moveend', track);
 
-    return () => instance.remove();
-  }, [home]);
+    return () => {
+      onReady(null);
+      instance.remove();
+    };
+  }, [home, onReady]);
 
   const visible = view?.visible;
   const padded = view?.padded;
-  const needsAreas = visible && !covers(fetched.box, visible);
+  const current = fetched.key === searchKey;
+  const needsAreas = visible && !(current && covers(fetched.box, visible));
 
   useEffect(() => {
     if (!needsAreas) return undefined;
     const controller = new AbortController();
-    authFetch(`${API}/map/areas?bbox=${padded.join(',')}`, { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+    const search = searchKey ? `&${searchKey}` : '';
+    getJson(`${API}/map/areas?bbox=${padded.join(',')}${search}`, { signal: controller.signal })
       .then(({ areas }) => {
         onError(false);
-        setFetched({ box: padded, areas });
+        setFetched({ box: padded, key: searchKey, areas });
       })
       .catch((err) => {
         if (controller.signal.aborted || isSessionExpiredError(err)) return;
@@ -113,9 +147,11 @@ const BooksMap = ({ home, selectedPlace, onSelect, onError }) => {
         onError(true);
       });
     return () => controller.abort();
-  }, [needsAreas, padded, onError]);
+  }, [needsAreas, padded, searchKey, onError]);
 
-  const index = useMemo(() => clusterAreas(fetched.areas), [fetched.areas]);
+  // Markers for another search are not shown while this one's are fetched.
+  const areas = current ? fetched.areas : NO_AREAS;
+  const index = useMemo(() => clusterAreas(areas), [areas]);
   const markers = view ? index.getClusters(view.padded, Math.floor(view.zoom)) : [];
 
   const splitZoom = (clusterId) => {
@@ -191,20 +227,34 @@ const BooksMap = ({ home, selectedPlace, onSelect, onError }) => {
   );
 };
 
-// The map page: books by place, anywhere, under the top bar, with the chosen
-// place's books in a panel on the right. It opens on the reader's own point,
-// with their distance around it, or on the whole country for a reader without a ZIP.
+// The map page: books by place, anywhere, under the top bar and the search,
+// with a panel on the right for the chosen place's books or, while a search is
+// on, its results. It opens on the reader's own point, with their distance
+// around it, or on the whole country for a reader without a ZIP. The search
+// lives in the page's query string; each new one moves the map to the reader
+// and the nearest matching places.
 const BookMap = () => {
   // undefined while loading; null for a reader without a ZIP.
   const [home, setHome] = useState(undefined);
   const [homeFailed, setHomeFailed] = useState(false);
   const [areasFailed, setAreasFailed] = useState(false);
-  const [selected, setSelected] = useState(null);
+  // The place chosen under the search `key`.
+  const [selection, setSelection] = useState(null);
+  const [map, setMap] = useState(null);
+  const [genres, setGenres] = useState([]);
+  // The nearest matches for the search `key`: { key, places, placeCount,
+  // bookCount }, or { key, failed: true }.
+  const [results, setResults] = useState(null);
+
+  const [params, setParams] = useSearchParams();
+  const search = useMemo(() => readSearch(params), [params]);
+  const searchKey = searchQuery(search);
+  const selected = selection?.key === searchKey ? selection : null;
+  const select = (choice) => setSelection({ ...choice, key: searchKey });
 
   useEffect(() => {
     let live = true;
-    authFetch(`${API}/map`)
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+    getJson(`${API}/map`)
       .then((data) => live && setHome(data.home ?? null))
       .catch((err) => {
         if (!live || isSessionExpiredError(err)) return;
@@ -212,49 +262,117 @@ const BookMap = () => {
         setHomeFailed(true);
         setHome(null);
       });
+    getJson(`${API}/map/genres`)
+      .then((data) => live && setGenres(data.genres))
+      .catch((err) => {
+        // The search still works without the list, by any genre.
+        if (live && !isSessionExpiredError(err)) console.error('Failed to fetch the genres:', err);
+      });
     return () => {
       live = false;
     };
   }, []);
 
+  // A new search finds the nearest matching places, from the reader's own
+  // point (the API knows it) or, without a ZIP, from where the map is looking,
+  // and fits the map around them. With no match anywhere, the view stays.
+  useEffect(() => {
+    if (!searchKey || !map) return undefined;
+    const controller = new AbortController();
+    const centre = map.getCenter();
+    const origin = home ? home.point : [centre.lng, centre.lat];
+    const near = home ? '' : `&near=${origin.join(',')}`;
+    getJson(`${API}/map/nearest?${searchKey}${near}`, { signal: controller.signal })
+      .then((found) => {
+        setResults({ key: searchKey, ...found });
+        const bounds = searchBounds(origin, found.places);
+        if (bounds) map.fitBounds(bounds, { padding: SEARCH_PADDING, maxZoom: SEARCH_MAX_ZOOM });
+      })
+      .catch((err) => {
+        if (controller.signal.aborted || isSessionExpiredError(err)) return;
+        console.error('Failed to search the map:', err);
+        setResults({ key: searchKey, failed: true });
+      });
+    return () => controller.abort();
+  }, [searchKey, map, home]);
+
   const onAreasError = useCallback((failed) => setAreasFailed(failed), []);
+
+  const applySearch = (next) => {
+    setSelection(null);
+    setParams(searchParams(next));
+  };
+
+  const clearSearch = () => {
+    applySearch({});
+    map?.fitBounds(homeBounds(home), { padding: MAP_PADDING });
+  };
+
+  // A place chosen from the results is brought into view and its matching
+  // books listed.
+  const chooseResult = ({ place, point, count }) => {
+    select({ place, count });
+    map?.easeTo({ center: point, zoom: Math.max(map.getZoom(), PLACE_ZOOM) });
+  };
 
   return (
     <main className="map-page">
       <h1 className="visually-hidden">Map</h1>
 
       <div className="map-page__map">
-        {home !== undefined && (
-          <BooksMap
-            home={home}
-            selectedPlace={selected?.place}
-            onSelect={setSelected}
-            onError={onAreasError}
-          />
-        )}
+        <SearchBar
+          key={searchKey}
+          search={search}
+          active={Boolean(searchKey)}
+          genres={genres}
+          onSearch={applySearch}
+          onClear={clearSearch}
+        />
 
-        <div className="map-page__notes">
-          {home && (
-            <p className="map-page__note">
-              The circle is your {home.miles} mi from your ZIP code in {home.place}. Choose a place to see its books.
-            </p>
+        <div className="map-page__view">
+          {home !== undefined && (
+            <BooksMap
+              home={home}
+              searchKey={searchKey}
+              selectedPlace={selected?.place}
+              onSelect={select}
+              onError={onAreasError}
+              onReady={setMap}
+            />
           )}
-          {home === null && !homeFailed && <LocationPrompt area={null} />}
-          {(homeFailed || areasFailed) && (
-            <p className="notice notice--error" role="alert">
-              We couldn&rsquo;t load the books on the map. Try again in a moment.
-            </p>
-          )}
+
+          <div className="map-page__notes">
+            {home && (
+              <p className="map-page__note">
+                The circle is your {home.miles} mi from your ZIP code in {home.place}. Choose a place to see its books.
+              </p>
+            )}
+            {home === null && !homeFailed && <LocationPrompt area={null} />}
+            {(homeFailed || areasFailed) && (
+              <p className="notice notice--error" role="alert">
+                We couldn&rsquo;t load the books on the map. Try again in a moment.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
-      {selected && (
+      {selected ? (
         <AreaPanel
-          key={selected.place}
+          key={`${selected.place}?${searchKey}`}
           place={selected.place}
           count={selected.count}
-          onClose={() => setSelected(null)}
+          searchKey={searchKey}
+          onClose={() => setSelection(null)}
         />
+      ) : (
+        searchKey && (
+          <ResultsPanel
+            results={results?.key === searchKey ? results : null}
+            onChoose={chooseResult}
+            onClear={clearSearch}
+          />
+        )
       )}
     </main>
   );

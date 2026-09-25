@@ -173,6 +173,10 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - The map (`routes/map.js`, `lib/map.js`) groups books by `OfferedBook.ownerPlace` (the owner's
   public place name) at `ownerPlacePoint` (`placePoint` in `lib/zipCodes.js`, the mean of the
   place's ZIP points, 2d-indexed for bbox queries), never at `ownerGeo`; it shows any distance.
+- A map search is the query-string keys `parseSearch` reads in `back-end/lib/mapSearch.js`; its
+  `searchFilter` (always on top of `marketFilter`) is the one filter every `/map` endpoint uses,
+  so counts, the panel and `/map/nearest` agree. The front end keeps the same keys in the page's
+  URL (`front-end/src/mapSearch.js`) and passes them through unchanged.
 - ZIPs resolve offline through `lib/zipCodes.js` from the bundled GeoNames table
   (`npm run build:zip-codes`; shipped to Vercel by `includeFiles` in `vercel.json`).
   Test fixtures live in Brooklyn (11201); `createUser({ zip: null })` is a pre-ZIP account.

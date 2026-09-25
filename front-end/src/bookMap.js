@@ -105,3 +105,35 @@ export const clusterAreas = (areas) => {
 
 // "1 book", "12 books".
 export const booksCount = (n) => `${n} ${n === 1 ? 'book' : 'books'}`;
+
+// A search fits the map to the reader's point and this many of the nearest
+// matching places, or to every matching place within their distance when
+// there are more of those.
+export const FIT_NEAREST = 5;
+
+/**
+ * The places a search's view is fitted to, from the places matching it
+ * (nearest first, as GET /map/nearest lists them): those within the reader's
+ * distance (the ones with `distanceMiles`) when they outnumber FIT_NEAREST,
+ * otherwise the nearest FIT_NEAREST, however far.
+ */
+export const fitPlaces = (places) => {
+  const within = places.filter((place) => place.distanceMiles !== undefined);
+  return within.length > FIT_NEAREST ? within : places.slice(0, FIT_NEAREST);
+};
+
+/**
+ * The view, [[west, south], [east, north]], a search moves the map to: around
+ * `origin` (the reader's point, or where the map was looking) and the places
+ * fitPlaces picks, or null when nothing matched, so the view stays.
+ */
+export const searchBounds = (origin, places) => {
+  if (!places.length) return null;
+  const points = [origin, ...fitPlaces(places).map((place) => place.point)];
+  const longitudes = points.map(([longitude]) => longitude);
+  const latitudes = points.map(([, latitude]) => latitude);
+  return [
+    [Math.min(...longitudes), Math.min(...latitudes)],
+    [Math.max(...longitudes), Math.max(...latitudes)],
+  ];
+};

@@ -45,8 +45,9 @@ export function parseBbox(bbox) {
  */
 export function areasWithin(boxes, match) {
   const within = boxes.map((box) => ({ ownerPlacePoint: { $geoWithin: { $box: box } } }));
+  // Beside `match`, not merged into it, so neither replaces the other's $or.
   return OfferedBook.aggregate([
-    { $match: { ...match, ...(within.length === 1 ? within[0] : { $or: within }) } },
+    { $match: { $and: [match, within.length === 1 ? within[0] : { $or: within }] } },
     { $group: { _id: "$ownerPlace", point: { $first: "$ownerPlacePoint" }, count: { $sum: 1 } } },
     { $project: { _id: 0, place: "$_id", point: 1, count: 1 } },
     { $sort: { place: 1 } },

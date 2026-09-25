@@ -62,9 +62,12 @@ export function displayMilesExpr(meters) {
  */
 export function distanceFields(area, point) {
   if (!area || !point?.coordinates?.length) return {};
-  if (!withinReach(area, point)) return { distanceLabel: `More than ${area.miles} mi away` };
+  if (!withinReach(area, point)) return { distanceLabel: beyondReachLabel(area) };
   return { distanceMiles: displayMiles(metersBetween(area.point, point)) };
 }
+
+/** What is said of anything beyond the reader's distance, in place of how far it is. */
+export const beyondReachLabel = (area) => `More than ${area.miles} mi away`;
 
 /** Whether `area` reaches `point`. A reader without an area is unrestricted. */
 export function withinReach(area, point) {
