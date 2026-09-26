@@ -146,6 +146,52 @@ describe('adding the chosen Google Books volume', () => {
     expect(screen.getByRole('button', { name: 'Add to Offerings' })).not.toHaveAttribute('aria-disabled');
   });
 
+  test("an add that answers after another book is chosen leaves that book's buttons alone", async () => {
+    const messiah = { title: 'Dune Messiah', author: 'Frank Herbert', isbn: '9780593098233', cover: '' };
+    const answers = [];
+    global.fetch.mockImplementation((url) => {
+      if (String(url).includes('/google-books/search')) {
+        return Promise.resolve(respond(200, { books: String(url).includes('messiah') ? [messiah] : [dune] }));
+      }
+      return new Promise((resolve) => answers.push(resolve));
+    });
+    await choose();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Wishlist' }));
+    const input = screen.getByLabelText('Search Google Books');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'messiah');
+    await userEvent.click(await screen.findByRole('button', { name: /Dune Messiah/ }));
+
+    await act(async () => answers[0](respond(201, { message: 'Added' })));
+
+    expect(screen.queryByRole('button', { name: /On your wishlist/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add to Wishlist' })).not.toHaveClass('is-done');
+    expect(screen.getByRole('button', { name: 'Add to Wishlist' })).not.toHaveAttribute('aria-disabled');
+  });
+
+  test("a failed add that answers after another book is chosen does not show its error there", async () => {
+    const messiah = { title: 'Dune Messiah', author: 'Frank Herbert', isbn: '9780593098233', cover: '' };
+    const answers = [];
+    global.fetch.mockImplementation((url) => {
+      if (String(url).includes('/google-books/search')) {
+        return Promise.resolve(respond(200, { books: String(url).includes('messiah') ? [messiah] : [dune] }));
+      }
+      return new Promise((resolve) => answers.push(resolve));
+    });
+    await choose();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Wishlist' }));
+    const input = screen.getByLabelText('Search Google Books');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'messiah');
+    await userEvent.click(await screen.findByRole('button', { name: /Dune Messiah/ }));
+
+    await act(async () => answers[0](respond(409, { message: 'That book is already on your wishlist.' })));
+
+    expect(screen.queryByText('That book is already on your wishlist.')).not.toBeInTheDocument();
+  });
+
   test('a failed add says why beside the buttons and leaves the button to try again', async () => {
     global.fetch.mockImplementation(async (url) =>
       String(url).includes('/google-books/search')

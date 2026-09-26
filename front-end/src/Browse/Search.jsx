@@ -1,5 +1,5 @@
 // src/Browse/Search.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GoogleSuggestions, GoogleSelection, MarketResults } from "./SearchResults";
 import { authFetch, isSessionExpiredError } from "../auth";
@@ -21,6 +21,10 @@ export default function Search() {
   // Google results + selection
   const [googleResults, setGoogleResults] = useState([]);
   const [selectedGoogleBook, setSelectedGoogleBook] = useState(null);
+  const selectedRef = useRef(null);
+  useEffect(() => {
+    selectedRef.current = selectedGoogleBook;
+  }, [selectedGoogleBook]);
 
   // What the selected book has become ({ wishlist, offered }), which action is
   // under way, and why one failed.
@@ -169,7 +173,8 @@ export default function Search() {
 
   // Adds the selected book to a shelf; its button then reads as done.
   const addTo = async (shelf, path, body) => {
-    if (!selectedGoogleBook) return;
+    const book = selectedGoogleBook;
+    if (!book) return;
 
     setAdding(shelf);
     selectionFeedback.clear();
@@ -185,12 +190,13 @@ export default function Search() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message || data?.error || `Request failed (HTTP ${res.status})`);
 
-      setAdded((prev) => ({ ...prev, [shelf]: true }));
+      if (selectedRef.current === book) setAdded((prev) => ({ ...prev, [shelf]: true }));
     } catch (e) {
       // RequireAuth is already redirecting to the login page.
       if (isSessionExpiredError(e)) return;
 
       console.error(e);
+      if (selectedRef.current !== book) return;
       selectionFeedback.fail(
         e.message || (shelf === "wishlist" ? "Failed to add to wishlist." : "Failed to add to offerings.")
       );
