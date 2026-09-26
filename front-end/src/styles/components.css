@@ -582,7 +582,8 @@
 }
 
 /* Done: the fill drains to paper and a check draws in beside the new label,
-   e.g. "Add to Wishlist" becoming "On your wishlist". */
+   e.g. "Add to Wishlist" becoming "On your wishlist". Only a click's outcome
+   (.is-new) animates; a button that loads already done just shows it. */
 .button.is-done,
 .button.is-done:hover,
 .button.is-done:focus-visible {
@@ -595,11 +596,17 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.button__done.is-new {
   animation: done-in var(--duration-base) var(--ease-out) both;
 }
 
 .button__check {
   display: inline-block;
+}
+
+.button__done.is-new .button__check {
   animation: check-in var(--duration-slow) var(--ease-out) both;
 }
 

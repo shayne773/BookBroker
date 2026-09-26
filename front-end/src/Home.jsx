@@ -11,9 +11,9 @@ import useFeedback from './useFeedback';
 const Home = () => {
     const [books, setBooks] = useState([]);
     const screenRefs = useRef([]);
-    // The book being added to the wishlist, and the one whose add failed, which
+    // The books being added to the wishlist, and the one whose add failed, which
     // says so under its button.
-    const [adding, setAdding] = useState(null);
+    const [addingIds, setAddingIds] = useState(() => new Set());
     const [failedId, setFailedId] = useState(null);
     const { feedback, fail, clear } = useFeedback();
     // ISBNs on the reader's wishlist, so a book they already want is flagged
@@ -70,7 +70,7 @@ const Home = () => {
     }, [books]);
 
     const handleAddBook = (book) => {
-        setAdding(book._id);
+        setAddingIds(prev => new Set(prev).add(book._id));
         setFailedId(null);
         clear();
         authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-wishlist-book`, {
@@ -96,7 +96,11 @@ const Home = () => {
             setFailedId(book._id);
             fail("This book couldn't be added. Please try again.");
         })
-        .finally(() => setAdding(null));
+        .finally(() => setAddingIds(prev => {
+            const next = new Set(prev);
+            next.delete(book._id);
+            return next;
+        }));
     };
 
     // Add to Wishlist, which turns into "On your wishlist" once it is.
@@ -105,7 +109,7 @@ const Home = () => {
             className={className}
             done={onWishlist(book)}
             doneLabel="On your wishlist"
-            busy={adding === book._id}
+            busy={addingIds.has(book._id)}
             busyLabel="Adding…"
             onClick={() => handleAddBook(book)}
         >

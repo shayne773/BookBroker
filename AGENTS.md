@@ -38,7 +38,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - `.page` runs its entry animation with fill-mode `backwards`, not `both`: a transform
   left in effect makes the page the containing block for its `position: fixed` children
   (dialog overlays).
-- No pop-ups: no `alert()`/`confirm()` (`src/noPopups.test.js` enforces it) and no toasts.
+- No pop-ups: no `alert()`/`confirm()` (`src/setupTests.js` makes them throw in every test) and no toasts.
   An action's outcome is a `<Feedback>` line (`src/Feedback.jsx`, state from
   `useFeedback`) beside the control, or a `DoneButton` that turns into its checked state
   ("On your wishlist"). Dialogs stay only for collecting input.
