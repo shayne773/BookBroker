@@ -10,6 +10,8 @@ import {
 } from "../lib/tradeDeadlines.js";
 
 const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
 
 // Trade emails to `user` about a completed trade, once every send has finished.
 async function completedEmailsTo(user) {
@@ -71,7 +73,15 @@ describe("trade deadlines", () => {
 
   // Moves a trade's deadline into the past, as if it had been set long ago.
   const overdue = (id, field) =>
-    Exchange.updateOne({ _id: id }, { $set: { [field]: new Date(Date.now() - MINUTE) } });
+    Exchange.updateOne(
+      { _id: id },
+      { $set: { [field]: new Date(Date.now() - MINUTE), updatedAt: new Date(Date.now() - PROPOSAL_TIMEOUT_MS - MINUTE) } },
+      { timestamps: false }
+    );
+
+  // Makes an offer look last proposed at `at`, with the given deadline.
+  const proposedAt = (id, at, expiresAt) =>
+    Exchange.updateOne({ _id: id }, { $set: { updatedAt: at, expiresAt } }, { timestamps: false });
 
   describe("an accepted trade one side has confirmed", () => {
     it("completes by itself 7 days after the first confirmation, which a second one does not move", async () => {
@@ -103,7 +113,7 @@ describe("trade deadlines", () => {
 
       expect(result).to.deep.equal({ expired: 0, completed: 1 });
       const ex = await Exchange.findById(id).lean();
-      expect(ex).to.include({ status: "COMPLETED", autoCompleted: true, responderConfirmedComplete: false });
+      expect(ex).to.include({ status: "COMPLETED", autoCompleted: true, deadlineDays: 7, responderConfirmedComplete: false });
       expect(await OfferedBook.countDocuments({ _id: { $in: [requesterBook.id, responderBook.id] } })).to.equal(0);
       expect(await OfferedBook.countDocuments({ lockedByExchange: id })).to.equal(0);
       expect(await OfferedBook.exists({ _id: bystander.id })).to.not.equal(null);
@@ -193,7 +203,7 @@ describe("trade deadlines", () => {
       const result = await resolveTradeDeadlines({}, new Date(Date.now() + 2 * COMPLETION_TIMEOUT_MS));
 
       expect(result.completed).to.equal(0);
-      expect(await Exchange.findById(id).lean()).to.include({ status: "COMPLETED", autoCompleted: false });
+      expect(await Exchange.findById(id).lean()).to.include({ status: "COMPLETED", autoCompleted: false, deadlineDays: null });
     });
   });
 
@@ -209,7 +219,47 @@ describe("trade deadlines", () => {
 
       const result = await resolveTradeDeadlines({}, expiresAt);
       expect(result).to.deep.equal({ expired: 1, completed: 0 });
+      expect(await Exchange.findById(id).lean()).to.include({ status: "EXPIRED", deadlineDays: 14 });
+    });
+
+    it("made under the old 48-hour rule gets its 14 days from the latest proposal, once", async () => {
+      const id = await propose();
+      const at = new Date(Date.now() - 3 * DAY);
+      await proposedAt(id, at, new Date(at.getTime() + 48 * HOUR));
+
+      expect(await resolveTradeDeadlines()).to.deep.equal({ expired: 0, completed: 0 });
+      const renewed = await Exchange.findById(id).lean();
+      expect(renewed.expiresAt.getTime()).to.equal(at.getTime() + PROPOSAL_TIMEOUT_MS);
+      expect(renewed.updatedAt.getTime()).to.equal(at.getTime());
+
+      await resolveTradeDeadlines();
+      const again = await Exchange.findById(id).lean();
+      expect(again.expiresAt.getTime()).to.equal(renewed.expiresAt.getTime());
+      expect(again.__v).to.equal(renewed.__v);
+
+      await resolveTradeDeadlines({}, new Date(renewed.expiresAt.getTime() - 1));
+      expect(await statusOf(id)).to.equal("PENDING");
+      await resolveTradeDeadlines({}, renewed.expiresAt);
+      expect(await Exchange.findById(id).lean()).to.include({ status: "EXPIRED", deadlineDays: 14 });
+    });
+
+    it("made before any deadline, over 14 days ago, expires at once", async () => {
+      const id = await propose();
+      await proposedAt(id, new Date(Date.now() - PROPOSAL_TIMEOUT_MS - DAY), null);
+
+      expect(await resolveTradeDeadlines()).to.deep.equal({ expired: 1, completed: 0 });
       expect(await statusOf(id)).to.equal("EXPIRED");
+    });
+
+    it("keeps a deadline beyond 14 days from its latest proposal", async () => {
+      const id = await propose();
+      const at = new Date(Date.now() - DAY);
+      const later = new Date(at.getTime() + PROPOSAL_TIMEOUT_MS + DAY);
+      await proposedAt(id, at, later);
+
+      await resolveTradeDeadlines();
+
+      expect((await Exchange.findById(id).lean()).expiresAt.getTime()).to.equal(later.getTime());
     });
 
     it("counts the 14 days from the latest counter", async () => {

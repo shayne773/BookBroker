@@ -3,7 +3,7 @@ import { deadlineDate } from "../exchangeStatus";
 // The two stages after both sides agree: confirming the hand-over, then
 // rating the other reader.
 
-export function CompletionPanel({ ex }) {
+export function CompletionPanel({ ex, confirmedByMe }) {
   return (
     <section className="section">
       <div className="section-head">
@@ -22,12 +22,15 @@ export function CompletionPanel({ ex }) {
       </dl>
 
       <p className="hint mt-4">
-        Both users must confirm to mark the trade complete and remove books from listings.
+        The trade completes, and its books leave the listings, when you both confirm, or
+        automatically on a set date once one of you has.
       </p>
 
       {ex.autoCompletesAt && ex.requesterConfirmedComplete !== ex.responderConfirmedComplete && (
         <p className="notice mt-4">
-          Completes automatically on {deadlineDate(ex.autoCompletesAt)} unless cancelled.
+          {confirmedByMe
+            ? `Completes automatically on ${deadlineDate(ex.autoCompletesAt)} unless you cancel.`
+            : `Completes automatically on ${deadlineDate(ex.autoCompletesAt)}. Confirm, or message them if something is wrong.`}
         </p>
       )}
     </section>

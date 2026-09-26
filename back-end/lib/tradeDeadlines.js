@@ -8,6 +8,8 @@
 //   later. Past it, with the other side still silent, the trade completes as a
 //   two-sided confirmation does (its books leave the market), is marked
 //   `autoCompleted`, and the silent side gets the "completed" email.
+// Either way the trade records the days its deadline allowed, `deadlineDays`,
+// which is how the front end says why it closed.
 //
 // Nothing runs at the deadline itself: the daily cron (routes/cron.js) sweeps
 // every trade that is due, and the exchange routes resolve the trades they are
@@ -21,9 +23,12 @@ import Exchange from "../Exchange.js";
 import { OfferedBook } from "../Data.js";
 import { notifyTrade } from "./notifications.js";
 
-const DAY = 24 * 60 * 60 * 1000;
-export const PROPOSAL_TIMEOUT_MS = 14 * DAY;
-export const COMPLETION_TIMEOUT_MS = 7 * DAY;
+const MINUTE = 60 * 1000;
+const DAY = 24 * 60 * MINUTE;
+const PROPOSAL_TIMEOUT_DAYS = 14;
+const COMPLETION_TIMEOUT_DAYS = 7;
+export const PROPOSAL_TIMEOUT_MS = PROPOSAL_TIMEOUT_DAYS * DAY;
+export const COMPLETION_TIMEOUT_MS = COMPLETION_TIMEOUT_DAYS * DAY;
 
 // Each call handles at most BATCH_SIZE * MAX_BATCHES trades of each kind, so
 // the cron fits well inside the function's 30 s; what is left waits for the
@@ -71,7 +76,7 @@ export function releaseBooks(exchangeId, session) {
 async function expire(id, now) {
   const expired = await Exchange.findOneAndUpdate(
     { _id: id, ...dueExpiry(now) },
-    { $set: { status: "EXPIRED" }, $inc: { __v: 1 } },
+    { $set: { status: "EXPIRED", deadlineDays: PROPOSAL_TIMEOUT_DAYS }, $inc: { __v: 1 } },
     { new: true }
   );
   if (!expired) return false;
@@ -86,7 +91,7 @@ async function autoComplete(id, now) {
     await session.withTransaction(async () => {
       completed = await Exchange.findOneAndUpdate(
         { _id: id, ...dueCompletion(now) },
-        { $set: { status: "COMPLETED", autoCompleted: true }, $inc: { __v: 1 } },
+        { $set: { status: "COMPLETED", autoCompleted: true, deadlineDays: COMPLETION_TIMEOUT_DAYS }, $inc: { __v: 1 } },
         { new: true, session }
       );
       if (completed) await removeTradedBooks(completed, session);
@@ -132,10 +137,19 @@ async function drain(filter, sort, transition, now) {
  * Returns how many of each it changed.
  */
 export async function resolveTradeDeadlines(scope = {}, now = new Date()) {
-  // Trades from before the deadlines existed get theirs from now on.
+  // An offer from before this rule (no deadline, or the old 48 hours) gets at
+  // least PROPOSAL_TIMEOUT_MS from its latest proposal or counter, its last
+  // change, which `updatedAt` still records because this update leaves it be.
+  // An offer made since already has that deadline, give or take the moment
+  // between setting it and saving, which the minute of slack allows for.
+  const proposalDeadline = { $add: ["$updatedAt", PROPOSAL_TIMEOUT_MS] };
   await Exchange.updateMany(
-    within(scope, { status: OPEN_OFFER, expiresAt: null }),
-    { $set: { expiresAt: proposalExpiry(now) }, $inc: { __v: 1 } }
+    within(scope, {
+      status: OPEN_OFFER,
+      $expr: { $lt: ["$expiresAt", { $subtract: [proposalDeadline, MINUTE] }] },
+    }),
+    [{ $set: { expiresAt: proposalDeadline } }],
+    { timestamps: false }
   );
   await Exchange.updateMany(
     within(scope, {

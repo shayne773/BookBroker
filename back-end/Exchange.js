@@ -45,6 +45,10 @@ const ExchangeSchema = new mongoose.Schema(
     autoCompletesAt: { type: Date, default: null },
     // true for a trade completed that way rather than by both confirmations
     autoCompleted: { type: Boolean, default: false },
+    // the days allowed by the deadline that closed the trade (expired or
+    // completed that way); null for a trade a reader closed, or one that
+    // expired before the deadlines of lib/tradeDeadlines.js
+    deadlineDays: { type: Number, default: null },
 
     // ratings after completion
     requesterRating: { type: Number, min: 1, max: 5, default: null },

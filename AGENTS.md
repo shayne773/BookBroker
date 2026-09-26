@@ -150,6 +150,8 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   Vercel Cron (`/cron/trade-deadlines`, `CRON_SECRET`) sweeps, and every exchange route calls
   `resolveTradeDeadlines` for the trades it reads or acts on first. `Exchange` uses
   `optimisticConcurrency`, so a direct update to a trade must `$inc` `__v` or stale saves win.
+  A trade a deadline closed records `deadlineDays`; the front end reads day counts from it and
+  never hard-codes them.
 
 ## Messaging
 
