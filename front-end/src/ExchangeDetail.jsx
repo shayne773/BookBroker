@@ -217,6 +217,7 @@ export default function ExchangeDetail() {
   // Either side can cancel an offer, or back out of an accepted trade until the
   // other side confirms it complete, which releases both sides' books.
   const otherConfirmed = meIsRequester ? ex.responderConfirmedComplete : ex.requesterConfirmedComplete;
+  const myConfirmed = meIsRequester ? ex.requesterConfirmedComplete : ex.responderConfirmedComplete;
   const canCancel = canRespond || (canComplete && !otherConfirmed);
 
   return (
@@ -278,7 +279,7 @@ export default function ExchangeDetail() {
         </section>
       )}
 
-      {ex.status === "ACCEPTED" && <CompletionPanel ex={ex} />}
+      {ex.status === "ACCEPTED" && <CompletionPanel ex={ex} confirmedByMe={!!myConfirmed} />}
 
       {ex.status === "COMPLETED" && (
         <RatingPanel

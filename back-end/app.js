@@ -9,6 +9,7 @@ import exchangesRouter from "./routes/exchanges.js";
 import messagesRouter from "./routes/messages.js";
 import adminRouter from "./routes/admin.js";
 import mapRouter from "./routes/map.js";
+import cronRouter from "./routes/cron.js";
 import { isAdmin, requireAdmin } from "./lib/admin.js";
 import { isSuspended, SUSPENDED_LOGIN_MESSAGE } from "./lib/suspensions.js";
 import { buildCorsOptions } from "./lib/cors.js";
@@ -247,6 +248,9 @@ app.use("/map", authMiddleware, mapRouter);
 
 // Reports and suspensions, for the accounts named by ADMIN_EMAILS only.
 app.use("/admin", authMiddleware, requireAdmin, adminRouter);
+
+// Scheduled jobs, for Vercel Cron only (CRON_SECRET).
+app.use("/cron", cronRouter);
 
 // --------------------
 // PUBLIC ROUTES

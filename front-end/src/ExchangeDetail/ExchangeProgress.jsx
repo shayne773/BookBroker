@@ -1,4 +1,4 @@
-import { statusClass } from '../exchangeStatus';
+import { closedByDeadline, deadlineDate, statusClass, statusLabel } from '../exchangeStatus';
 
 const STATUSES = ["PENDING", "COUNTERED", "ACCEPTED", "COMPLETED"];
 
@@ -16,7 +16,7 @@ export default function ExchangeProgress({ ex }) {
     <section className="section">
       <div className="section-head">
         <h2 className="section-title">Status</h2>
-        <span className={statusClass(ex.status)}>{ex.status}</span>
+        <span className={statusClass(ex.status)}>{statusLabel(ex.status)}</span>
       </div>
 
       <ol className="steps">
@@ -28,6 +28,12 @@ export default function ExchangeProgress({ ex }) {
       </ol>
 
       <p className="hint mt-4">Updated {new Date(ex.updatedAt).toLocaleString()}</p>
+
+      {closedByDeadline(ex) && <p className="notice mt-4">{closedByDeadline(ex)}.</p>}
+
+      {["PENDING", "COUNTERED"].includes(ex.status) && ex.expiresAt && (
+        <p className="hint mt-4">Expires on {deadlineDate(ex.expiresAt)} without a response.</p>
+      )}
 
       {!!ex.message && <blockquote className="quote mt-4">“{ex.message}”</blockquote>}
     </section>
