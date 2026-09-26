@@ -102,7 +102,7 @@ test('wishlist matches say how far each offer is', async () => {
   render(<WishlistMatches />, { wrapper: MemoryRouter });
 
   const offers = await screen.findByRole('list', { name: 'Readers offering The Hobbit' });
-  expect(within(offers).getByRole('link')).toHaveTextContent('rob · New York, NY · No ratings yet · 2 mi away');
+  expect(within(offers).getByRole('listitem')).toHaveTextContent('rob · New York, NY · No ratings yet · 2 mi away');
 });
 
 describe('where you trade', () => {

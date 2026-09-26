@@ -2,10 +2,14 @@ import ShelfPage from './ShelfPage';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from './auth';
+import useReader from './useReader';
+import UserLink from './UserLink';
+import MessageAction from './UserPage/MessageAction';
 import DistanceLabel from './DistanceLabel';
 
 const UserPageOffered = () => {
   const { id } = useParams(); // user id
+  const [reader] = useReader(id);
   const [offeredBooks, setOfferedBooks] = useState([]);
 
   useEffect(() => {
@@ -23,8 +27,9 @@ const UserPageOffered = () => {
 
   return (
     <ShelfPage
-      kicker="Reader"
+      kicker={<UserLink user={reader} fallback="Reader" />}
       title="Offerings"
+      aside={<MessageAction user={reader} />}
       books={offeredBooks}
       emptyLabel="No offerings"
       renderExtra={(book) => (

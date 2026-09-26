@@ -1,8 +1,11 @@
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { authFetch, isSessionExpiredError } from './auth';
 import BookCover from './BookCover';
 import { formatDistance } from './distance';
+import Feedback, { DoneButton } from './Feedback';
+import useFeedback from './useFeedback';
+import UserLink from './UserLink';
 
 const BookPage = () => {
   const { id } = useParams();
@@ -10,9 +13,12 @@ const BookPage = () => {
   const [notFound, setNotFound] = useState(false);
 
   const [isInWishlist, setIsInWishlist] = useState(false);
+  const [adding, setAdding] = useState(false);
+  // How the last action here went, under the buttons.
+  const { feedback, fail, clear } = useFeedback();
   const navigate = useNavigate();
 
-  const addToWishlist = () => {
+  const addToWishlist = async () => {
     const bookData = {
       title: book.title,
       author: book.author,
@@ -24,29 +30,27 @@ const BookPage = () => {
       desc: book.desc
     };
 
-    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-wishlist-book`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(bookData)
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.message) {
-          console.log('Book added to wishlist successfully!');
-          setIsInWishlist(true);
-        } else {
-          console.log('Failed to add book to wishlist.');
-        }
-      })
-      .catch(err => {
-        // RequireAuth is already redirecting to the login page.
-        if (isSessionExpiredError(err)) return;
-
-        console.error('Error:', err);
-        alert('An error occurred. Please try again.');
+    setAdding(true);
+    clear();
+    try {
+      const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-wishlist-book`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(bookData)
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setIsInWishlist(true);
+    } catch (err) {
+      // RequireAuth is already redirecting to the login page.
+      if (isSessionExpiredError(err)) return;
+
+      console.error('Error:', err);
+      fail("This book couldn't be added to your wishlist. Please try again.");
+    } finally {
+      setAdding(false);
+    }
   };
 
   useEffect(() => {
@@ -67,25 +71,30 @@ const BookPage = () => {
   }, [id]);
 
   async function openConversationWithOwner() {
-    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/messages/${book.owner?.id}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ content: `Hey, I'm interested in your listing for ${book.title}` })
-    }).then((res) => {
-      if(!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    })
-      .then(()=>navigate(`/messages/${book.owner?.id}`))
-      .then(res => console.log(res))
-      .catch((err) => {
-        // RequireAuth is already redirecting to the login page.
-        if (isSessionExpiredError(err)) return;
+    clear();
+    let reason = "Could not open conversation. Please try again.";
+    try {
+      const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/messages/${book.owner?.id}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content: `Hey, I'm interested in your listing for ${book.title}` })
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        // A refusal the reader can act on, such as a block, is shown as the API words it.
+        if (res.status === 403 && body.message) reason = body.message;
+        throw new Error(`HTTP ${res.status}`);
+      }
+      navigate(`/messages/${book.owner?.id}`);
+    } catch (err) {
+      // RequireAuth is already redirecting to the login page.
+      if (isSessionExpiredError(err)) return;
 
-        console.log("Failed to open conversation:", err)
-        alert("Could not open conversation. Please try again.");
-      })
+      console.log("Failed to open conversation:", err);
+      fail(reason);
+    }
   }
   useEffect(() => {
     if (book.isbn) {
@@ -129,15 +138,16 @@ const BookPage = () => {
             </div>
 
             <div className="book__actions">
-              {isInWishlist ? (
-                <p className="notice" role="status">
-                  <span aria-hidden="true">&#10003;</span> In your wishlist
-                </p>
-              ) : (
-                <button className="button button--primary button--block" onClick={addToWishlist}>
-                  Add to Wishlist
-                </button>
-              )}
+              <DoneButton
+                className="button button--primary button--block"
+                done={isInWishlist}
+                doneLabel="On your wishlist"
+                busy={adding}
+                busyLabel="Adding…"
+                onClick={addToWishlist}
+              >
+                Add to Wishlist
+              </DoneButton>
 
               <button
                 className="button button--secondary button--block"
@@ -145,6 +155,8 @@ const BookPage = () => {
               >
                 Contact Owner
               </button>
+
+              <Feedback feedback={feedback} />
             </div>
           </div>
 
@@ -152,9 +164,7 @@ const BookPage = () => {
             <section className="book__section">
               <h2 className="fact__term">Offered by</h2>
               <p className="fact__value">
-                <Link to={`/users/${book.owner?.id}`} className="textlink">
-                  {book.owner?.username || "[NO USER]"}
-                </Link>
+                <UserLink user={book.owner} fallback="[NO USER]" className="textlink" />
               </p>
               {/* The owner's town, never their ZIP, and how far it is from you. */}
               {(book.owner?.location || formatDistance(book.distanceMiles, book.distanceLabel)) && (

@@ -37,12 +37,14 @@ test('lists each wishlisted book on offer with every reader offering it', async 
   render(<WishlistMatches />, { wrapper: MemoryRouter });
 
   const offers = await screen.findByRole('list', { name: 'Readers offering The Hobbit' });
-  const links = within(offers).getAllByRole('link');
+  const lines = within(offers).getAllByRole('listitem');
 
-  expect(links.map((a) => a.getAttribute('href'))).toEqual(['/books/o1', '/books/o2']);
-  expect(links[0]).toHaveTextContent('rob');
-  expect(links[0]).toHaveTextContent('Queens · 4.5 of 5 · 2 ratings');
-  expect(links[1]).toHaveTextContent('Bronx · No ratings yet');
+  // Each line opens the book, and the reader's name on it opens their profile.
+  expect(within(lines[0]).getByRole('link', { name: 'Open The Hobbit from rob' })).toHaveAttribute('href', '/books/o1');
+  expect(within(lines[0]).getByRole('link', { name: 'rob' })).toHaveAttribute('href', '/users/u1');
+  expect(within(lines[1]).getByRole('link', { name: /^Open The Hobbit from/ })).toHaveAttribute('href', '/books/o2');
+  expect(lines[0]).toHaveTextContent('rob · Queens · 4.5 of 5 · 2 ratings');
+  expect(lines[1]).toHaveTextContent('Bronx · No ratings yet');
   expect(screen.getByText('2 offers')).toBeInTheDocument();
   expect(screen.queryByText('Dune')).not.toBeInTheDocument();
 });

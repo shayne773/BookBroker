@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ExchangeDetail from './ExchangeDetail';
 import ExchangesList from './ExchangesList';
@@ -101,4 +101,44 @@ test('lists an unanswered offer past its deadline as Expired', async () => {
   renderAt('/exchanges');
 
   expect(await screen.findByText('Expired')).toBeInTheDocument();
+});
+
+test("names both sides of a trade, each linked to their profile, and your own to yours", async () => {
+  serve({ ...base, status: 'ACCEPTED' });
+
+  renderAt('/exchanges/ex1');
+
+  const heading = await screen.findByRole('heading', { level: 1, name: 'rob' });
+  expect(within(heading).getByRole('link', { name: 'rob' })).toHaveAttribute('href', '/users/them');
+
+  // What each side gives, and who has confirmed the hand-over.
+  const robLinks = screen.getAllByRole('link', { name: 'rob' });
+  const myLinks = screen.getAllByRole('link', { name: 'me' });
+  expect(robLinks.length).toBeGreaterThanOrEqual(3);
+  expect(myLinks.length).toBeGreaterThanOrEqual(2);
+  robLinks.forEach((link) => expect(link).toHaveAttribute('href', '/users/them'));
+  myLinks.forEach((link) => expect(link).toHaveAttribute('href', '/profile'));
+});
+
+test("a trade's action is confirmed in place, not in a pop-up", async () => {
+  serve({ ...base, status: 'PENDING', proposedBy: 'them' });
+
+  renderAt('/exchanges/ex1');
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Accept' }));
+
+  expect(await screen.findByText('Accepted')).toBeInTheDocument();
+  expect(document.querySelector('.toast')).toBeNull();
+});
+
+test("the trade list names the other reader, linked to their profile, beside the row's own link", async () => {
+  serve({ ...base, status: 'PENDING' });
+
+  renderAt('/exchanges');
+
+  expect(await screen.findByRole('link', { name: 'rob' })).toHaveAttribute('href', '/users/them');
+  expect(screen.getByRole('link', { name: /View \/ Respond exchange with rob/ })).toHaveAttribute(
+    'href',
+    '/exchanges/ex1'
+  );
 });

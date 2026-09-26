@@ -6,6 +6,9 @@ import ExchangeProgress from "./ExchangeDetail/ExchangeProgress";
 import ExchangeBooks from "./ExchangeDetail/ExchangeBooks";
 import { CompletionPanel, RatingPanel } from "./ExchangeDetail/ExchangeWrapUp";
 import CounterOfferDialog from "./ExchangeDetail/CounterOfferDialog";
+import Feedback from "./Feedback";
+import useFeedback from "./useFeedback";
+import UserLink from "./UserLink";
 
 export default function ExchangeDetail() {
   const { exchangeId } = useParams();
@@ -24,7 +27,10 @@ export default function ExchangeDetail() {
 
   // rating state
   const [rating, setRating] = useState(5);
-  const [toast, setToast] = useState("");
+
+  // How the last action went: under the action buttons, and under the rating.
+  const actionFeedback = useFeedback();
+  const ratingFeedback = useFeedback();
 
   const meIsRequester = useMemo(() => {
     if (!ex?.requester?._id) return false;
@@ -61,11 +67,6 @@ export default function ExchangeDetail() {
     return () => (alive = false);
   }, [server, exchangeId]);
 
-  function popToast(msg) {
-    setToast(msg);
-    setTimeout(() => setToast(""), 1800);
-  }
-
   async function post(path, body) {
     const res = await authFetch(`${server}${path}`, {
       method: "POST",
@@ -88,12 +89,14 @@ export default function ExchangeDetail() {
   async function onAccept() {
     try {
       setActionBusy(true);
+      actionFeedback.clear();
       await post(`/exchanges/${exchangeId}/accept`);
-      popToast("Accepted!");
+      actionFeedback.done("Accepted");
       await refresh();
     } catch (e) {
+      if (isSessionExpiredError(e)) return;
       console.error(e);
-      popToast(e.message);
+      actionFeedback.fail(e.message);
     } finally {
       setActionBusy(false);
     }
@@ -102,12 +105,14 @@ export default function ExchangeDetail() {
   async function onDecline() {
     try {
       setActionBusy(true);
+      actionFeedback.clear();
       await post(`/exchanges/${exchangeId}/decline`);
-      popToast("Declined");
+      actionFeedback.done("Declined");
       await refresh();
     } catch (e) {
+      if (isSessionExpiredError(e)) return;
       console.error(e);
-      popToast(e.message);
+      actionFeedback.fail(e.message);
     } finally {
       setActionBusy(false);
     }
@@ -116,12 +121,14 @@ export default function ExchangeDetail() {
   async function onCancel() {
     try {
       setActionBusy(true);
+      actionFeedback.clear();
       await post(`/exchanges/${exchangeId}/cancel`);
-      popToast("Cancelled");
+      actionFeedback.done("Cancelled");
       await refresh();
     } catch (e) {
+      if (isSessionExpiredError(e)) return;
       console.error(e);
-      popToast(e.message);
+      actionFeedback.fail(e.message);
     } finally {
       setActionBusy(false);
     }
@@ -130,12 +137,14 @@ export default function ExchangeDetail() {
   async function onConfirmComplete() {
     try {
       setActionBusy(true);
+      actionFeedback.clear();
       await post(`/exchanges/${exchangeId}/confirm-complete`);
-      popToast("Marked complete");
+      actionFeedback.done("Marked complete");
       await refresh();
     } catch (e) {
+      if (isSessionExpiredError(e)) return;
       console.error(e);
-      popToast(e.message);
+      actionFeedback.fail(e.message);
     } finally {
       setActionBusy(false);
     }
@@ -155,7 +164,7 @@ export default function ExchangeDetail() {
         responderBooks,
         message,
       });
-      popToast("Counter sent");
+      actionFeedback.done("Counter sent");
       setShowCounter(false);
       await refresh();
     } catch (e) {
@@ -176,12 +185,14 @@ export default function ExchangeDetail() {
   async function onRate() {
     try {
       setActionBusy(true);
+      ratingFeedback.clear();
       await post(`/exchanges/${exchangeId}/rate`, { rating });
-      popToast("Rating saved");
+      ratingFeedback.done("Rating saved");
       await refresh();
     } catch (e) {
+      if (isSessionExpiredError(e)) return;
       console.error(e);
-      popToast(e.message);
+      ratingFeedback.fail(e.message);
     } finally {
       setActionBusy(false);
     }
@@ -222,14 +233,14 @@ export default function ExchangeDetail() {
 
   return (
     <main className="page page--reading">
-      {toast && <div className="toast" role="status">{toast}</div>}
-
       <BackLink />
 
       <div className="page-head">
         <div className="page-head__main">
           <p className="kicker">Exchange with</p>
-          <h1 className="page-title">{otherUser?.username || "Unknown"}</h1>
+          <h1 className="page-title">
+            <UserLink user={otherUser} />
+          </h1>
           {readerMeta(otherUser) && <p className="page-lede">{readerMeta(otherUser)}</p>}
         </div>
         <div className="page-head__aside">
@@ -279,11 +290,14 @@ export default function ExchangeDetail() {
         </section>
       )}
 
+      <Feedback feedback={actionFeedback.feedback} className="mt-4" />
+
       {ex.status === "ACCEPTED" && <CompletionPanel ex={ex} confirmedByMe={!!myConfirmed} />}
 
       {ex.status === "COMPLETED" && (
         <RatingPanel
-          otherName={otherUser?.username}
+          other={otherUser}
+          feedback={ratingFeedback.feedback}
           ratedAlready={myRatedAlready}
           rating={rating}
           setRating={setRating}
