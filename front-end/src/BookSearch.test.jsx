@@ -123,6 +123,29 @@ describe('adding the chosen Google Books volume', () => {
     expect(added).toEqual(['/user/add-offered-book']);
   });
 
+  test('while one add is under way, neither button sends another', async () => {
+    let answer;
+    global.fetch.mockImplementation((url) => {
+      if (String(url).includes('/google-books/search')) return Promise.resolve(respond(200, { books: [dune] }));
+      added.push(String(url).replace(/^[^/]*/, ''));
+      return new Promise((resolve) => {
+        answer = () => resolve(respond(201, { message: 'Added' }));
+      });
+    });
+    await choose();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Wishlist' }));
+    const offer = screen.getByRole('button', { name: 'Add to Offerings' });
+    expect(offer).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(offer);
+    await userEvent.click(screen.getByRole('button', { name: 'Adding…' }));
+    expect(added).toEqual(['/user/add-wishlist-book']);
+
+    await act(async () => answer());
+    expect(await screen.findByRole('button', { name: /On your wishlist/ })).toHaveClass('is-done');
+    expect(screen.getByRole('button', { name: 'Add to Offerings' })).not.toHaveAttribute('aria-disabled');
+  });
+
   test('a failed add says why beside the buttons and leaves the button to try again', async () => {
     global.fetch.mockImplementation(async (url) =>
       String(url).includes('/google-books/search')

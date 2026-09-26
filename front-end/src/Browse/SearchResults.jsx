@@ -34,7 +34,7 @@ export const GoogleSuggestions = ({ results, onPick }) => (
 
 // The chosen Google Books volume, with the two things it can become. Each
 // button turns into a checked state once done (`added`), `adding` names the
-// one under way, and `feedback` says why one failed.
+// one under way (both wait for it), and `feedback` says why one failed.
 export const GoogleSelection = ({ book, added, adding, feedback, onWishlist, onOffer, onCancel }) => (
   <article className="selection">
     <div className="selection__cover cover">
@@ -61,8 +61,8 @@ export const GoogleSelection = ({ book, added, adding, feedback, onWishlist, onO
           className="button button--primary"
           done={added.wishlist}
           doneLabel="On your wishlist"
-          busy={adding === 'wishlist'}
-          busyLabel="Adding…"
+          busy={Boolean(adding)}
+          busyLabel={adding === 'wishlist' ? 'Adding…' : undefined}
           onClick={onWishlist}
         >
           Add to Wishlist
@@ -72,8 +72,8 @@ export const GoogleSelection = ({ book, added, adding, feedback, onWishlist, onO
           className="button button--secondary"
           done={added.offered}
           doneLabel="Offered"
-          busy={adding === 'offered'}
-          busyLabel="Adding…"
+          busy={Boolean(adding)}
+          busyLabel={adding === 'offered' ? 'Adding…' : undefined}
           onClick={onOffer}
         >
           Add to Offerings
