@@ -269,6 +269,7 @@ build:
    | `FRONTEND_BASE_URL` | The site's Vercel address, e.g. `https://your-project.vercel.app`, with no trailing slash. Emailed links point here. |
    | `ADMIN_EMAILS` | Comma-separated confirmed emails of the admin accounts; unset means no admins. A change takes effect on the next deployment (redeploy), not a restart. |
    | `NODE_ENV` | `production`. The API then refuses to start without `FRONTEND_BASE_URL` rather than emailing links to `localhost`. |
+   | `CRON_SECRET` | A random string of at least 16 characters (e.g. `openssl rand -hex 32`). Vercel sends it with the daily cron job in `vercel.json`, which expires unanswered trade offers and completes trades one side has confirmed; without it the job is refused. |
 
    Do not set `VITE_SERVER_ADDRESS` or `CORS_ALLOWED_ORIGINS` on Vercel: the site
    calls `/api` on its own origin, which needs neither.
@@ -295,7 +296,13 @@ After the first deployment of the map, run `npm run place-books` the same way (s
   Resend and an `EMAIL_FROM` on that domain.
 - **Plan.** Vercel's free Hobby plan is for personal, non-commercial use only; a
   commercial deployment needs a paid plan. The function's `maxDuration` in
-  `vercel.json` (30 seconds) is within the Hobby limit.
+  `vercel.json` (30 seconds) and its one daily cron job are within the Hobby limits.
+- **Trade deadlines.** An offer nobody answers expires 14 days after the proposal or
+  the latest counter, and an accepted trade that one side has confirmed completes by
+  itself 7 days after that confirmation. The daily cron job
+  (`/api/cron/trade-deadlines`, 04:00 UTC; on Hobby it may run any time in that hour)
+  applies both, and the API also applies them to any trade a reader opens or lists,
+  so nobody sees a trade past its deadline between runs.
 - **Serverless.** An instance may be frozen or discarded between any two requests,
   so the API keeps nothing it needs in memory: sessions and rate limits live in
   MongoDB, the Google Books cache is only a saving, and work that finishes after the

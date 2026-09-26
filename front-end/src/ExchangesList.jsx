@@ -155,7 +155,10 @@ function ExchangeRow({ ex, other, completed = false }) {
           <span className={completed ? "status status--done" : statusClass(ex.status)}>
             {completed ? "Completed" : statusLabel(ex.status)}
           </span>
-          <span>{completed ? "Completed" : "Updated"} {formatWhen(ex.updatedAt)}</span>
+          <span>
+            {completed ? (ex.autoCompleted ? "Completed automatically" : "Completed") : "Updated"}{" "}
+            {formatWhen(ex.updatedAt)}
+          </span>
         </span>
 
         <span>

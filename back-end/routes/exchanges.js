@@ -6,6 +6,13 @@ import { BLOCKED_TRADE_MESSAGE, isBlockedBetween } from "../lib/blocks.js";
 import { isSuspended } from "../lib/suspensions.js";
 import { LoginThrottle } from "../lib/loginThrottle.js";
 import { notifyTrade } from "../lib/notifications.js";
+import {
+  completionDeadline,
+  proposalExpiry,
+  releaseBooks,
+  removeTradedBooks,
+  resolveTradeDeadlines,
+} from "../lib/tradeDeadlines.js";
 
 const router = express.Router();
 
@@ -27,6 +34,27 @@ function httpError(status, message) {
   err.status = status;
   return err;
 }
+
+export const TRADE_CHANGED_MESSAGE = "This trade has just changed. Reload it and try again.";
+
+// A save that lost a race with another change to the same trade (another
+// request, or the deadline sweep) answers 409 rather than 500. A trade's save
+// is conditional on the version it read (optimisticConcurrency in Exchange.js),
+// and a transaction that touched it after a concurrent write is aborted.
+function asHttpError(err) {
+  if (
+    err instanceof mongoose.Error.VersionError ||
+    err instanceof mongoose.Error.DocumentNotFoundError ||
+    err?.hasErrorLabel?.("TransientTransactionError")
+  ) {
+    return httpError(409, TRADE_CHANGED_MESSAGE);
+  }
+  return err;
+}
+
+// Brings the trade the request names past any deadline it has reached, so the
+// route below sees it as it now stands.
+const resolveThisTrade = (req) => resolveTradeDeadlines({ _id: req.params.id });
 
 // The other participant's fields shown beside a trade.
 const PARTICIPANT_FIELDS = "username location ratingsAvg ratingsCount";
@@ -77,11 +105,12 @@ async function proposalLimited(userId, res) {
 
 // --------------------
 // POST /exchanges  (create + send invite)
-// body: { responderId, requesterBooks: [], responderBooks: [], message, expiresInHours }
+// body: { responderId, requesterBooks: [], responderBooks: [], message }
+// An invite nobody answers expires after PROPOSAL_TIMEOUT_MS (lib/tradeDeadlines.js).
 // --------------------
 router.post("/", async (req, res) => {
   const userId = req.user.userId;
-  const { responderId, requesterBooks = [], responderBooks = [], message = "", expiresInHours = 48 } = req.body;
+  const { responderId, requesterBooks = [], responderBooks = [], message = "" } = req.body;
 
   try {
     // basic validation
@@ -105,8 +134,6 @@ router.post("/", async (req, res) => {
 
     if (await proposalLimited(userId, res)) return;
 
-    const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
-
     const ex = await Exchange.create({
       requester: userId,
       responder: responderId,
@@ -115,7 +142,7 @@ router.post("/", async (req, res) => {
       message,
       status: "PENDING",
       proposedBy: userId,
-      expiresAt,
+      expiresAt: proposalExpiry(),
     });
 
     notifyTrade(ex, "proposed", userId);
@@ -133,11 +160,7 @@ router.get("/", async (req, res) => {
   const userId = req.user.userId;
 
   try {
-    // auto-expire
-    await Exchange.updateMany(
-      { status: { $in: ["PENDING", "COUNTERED"] }, expiresAt: { $ne: null, $lt: new Date() } },
-      { $set: { status: "EXPIRED" } }
-    );
+    await resolveTradeDeadlines({ $or: [{ requester: userId }, { responder: userId }] });
 
     const exchanges = await Exchange.find({
       $or: [{ requester: userId }, { responder: userId }],
@@ -166,6 +189,8 @@ router.get("/:id", async (req, res) => {
     if (!ex) return res.status(404).json({ message: "Exchange not found" });
     assertParticipant(ex, userId);
 
+    await resolveThisTrade(req);
+
     const full = await Exchange.findById(req.params.id)
       .populate("requester", PARTICIPANT_FIELDS)
       .populate("responder", PARTICIPANT_FIELDS)
@@ -191,6 +216,7 @@ router.post("/:id/counter", async (req, res) => {
   const { requesterBooks = [], responderBooks = [], message = "" } = req.body;
 
   try {
+    await resolveThisTrade(req);
     const ex = await Exchange.findById(req.params.id);
     if (!ex) return res.status(404).json({ message: "Exchange not found" });
     assertParticipant(ex, userId);
@@ -220,14 +246,17 @@ router.post("/:id/counter", async (req, res) => {
     ex.message = message;
     ex.status = "COUNTERED";
     ex.proposedBy = userId;
+    ex.expiresAt = proposalExpiry();
     ex.requesterConfirmedComplete = false;
     ex.responderConfirmedComplete = false;
+    ex.autoCompletesAt = null;
 
     await ex.save();
     notifyTrade(ex, "countered", userId);
     res.json(ex);
-  } catch (err) {
-    console.error("COUNTER error:", err);
+  } catch (caught) {
+    const err = asHttpError(caught);
+    if (!err.status) console.error("COUNTER error:", err);
     res.status(err.status || 500).json({
       message: err.status ? err.message : "Internal server error",
     });
@@ -245,6 +274,7 @@ router.post("/:id/accept", async (req, res) => {
   session.startTransaction();
 
   try {
+    await resolveThisTrade(req);
     const ex = await Exchange.findById(req.params.id).session(session);
     if (!ex) throw httpError(404, "Exchange not found");
     assertParticipant(ex, userId);
@@ -283,8 +313,9 @@ router.post("/:id/accept", async (req, res) => {
     await session.commitTransaction();
     notifyTrade(ex, "accepted", userId);
     res.json({ message: "Exchange accepted", exchangeId: ex._id });
-  } catch (err) {
+  } catch (caught) {
     await session.abortTransaction();
+    const err = asHttpError(caught);
     if (!err.status) console.error("ACCEPT error:", err);
     res.status(err.status || 500).json({
       message: err.status ? err.message : "Internal server error",
@@ -301,6 +332,7 @@ router.post("/:id/decline", async (req, res) => {
   const userId = req.user.userId;
 
   try {
+    await resolveThisTrade(req);
     const ex = await Exchange.findById(req.params.id);
     if (!ex) return res.status(404).json({ message: "Exchange not found" });
     assertParticipant(ex, userId);
@@ -313,8 +345,9 @@ router.post("/:id/decline", async (req, res) => {
     await ex.save();
     notifyTrade(ex, "declined", userId);
     res.json({ message: "Exchange declined" });
-  } catch (err) {
-    console.error("DECLINE error:", err);
+  } catch (caught) {
+    const err = asHttpError(caught);
+    if (!err.status) console.error("DECLINE error:", err);
     res.status(err.status || 500).json({
       message: err.status ? err.message : "Internal server error",
     });
@@ -334,6 +367,7 @@ router.post("/:id/cancel", async (req, res) => {
   session.startTransaction();
 
   try {
+    await resolveThisTrade(req);
     const ex = await Exchange.findById(req.params.id).session(session);
     if (!ex) throw httpError(404, "Exchange not found");
     assertParticipant(ex, userId);
@@ -350,11 +384,7 @@ router.post("/:id/cancel", async (req, res) => {
         throw httpError(409, "The other participant has already confirmed completion");
       }
 
-      await OfferedBook.updateMany(
-        { lockedByExchange: ex._id },
-        { $set: { locked: false, lockedByExchange: null } },
-        { session }
-      );
+      await releaseBooks(ex._id, session);
     }
 
     ex.status = "CANCELLED";
@@ -363,8 +393,9 @@ router.post("/:id/cancel", async (req, res) => {
     await session.commitTransaction();
     notifyTrade(ex, "cancelled", userId);
     res.json({ message: "Exchange cancelled" });
-  } catch (err) {
+  } catch (caught) {
     await session.abortTransaction();
+    const err = asHttpError(caught);
     if (!err.status) console.error("CANCEL error:", err);
     res.status(err.status || 500).json({
       message: err.status ? err.message : "Internal server error",
@@ -377,6 +408,8 @@ router.post("/:id/cancel", async (req, res) => {
 // --------------------
 // POST /exchanges/:id/confirm-complete
 // When both confirm => COMPLETED + delete traded OfferedBooks + update ratings totals
+// The first confirmation starts the clock: if the other side has not confirmed
+// by autoCompletesAt, the trade completes without them (lib/tradeDeadlines.js).
 // --------------------
 router.post("/:id/confirm-complete", async (req, res) => {
   const userId = req.user.userId;
@@ -385,6 +418,7 @@ router.post("/:id/confirm-complete", async (req, res) => {
   session.startTransaction();
 
   try {
+    await resolveThisTrade(req);
     const ex = await Exchange.findById(req.params.id).session(session);
     if (!ex) throw httpError(404, "Exchange not found");
     assertParticipant(ex, userId);
@@ -395,22 +429,12 @@ router.post("/:id/confirm-complete", async (req, res) => {
 
     if (isRequester(ex, userId)) ex.requesterConfirmedComplete = true;
     else ex.responderConfirmedComplete = true;
+    if (!ex.autoCompletesAt) ex.autoCompletesAt = completionDeadline();
 
     // if both confirmed -> finalize
     if (ex.requesterConfirmedComplete && ex.responderConfirmedComplete) {
       ex.status = "COMPLETED";
-
-      const tradedBookIds = [...ex.requesterBooks, ...ex.responderBooks];
-
-      // delete traded books (so they no longer show in marketplace)
-      await OfferedBook.deleteMany({ _id: { $in: tradedBookIds } }, { session });
-
-      // (optional) unlock any other books that were locked by this exchange (usually none left)
-      await OfferedBook.updateMany(
-        { lockedByExchange: ex._id },
-        { $set: { locked: false, lockedByExchange: null } },
-        { session }
-      );
+      await removeTradedBooks(ex, session);
     }
 
     await ex.save({ session });
@@ -418,8 +442,9 @@ router.post("/:id/confirm-complete", async (req, res) => {
     await session.commitTransaction();
     if (ex.status === "COMPLETED") notifyTrade(ex, "completed", userId);
     res.json({ message: "Completion recorded", status: ex.status });
-  } catch (err) {
+  } catch (caught) {
     await session.abortTransaction();
+    const err = asHttpError(caught);
     if (!err.status) console.error("CONFIRM COMPLETE error:", err);
     res.status(err.status || 500).json({
       message: err.status ? err.message : "Internal server error",
@@ -445,6 +470,7 @@ router.post("/:id/rate", async (req, res) => {
   session.startTransaction();
 
   try {
+    await resolveThisTrade(req);
     const ex = await Exchange.findById(req.params.id).session(session);
     if (!ex) return res.status(404).json({ message: "Exchange not found" });
     assertParticipant(ex, userId);
@@ -485,9 +511,10 @@ router.post("/:id/rate", async (req, res) => {
 
     await session.commitTransaction();
     res.json({ message: "Rating saved" });
-  } catch (err) {
+  } catch (caught) {
     await session.abortTransaction();
-    console.error("RATE error:", err);
+    const err = asHttpError(caught);
+    if (!err.status) console.error("RATE error:", err);
     res.status(err.status || 500).json({
       message: err.status ? err.message : "Internal server error",
     });

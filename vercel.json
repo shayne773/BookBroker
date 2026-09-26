@@ -7,6 +7,7 @@
   "functions": {
     "api/index.js": { "maxDuration": 30, "includeFiles": "back-end/data/**" }
   },
+  "crons": [{ "path": "/api/cron/trade-deadlines", "schedule": "0 4 * * *" }],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }

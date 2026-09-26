@@ -144,6 +144,12 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   shared `catch` aborts the transaction and `finally` ends the session.
 - An ACCEPTED exchange holds its books via `locked` / `lockedByExchange`; anything that lists
   books as available to trade must filter `locked: false`.
+- Trade deadlines (`back-end/lib/tradeDeadlines.js`): an unanswered offer expires at `expiresAt`
+  (14 days from the latest proposal or counter), and a one-side-confirmed trade completes at
+  `autoCompletesAt` (7 days from the first confirmation). Nothing fires at the deadline: the daily
+  Vercel Cron (`/cron/trade-deadlines`, `CRON_SECRET`) sweeps, and every exchange route calls
+  `resolveTradeDeadlines` for the trades it reads or acts on first. `Exchange` uses
+  `optimisticConcurrency`, so a direct update to a trade must `$inc` `__v` or stale saves win.
 
 ## Messaging
 

@@ -74,7 +74,6 @@ export default function ProposeTradeDialog({ otherUserId, otherUser, onClose }) 
           requesterBooks: [myPick._id],
           responderBooks: [theirPick._id],
           message: tradeMsg.trim() || "",
-          expiresInHours: 48,
         }),
       });
 

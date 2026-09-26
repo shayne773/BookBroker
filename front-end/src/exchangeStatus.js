@@ -22,3 +22,16 @@ export function statusClass(s) {
   if (s === "COMPLETED") return "status status--done";
   return "status status--closed";
 }
+
+// A trade deadline as a date, e.g. "September 30, 2026".
+export function deadlineDate(d) {
+  return new Date(d).toLocaleDateString([], { year: "numeric", month: "long", day: "numeric" });
+}
+
+// Why a closed trade closed on its own (the deadlines in
+// back-end/lib/tradeDeadlines.js), or null when a reader closed it.
+export function closedByDeadline(ex) {
+  if (ex.status === "COMPLETED" && ex.autoCompleted) return "Completed automatically after 7 days";
+  if (ex.status === "EXPIRED") return "Expired after 14 days without a response";
+  return null;
+}

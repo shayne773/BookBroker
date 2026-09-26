@@ -40,14 +40,28 @@ const ExchangeSchema = new mongoose.Schema(
     requesterConfirmedComplete: { type: Boolean, default: false },
     responderConfirmedComplete: { type: Boolean, default: false },
 
+    // set when the first side confirms completion: if the other side has not
+    // confirmed by then, the trade completes on its own (lib/tradeDeadlines.js)
+    autoCompletesAt: { type: Date, default: null },
+    // true for a trade completed that way rather than by both confirmations
+    autoCompleted: { type: Boolean, default: false },
+
     // ratings after completion
     requesterRating: { type: Number, min: 1, max: 5, default: null },
     responderRating: { type: Number, min: 1, max: 5, default: null },
 
-    // expiry to avoid forever-pending invites
+    // when an unanswered offer expires: PROPOSAL_TIMEOUT_MS after the invite
+    // or the latest counter (lib/tradeDeadlines.js)
     expiresAt: { type: Date, default: null },
   },
-  { timestamps: true }
+  // Every save is conditional on the version it was read at, and the deadline
+  // sweep bumps the version, so a route acting on a trade the sweep has just
+  // closed fails instead of overwriting it.
+  { timestamps: true, optimisticConcurrency: true }
 );
+
+// The deadline sweep's queries (lib/tradeDeadlines.js).
+ExchangeSchema.index({ status: 1, expiresAt: 1 });
+ExchangeSchema.index({ status: 1, autoCompletesAt: 1 });
 
 export default mongoose.model("Exchange", ExchangeSchema);
