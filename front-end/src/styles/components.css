@@ -35,8 +35,8 @@
   margin: 0 auto;
   padding: var(--space-12) var(--gutter) var(--space-24);
   /* backwards, not both: a transform left in effect after the entry would make
-     the page the containing block for its fixed children, pinning a toast or a
-     dialog overlay to the page instead of the window. */
+     the page the containing block for its fixed children, pinning a dialog
+     overlay to the page instead of the window. */
   animation: page-enter var(--duration-slow) var(--ease-out) backwards;
 }
 
@@ -397,6 +397,63 @@
   transform: scaleX(1);
 }
 
+/*
+ * A reader's name (UserLink), wherever the app shows one. It takes the type of
+ * the line it sits in, so a page of names stays quiet, and like a headline link
+ * an ink rule grows in under it on hover.
+ */
+.user-link {
+  position: relative;
+  color: inherit;
+}
+
+.user-link::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.user-link:hover::after,
+.user-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
+/*
+ * A record that opens one thing but names a reader who opens another, e.g. an
+ * inbox row: its own link (.stretch-link) is stretched over the whole record,
+ * and the reader's name sits above it, so neither link nests in the other. The
+ * focus ring goes round the record, not the small link that carries it.
+ */
+.has-stretch {
+  position: relative;
+}
+
+.stretch-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.stretch-link:focus-visible {
+  outline: none;
+}
+
+.has-stretch:has(.stretch-link:focus-visible) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.has-stretch .user-link {
+  z-index: 1;
+}
+
 /* Back link that sits above a page title. */
 .back-link {
   display: inline-flex;
@@ -509,6 +566,66 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
+}
+
+/*
+ * A DoneButton (Feedback.jsx) at work or done. It is aria-disabled rather than
+ * disabled so it keeps focus, so these repeat the disabled look for it.
+ */
+.button[aria-disabled='true'],
+.button[aria-disabled='true']:hover,
+.button[aria-disabled='true']:focus-visible {
+  border-color: var(--color-rule);
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: default;
+}
+
+/* Done: the fill drains to paper and a check draws in beside the new label,
+   e.g. "Add to Wishlist" becoming "On your wishlist". */
+.button.is-done,
+.button.is-done:hover,
+.button.is-done:focus-visible {
+  border-color: var(--color-rule-strong);
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+.button__done {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  animation: done-in var(--duration-base) var(--ease-out) both;
+}
+
+.button__check {
+  display: inline-block;
+  animation: check-in var(--duration-slow) var(--ease-out) both;
+}
+
+@keyframes done-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes check-in {
+  from {
+    opacity: 0;
+    transform: scale(0.3) rotate(-25deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  to {
+    transform: none;
+  }
 }
 
 /* ======================================================================
@@ -1233,34 +1350,49 @@ a.book-tile:focus-visible .book-tile__title {
   }
 }
 
-/* Toast - the one floating element, so the one shadow token. */
-.toast {
-  position: fixed;
-  bottom: var(--space-8);
-  left: 50%;
-  z-index: 50;
-  /* The keyframes animate translate(-50%, y); this is the resting value. */
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-6);
-  background: var(--color-fill-strong);
-  box-shadow: var(--shadow-overlay);
-  color: var(--color-ink-inverse);
+/*
+ * Feedback (Feedback.jsx): how an action went, in a short line beside the
+ * control that did it - never a pop-up. Empty, it takes no room; a success
+ * carries a check, a failure an ink rule down its edge.
+ */
+.feedback {
+  margin-top: var(--space-2);
+  color: var(--color-ink-secondary);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
-  animation: toast-in var(--duration-base) var(--ease-out) both;
 }
 
-@keyframes toast-in {
+.feedback:empty {
+  margin: 0;
+}
+
+.feedback__text {
+  display: inline-block;
+  animation: feedback-in var(--duration-base) var(--ease-out) both;
+}
+
+.feedback--done .feedback__text::before {
+  content: '\2713';
+  margin-right: var(--space-2);
+}
+
+.feedback--error {
+  color: var(--color-ink);
+}
+
+.feedback--error .feedback__text {
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-rule-strong);
+}
+
+@keyframes feedback-in {
   from {
     opacity: 0;
-    transform: translate(-50%, 12px);
+    transform: translateY(-3px);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: none;
   }
 }
 
@@ -1614,6 +1746,16 @@ textarea.input {
   font-size: var(--text-h1);
 }
 
+/* An initial that opens the reader's profile, beside their linked name. */
+.avatar--link {
+  transition: var(--transition-colors);
+}
+
+.avatar--link:hover {
+  background: var(--color-fill-strong);
+  color: var(--color-ink-inverse);
+}
+
 /* Avatar beside a name, e.g. inside a page head. */
 .person {
   display: flex;
@@ -1664,7 +1806,9 @@ textarea.input {
 }
 
 a.list-row:hover,
-a.list-row:focus-visible {
+a.list-row:focus-visible,
+.list-row.has-stretch:hover,
+.list-row.has-stretch:focus-within {
   padding-left: var(--space-4);
   background: var(--color-paper-raised);
 }
@@ -1709,7 +1853,9 @@ a.list-row:focus-visible {
 }
 
 a.list-row:hover .textlink-arrow__mark,
-a.list-row:focus-visible .textlink-arrow__mark {
+a.list-row:focus-visible .textlink-arrow__mark,
+.list-row.has-stretch:hover .textlink-arrow__mark,
+.list-row.has-stretch:focus-within .textlink-arrow__mark {
   color: var(--color-ink);
   transform: translateX(3px);
 }

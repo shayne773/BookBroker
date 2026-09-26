@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { GoogleSuggestions, GoogleSelection, MarketResults } from "./SearchResults";
 import { authFetch, isSessionExpiredError } from "../auth";
 import { searchGoogleBooks } from "../googleBooks";
+import useFeedback from "../useFeedback";
 
 export default function Search() {
   const navigate = useNavigate();
@@ -20,6 +21,13 @@ export default function Search() {
   // Google results + selection
   const [googleResults, setGoogleResults] = useState([]);
   const [selectedGoogleBook, setSelectedGoogleBook] = useState(null);
+
+  // What the selected book has become ({ wishlist, offered }), which action is
+  // under way, and why one failed.
+  const [added, setAdded] = useState({});
+  const [adding, setAdding] = useState(null); // "wishlist" | "offered" | null
+  const selectionFeedback = useFeedback();
+  const { clear: clearSelectionFeedback } = selectionFeedback;
 
   // Dropdown control
   const [showDropdown, setShowDropdown] = useState(false);
@@ -41,6 +49,8 @@ export default function Search() {
     setGoogleResults([]);
     setSelectedGoogleBook(null);
     setShowDropdown(false);
+    setAdded({});
+    clearSelectionFeedback();
   };
 
   // IMPORTANT: don't clear selectedGoogleBook inside the google search effect,
@@ -48,7 +58,11 @@ export default function Search() {
   // Instead, clear selectedGoogleBook only when the user edits input again.
   const onChangeInput = (val) => {
     setInputValue(val);
-    if (selectedGoogleBook) setSelectedGoogleBook(null);
+    if (selectedGoogleBook) {
+      setSelectedGoogleBook(null);
+      setAdded({});
+      clearSelectionFeedback();
+    }
   };
 
   // Google live dropdown (debounced)
@@ -146,79 +160,49 @@ export default function Search() {
     if (e?.preventDefault) e.preventDefault();
 
     setSelectedGoogleBook(book);
+    setAdded({});
+    clearSelectionFeedback();
     setInputValue(book.title);
     setGoogleResults([]);
     setShowDropdown(false);
   };
 
-  const addToWishlist = async () => {
+  // Adds the selected book to a shelf; its button then reads as done.
+  const addTo = async (shelf, path, body) => {
     if (!selectedGoogleBook) return;
 
+    setAdding(shelf);
+    selectionFeedback.clear();
     try {
-      setLoading(true);
-      setError("");
-
-      const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-wishlist-book`, {
+      const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}${path}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(selectedGoogleBook),
+        body: JSON.stringify(body),
       });
 
-      const text = await res.text();
-      let data = {};
-      try { data = JSON.parse(text); } catch { /* not JSON: report the status below */ }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || data?.error || `Request failed (HTTP ${res.status})`);
 
-      if (!res.ok) {
-        console.log("Backend error body:", text);
-        throw new Error(data?.message || data?.error || `Request failed (HTTP ${res.status})`);
-      }
-
-      alert("Added to wishlist!");
-      clearAll();
+      setAdded((prev) => ({ ...prev, [shelf]: true }));
     } catch (e) {
       // RequireAuth is already redirecting to the login page.
       if (isSessionExpiredError(e)) return;
 
       console.error(e);
-      setError(e.message || "Failed to add to wishlist.");
+      selectionFeedback.fail(
+        e.message || (shelf === "wishlist" ? "Failed to add to wishlist." : "Failed to add to offerings.")
+      );
     } finally {
-      setLoading(false);
+      setAdding(null);
     }
   };
 
-  const addToOfferings = async () => {
-    if (!selectedGoogleBook) return;
+  const addToWishlist = () => addTo("wishlist", "/user/add-wishlist-book", selectedGoogleBook);
 
-    try {
-      setLoading(true);
-      setError("");
-
-      const payload = { ...selectedGoogleBook, owner: userId };
-
-      const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-offered-book`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || "Failed to add to offerings.");
-
-      alert("Added to offerings!");
-      clearAll();
-    } catch (e) {
-      if (isSessionExpiredError(e)) return;
-
-      console.error(e);
-      setError(e.message || "Failed to add to offerings.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const addToOfferings = () =>
+    addTo("offered", "/user/add-offered-book", { ...selectedGoogleBook, owner: userId });
 
   return (
     <main className="page page--reading">
@@ -323,7 +307,9 @@ export default function Search() {
       {mode === "google" && selectedGoogleBook && (
         <GoogleSelection
           book={selectedGoogleBook}
-          loading={loading}
+          added={added}
+          adding={adding}
+          feedback={selectionFeedback.feedback}
           onWishlist={addToWishlist}
           onOffer={addToOfferings}
           onCancel={clearAll}

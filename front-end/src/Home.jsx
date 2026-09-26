@@ -5,11 +5,17 @@ import BookCover from './BookCover';
 import DistanceLabel from './DistanceLabel';
 import LocationPrompt from './LocationPrompt';
 import useReaderArea from './useReaderArea';
+import Feedback, { DoneButton } from './Feedback';
+import useFeedback from './useFeedback';
 
 const Home = () => {
     const [books, setBooks] = useState([]);
     const screenRefs = useRef([]);
-    const [showToast, setShowToast] = useState(false);
+    // The book being added to the wishlist, and the one whose add failed, which
+    // says so under its button.
+    const [adding, setAdding] = useState(null);
+    const [failedId, setFailedId] = useState(null);
+    const { feedback, fail, clear } = useFeedback();
     // ISBNs on the reader's wishlist, so a book they already want is flagged
     // rather than offered to them again.
     const [wishlistIsbns, setWishlistIsbns] = useState(() => new Set());
@@ -64,6 +70,9 @@ const Home = () => {
     }, [books]);
 
     const handleAddBook = (book) => {
+        setAdding(book._id);
+        setFailedId(null);
+        clear();
         authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-wishlist-book`, {
             method: 'POST',
             headers: {
@@ -77,18 +86,34 @@ const Home = () => {
             }
             return res.json();
         })
-        .then(data => {
-            console.log("Book added to wishlist:", data);
+        .then(() => {
             if (book.isbn) setWishlistIsbns(prev => new Set(prev).add(book.isbn));
-            setShowToast(true);
-            setTimeout(() => setShowToast(false), 2000);
         })
         .catch(err => {
             if (isSessionExpiredError(err)) return;
 
             console.error("Error adding book to wishlist:", err);
-        });
+            setFailedId(book._id);
+            fail("This book couldn't be added. Please try again.");
+        })
+        .finally(() => setAdding(null));
     };
+
+    // Add to Wishlist, which turns into "On your wishlist" once it is.
+    const wishlistButton = (book, className) => (
+        <DoneButton
+            className={className}
+            done={onWishlist(book)}
+            doneLabel="On your wishlist"
+            busy={adding === book._id}
+            busyLabel="Adding…"
+            onClick={() => handleAddBook(book)}
+        >
+            Add to Wishlist
+        </DoneButton>
+    );
+
+    const bookFeedback = (book) => <Feedback feedback={failedId === book._id ? feedback : null} />;
 
     // The first book runs as the lead story; the rest sit on the grid below it.
     const [lead, ...rest] = books;
@@ -110,13 +135,6 @@ const Home = () => {
         </div>
 
         <LocationPrompt area={area} />
-
-        {/* success toast for adding book */}
-        {showToast && (
-        <div className="toast" role="status">
-            Book added to wishlist
-        </div>
-        )}
 
         {books.length > 0 ? (
             <>
@@ -145,23 +163,13 @@ const Home = () => {
                         {lead.desc && <p className="prose lead__desc">{lead.desc}</p>}
 
                         <div className="button-row lead__actions">
-                            {onWishlist(lead) ? (
-                                <span className="tag">
-                                    <span aria-hidden="true">&#10003;</span> On your wishlist
-                                </span>
-                            ) : (
-                                <button
-                                    className="button button--primary"
-                                    onClick={() => handleAddBook(lead)}
-                                >
-                                    Add to Wishlist
-                                </button>
-                            )}
+                            {wishlistButton(lead, "button button--primary")}
 
                             <Link to={`/books/${lead._id}`} className="button button--secondary">
                                 View Details
                             </Link>
                         </div>
+                        {bookFeedback(lead)}
                     </div>
                 </article>
 
@@ -198,20 +206,10 @@ const Home = () => {
                                         <DistanceLabel miles={book.distanceMiles} block />
                                     </Link>
 
-                                    {onWishlist(book) ? (
-                                        <span className="tile-action">
-                                            <span className="tag">
-                                                <span aria-hidden="true">&#10003;</span> On your wishlist
-                                            </span>
-                                        </span>
-                                    ) : (
-                                        <button
-                                            className="button button--secondary button--small button--block tile-action"
-                                            onClick={() => handleAddBook(book)}
-                                        >
-                                            Add to Wishlist
-                                        </button>
-                                    )}
+                                    <span className="tile-action">
+                                        {wishlistButton(book, "button button--secondary button--small button--block")}
+                                    </span>
+                                    {bookFeedback(book)}
                                 </article>
                             ))}
                         </div>

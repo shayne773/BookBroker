@@ -3,8 +3,9 @@ import BookCover from './BookCover';
 
 // A whole wishlist or offerings shelf, one book per row. Your own shelves pass
 // `onRemove`; another reader's are read-only. `renderExtra(book)` adds a line
-// under a book's author, e.g. who is offering it.
-const ShelfPage = ({ kicker, title, books, emptyLabel, onRemove, renderExtra }) => {
+// under a book's author, e.g. who is offering it. `aside` sits beside the title,
+// e.g. the owner's Message action.
+const ShelfPage = ({ kicker, title, aside, books, emptyLabel, onRemove, renderExtra }) => {
   const navigate = useNavigate();
 
   return (
@@ -19,6 +20,8 @@ const ShelfPage = ({ kicker, title, books, emptyLabel, onRemove, renderExtra }) 
           <p className="kicker">{kicker}</p>
           <h1 className="page-title">{title}</h1>
         </div>
+
+        {aside && <div className="page-head__aside">{aside}</div>}
       </div>
 
       {books.length > 0 ? (

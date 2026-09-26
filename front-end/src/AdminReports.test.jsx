@@ -92,6 +92,26 @@ test('marking a report reviewed takes it off the open list', async () => {
   await waitFor(() => expect(screen.queryByText('Asked for money up front.')).not.toBeInTheDocument());
   expect(calls.at(-1)).toMatchObject({ method: 'POST', path: '/admin/reports/r1/review' });
   expect(screen.getByText('No open reports.')).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('Report marked reviewed');
+});
+
+test('names the reported reader, the reporter and the reviewer, each linked to their profile', async () => {
+  reports[0].reviewedAt = '2026-09-21T10:00:00Z';
+  reports[0].reviewedBy = { _id: 'kim', username: 'kim' };
+  renderPage();
+  fireEvent.click(await screen.findByRole('button', { name: 'Reviewed' }));
+
+  expect(await screen.findByRole('link', { name: 'kim' })).toHaveAttribute('href', '/users/kim');
+  expect(screen.getByRole('link', { name: 'rob' })).toHaveAttribute('href', '/users/rob');
+  expect(screen.getByRole('link', { name: 'ann' })).toHaveAttribute('href', '/users/ann');
+});
+
+test('a deleted reporter reads as plain text', async () => {
+  reports[0].reporter = null;
+  renderPage();
+
+  expect(await screen.findByText(/reported by a deleted reader/)).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'ann' })).not.toBeInTheDocument();
 });
 
 test('suspends the reported reader with a note, then offers to unsuspend them', async () => {

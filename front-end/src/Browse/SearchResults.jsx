@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import BookCover from '../BookCover';
 import DistanceLabel from '../DistanceLabel';
+import Feedback, { DoneButton } from '../Feedback';
 
 // The live suggestion list under the Google Books field.
 export const GoogleSuggestions = ({ results, onPick }) => (
@@ -31,8 +32,10 @@ export const GoogleSuggestions = ({ results, onPick }) => (
   </ul>
 );
 
-// The chosen Google Books volume, with the two things it can become.
-export const GoogleSelection = ({ book, loading, onWishlist, onOffer, onCancel }) => (
+// The chosen Google Books volume, with the two things it can become. Each
+// button turns into a checked state once done (`added`), `adding` names the
+// one under way, and `feedback` says why one failed.
+export const GoogleSelection = ({ book, added, adding, feedback, onWishlist, onOffer, onCancel }) => (
   <article className="selection">
     <div className="selection__cover cover">
       <BookCover src={book.cover} />
@@ -54,18 +57,34 @@ export const GoogleSelection = ({ book, loading, onWishlist, onOffer, onCancel }
       </p>
 
       <div className="button-row selection__actions">
-        <button className="button button--primary" onClick={onWishlist} disabled={loading}>
+        <DoneButton
+          className="button button--primary"
+          done={added.wishlist}
+          doneLabel="On your wishlist"
+          busy={adding === 'wishlist'}
+          busyLabel="Adding…"
+          onClick={onWishlist}
+        >
           Add to Wishlist
-        </button>
+        </DoneButton>
 
-        <button className="button button--secondary" onClick={onOffer} disabled={loading}>
+        <DoneButton
+          className="button button--secondary"
+          done={added.offered}
+          doneLabel="Offered"
+          busy={adding === 'offered'}
+          busyLabel="Adding…"
+          onClick={onOffer}
+        >
           Add to Offerings
-        </button>
+        </DoneButton>
 
-        <button className="button button--quiet" onClick={onCancel} disabled={loading}>
-          Cancel
+        <button className="button button--quiet" onClick={onCancel} disabled={Boolean(adding)}>
+          {added.wishlist || added.offered ? 'Done' : 'Cancel'}
         </button>
       </div>
+
+      <Feedback feedback={feedback} />
     </div>
   </article>
 );

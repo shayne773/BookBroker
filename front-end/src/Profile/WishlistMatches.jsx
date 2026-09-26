@@ -3,6 +3,7 @@ import BookCover from '../BookCover';
 import DistanceLabel from '../DistanceLabel';
 import { formatDistance } from '../distance';
 import { readerMeta } from '../rating';
+import UserLink from '../UserLink';
 import useWishlistMatches from './useWishlistMatches';
 
 // "Available from other readers": each book on your wishlist that someone else
@@ -55,20 +56,27 @@ const WishlistMatches = () => {
 
                 <ul className="offer-list" aria-label={`Readers offering ${wishlistBook.title}`}>
                   {offers.map((offer) => (
-                    <li key={offer._id}>
-                      <Link to={`/books/${offer._id}`} className="offer-line">
-                        <span>
-                          <span className="offer-line__who">{offer.owner.username}</span>
-                          {readerMeta(offer.owner) && (
-                            <span className="offer-line__meta"> · {readerMeta(offer.owner)}</span>
-                          )}
-                          {formatDistance(offer.distanceMiles) && (
-                            <>
-                              {' · '}
-                              <DistanceLabel miles={offer.distanceMiles} />
-                            </>
-                          )}
+                    <li key={offer._id} className="offer-line has-stretch">
+                      <span>
+                        <span className="offer-line__who">
+                          <UserLink user={offer.owner} />
                         </span>
+                        {readerMeta(offer.owner) && (
+                          <span className="offer-line__meta"> · {readerMeta(offer.owner)}</span>
+                        )}
+                        {formatDistance(offer.distanceMiles) && (
+                          <>
+                            {' · '}
+                            <DistanceLabel miles={offer.distanceMiles} />
+                          </>
+                        )}
+                      </span>
+                      {/* The line's own link, stretched over it; the name opens their profile. */}
+                      <Link
+                        to={`/books/${offer._id}`}
+                        className="stretch-link"
+                        aria-label={`Open ${wishlistBook.title} from ${offer.owner.username || 'this reader'}`}
+                      >
                         <span className="textlink-arrow__mark" aria-hidden="true">&rarr;</span>
                       </Link>
                     </li>

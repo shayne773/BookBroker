@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import BookCover from '../BookCover';
+import UserLink from '../UserLink';
 
 // What each side puts on the table.
 export default function ExchangeBooks({ ex }) {
@@ -10,8 +11,8 @@ export default function ExchangeBooks({ ex }) {
       </div>
 
       <div className="split">
-        <Side name={ex.requester?.username || "Requester"} books={ex.requesterBooks || []} />
-        <Side name={ex.responder?.username || "Responder"} books={ex.responderBooks || []} />
+        <Side name={<UserLink user={ex.requester} fallback="Requester" />} books={ex.requesterBooks || []} />
+        <Side name={<UserLink user={ex.responder} fallback="Responder" />} books={ex.responderBooks || []} />
       </div>
 
       <p className="hint mt-4">

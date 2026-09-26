@@ -4,6 +4,7 @@ import BookCover from "./BookCover";
 import { statusClass, statusLabel } from "./exchangeStatus";
 import { authFetch, isSessionExpiredError } from "./auth";
 import { readerMeta } from "./rating";
+import UserLink from "./UserLink";
 
 function formatWhen(d) {
   if (!d) return "";
@@ -131,13 +132,15 @@ function ExchangeRow({ ex, other, completed = false }) {
   ].slice(0, 6);
 
   return (
-    <Link to={`/exchanges/${ex._id}`} className="list-row">
+    <div className="list-row has-stretch">
       <span className="avatar" aria-hidden="true">
         {(other?.username || "?").slice(0, 1)}
       </span>
 
       <div className="list-row__body">
-        <h3 className="list-row__title">{other?.username || "Unknown"}</h3>
+        <h3 className="list-row__title">
+          <UserLink user={other} />
+        </h3>
         <p className="list-row__meta">{readerMeta(other, { noLocation: "No location" })}</p>
 
         <div className="cover-strip list-row__extra">
@@ -161,11 +164,13 @@ function ExchangeRow({ ex, other, completed = false }) {
           </span>
         </span>
 
-        <span>
+        {/* The row's own link, stretched over it; the name above opens their profile. */}
+        <Link to={`/exchanges/${ex._id}`} className="stretch-link">
           {completed ? "View" : "View / Respond"}
+          <span className="visually-hidden"> exchange with {other?.username || "this reader"}</span>
           <span className="textlink-arrow__mark" aria-hidden="true">&rarr;</span>
-        </span>
+        </Link>
       </div>
-    </Link>
+    </div>
   );
 }

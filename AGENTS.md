@@ -37,7 +37,14 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   from `<Popup className="dialog">`, so hand-built modals and Popup share one style.
 - `.page` runs its entry animation with fill-mode `backwards`, not `both`: a transform
   left in effect makes the page the containing block for its `position: fixed` children
-  (toasts, dialog overlays).
+  (dialog overlays).
+- No pop-ups: no `alert()`/`confirm()` (`src/noPopups.test.js` enforces it) and no toasts.
+  An action's outcome is a `<Feedback>` line (`src/Feedback.jsx`, state from
+  `useFeedback`) beside the control, or a `DoneButton` that turns into its checked state
+  ("On your wishlist"). Dialogs stay only for collecting input.
+- Another reader's name is always `UserLink` (`src/UserLink.jsx`), which links to their
+  profile (yours to `/profile`) and falls back to plain text. Inside a row that is itself a
+  link, use `.has-stretch` / `.stretch-link` (`components.css`) so the links don't nest.
 - Motion is tokenised (`--duration-fast|base|slow`, `--ease-out|standard`) and
   `tokens.css` collapses those durations under `prefers-reduced-motion: reduce`, so a
   component honours the preference by using the tokens rather than by opting in.

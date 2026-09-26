@@ -4,7 +4,11 @@ import { authFetch, isSessionExpiredError } from './auth';
 import { setBlocked } from './blocks';
 import ProfileHead from './ProfileHead';
 import ShelfPreview from './ShelfPreview';
+import Feedback from './Feedback';
+import useFeedback from './useFeedback';
+import useReader from './useReader';
 import BlockDialog from './UserPage/BlockDialog';
+import MessageAction from './UserPage/MessageAction';
 import ReportDialog from './UserPage/ReportDialog';
 
 const UserPage = () => {
@@ -12,14 +16,14 @@ const UserPage = () => {
   const navigate = useNavigate();
   const isMe = id === localStorage.getItem('userId');
 
-  const [user, setUser] = useState({});
+  const [user, setUser] = useReader(id);
   const [wishlistBooks, setWishlistBooks] = useState([]);
   const [offeredBooks, setOfferedBooks] = useState([]);
 
   const [dialog, setDialog] = useState(null); // 'block' | 'report' | null
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
-  const [toast, setToast] = useState('');
+  const { feedback, done, fail, clear } = useFeedback();
 
   // A reader blocked either way has an empty offered shelf, so it is reloaded
   // whenever a block is placed or lifted.
@@ -34,15 +38,6 @@ const UserPage = () => {
   }, [id]);
 
   useEffect(() => {
-    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}`)
-      .then(res => res.json())
-      .then(data => setUser((Array.isArray(data) ? data[0] : data) || {}))
-      .catch(err => {
-        // RequireAuth is already redirecting to the login page.
-        if (isSessionExpiredError(err)) return;
-        setUser({});
-      });
-
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}/wishlist`)
       .then(res => res.json())
       .then(setWishlistBooks)
@@ -54,11 +49,6 @@ const UserPage = () => {
     loadOffered();
   }, [id, loadOffered]);
 
-  const showToast = (message) => {
-    setToast(message);
-    setTimeout(() => setToast(''), 2500);
-  };
-
   const closeDialog = () => {
     setDialog(null);
     setActionError('');
@@ -67,16 +57,17 @@ const UserPage = () => {
   const changeBlock = async (blocked) => {
     setBusy(true);
     setActionError('');
+    clear();
     try {
       const blockedByMe = await setBlocked(id, blocked);
       setUser(prev => ({ ...prev, blockedByMe }));
       setDialog(null);
       loadOffered();
-      showToast(blockedByMe ? `${user.username} is blocked` : `${user.username} is unblocked`);
+      done(blockedByMe ? `${user.username} is blocked` : `${user.username} is unblocked`);
     } catch (err) {
       if (isSessionExpiredError(err)) return;
       if (blocked) setActionError(err.message);
-      else showToast(err.message);
+      else fail(err.message);
     } finally {
       setBusy(false);
     }
@@ -84,7 +75,7 @@ const UserPage = () => {
 
   const onReported = (message) => {
     setDialog(null);
-    showToast(message);
+    done(message);
   };
 
   const canAct = !isMe && user?._id;
@@ -99,6 +90,7 @@ const UserPage = () => {
       <ProfileHead kicker="Reader" user={user}>
         {canAct && (
           <>
+            <MessageAction user={user} />
             <button type="button" className="button button--quiet" onClick={() => setDialog('report')}>
               Report
             </button>
@@ -119,6 +111,8 @@ const UserPage = () => {
           </>
         )}
       </ProfileHead>
+
+      <Feedback feedback={feedback} className="mt-4" />
 
       {user.blockedByMe && (
         <p className="notice mt-4" role="status">
@@ -156,8 +150,6 @@ const UserPage = () => {
       {dialog === 'report' && (
         <ReportDialog user={user} onClose={closeDialog} onReported={onReported} />
       )}
-
-      {toast && <div className="toast" role="status">{toast}</div>}
     </main>
   );
 };

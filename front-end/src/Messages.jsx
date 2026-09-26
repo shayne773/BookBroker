@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { authFetch, isSessionExpiredError } from "./auth";
 import usePolling from "./usePolling";
 import { readerMeta } from "./rating";
+import UserLink from "./UserLink";
 
 // How often the open inbox checks for new messages (paused while the tab is hidden).
 const LIST_INTERVAL = 15000;
@@ -107,34 +108,41 @@ const Messages = () => {
             const unread = Number(c.unread) || 0;
 
             return (
-              <li key={c.id}>
-                <Link
-                  to={`/messages/${u.id}`}
-                  className={`list-row${unread > 0 ? " list-row--unread" : ""}`}
-                >
-                  <span className="avatar" aria-hidden="true">{initials}</span>
+              <li
+                key={c.id}
+                className={`list-row has-stretch${unread > 0 ? " list-row--unread" : ""}`}
+              >
+                <span className="avatar" aria-hidden="true">{initials}</span>
 
-                  <div className="list-row__body">
-                    <h2 className="list-row__title">{u.username || "Unknown"}</h2>
-                    <p className="list-row__meta">
-                      {readerMeta(u, { noLocation: "—" })}
-                    </p>
-                    <p className="list-row__excerpt">{c.lastMessage || "Tap to open chat"}</p>
-                  </div>
+                <div className="list-row__body">
+                  <h2 className="list-row__title">
+                    <UserLink user={u} />
+                  </h2>
+                  <p className="list-row__meta">
+                    {readerMeta(u, { noLocation: "—" })}
+                  </p>
+                  <p className="list-row__excerpt">{c.lastMessage || "Tap to open chat"}</p>
+                </div>
 
-                  <div className="list-row__trail">
-                    {unread > 0 && (
-                      <span className="unread-marker">
-                        <span className="unread-dot" aria-hidden="true" />
-                        {unread} new
-                        <span className="visually-hidden">
-                          {unread === 1 ? " message" : " messages"}
-                        </span>
+                <div className="list-row__trail">
+                  {unread > 0 && (
+                    <span className="unread-marker">
+                      <span className="unread-dot" aria-hidden="true" />
+                      {unread} new
+                      <span className="visually-hidden">
+                        {unread === 1 ? " message" : " messages"}
                       </span>
-                    )}
+                    </span>
+                  )}
+                  {/* The row's own link, stretched over it; the name above opens their profile. */}
+                  <Link
+                    to={`/messages/${u.id}`}
+                    className="stretch-link"
+                    aria-label={`Open conversation with ${u.username || "this reader"}`}
+                  >
                     <span className="textlink-arrow__mark" aria-hidden="true">&rarr;</span>
-                  </div>
-                </Link>
+                  </Link>
+                </div>
               </li>
             );
           })}
