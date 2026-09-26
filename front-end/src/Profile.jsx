@@ -11,6 +11,8 @@ import BlockedReaders from './Profile/BlockedReaders';
 import NotificationSettings from './Profile/NotificationSettings';
 import LocationSettings from './Profile/LocationSettings';
 import { formatDistance } from './distance';
+import useFeedback from './useFeedback';
+import UserLink from './UserLink';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -23,8 +25,11 @@ const Profile = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAddOfferingsModal, setShowAddOfferingsModal] = useState(false);
 
-  const [showToastWishlist, setShowToastWishlist] = useState(false);
-  const [showToastOfferings, setShowToastOfferings] = useState(false);
+  // An added book appears on its shelf, and the shelf says so under its head;
+  // a failed add says why in its dialog.
+  const wishlistFeedback = useFeedback();
+  const offeringsFeedback = useFeedback();
+  const [addError, setAddError] = useState('');
   const [editNotice, setEditNotice] = useState(null);
 
   const { matches, loaded: matchesLoaded, error: matchesError } = useWishlistMatches();
@@ -50,7 +55,7 @@ const Profile = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
+  const loadWishlist = () =>
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/wishlist`)
       .then(res => res.json())
       .then(data => setWishlistBooks(data))
@@ -59,6 +64,7 @@ const Profile = () => {
         console.log("Failed to fetch wishlist:", err);
       });
 
+  const loadOffered = () =>
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/offered`)
       .then(res => res.json())
       .then(data => setOfferedBooks(data))
@@ -66,52 +72,59 @@ const Profile = () => {
         if (isSessionExpiredError(err)) return;
         console.log("Failed to fetch offerings", err);
       });
+
+  useEffect(() => {
+    loadWishlist();
+    loadOffered();
   }, []);
+
+  // Adds the book chosen in a dialog to a shelf, then shows it there.
+  const addBook = (path, body, { close, search, reload, feedback, label }) => {
+    setAddError('');
+    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+      .then(async res => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || 'That book could not be added. Please try again.');
+        close();
+        search.reset();
+        reload();
+        feedback.done(`${body.title || 'Book'} added to your ${label}`);
+      })
+      .catch(err => {
+        if (isSessionExpiredError(err)) return;
+        console.error(err);
+        setAddError(err.message);
+      });
+  };
 
   const handleAddBook = (e) => {
     e.preventDefault();
     if (!wishlistSearch.selected) return;
 
-    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-wishlist-book`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(wishlistSearch.selected)
-    })
-      .then(res => res.json())
-      .then(() => {
-        setShowToastWishlist(true);
-        setTimeout(() => setShowToastWishlist(false), 2000);
-        setShowAddModal(false);
-        wishlistSearch.reset();
-      })
-      .catch(err => {
-        if (isSessionExpiredError(err)) return;
-        console.error(err);
-      });
+    addBook('/user/add-wishlist-book', wishlistSearch.selected, {
+      close: () => setShowAddModal(false),
+      search: wishlistSearch,
+      reload: loadWishlist,
+      feedback: wishlistFeedback,
+      label: 'wishlist',
+    });
   };
 
   const handleAddOffering = (e) => {
     e.preventDefault();
     if (!offerSearch.selected) return;
 
-    const payload = { ...offerSearch.selected, owner: userId };
-
-    authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-offered-book`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-      .then(res => res.json())
-      .then(() => {
-        setShowToastOfferings(true);
-        setTimeout(() => setShowToastOfferings(false), 2000);
-        setShowAddOfferingsModal(false);
-        offerSearch.reset();
-      })
-      .catch(err => {
-        if (isSessionExpiredError(err)) return;
-        console.error(err);
-      });
+    addBook('/user/add-offered-book', { ...offerSearch.selected, owner: userId }, {
+      close: () => setShowAddOfferingsModal(false),
+      search: offerSearch,
+      reload: loadOffered,
+      feedback: offeringsFeedback,
+      label: 'offerings',
+    });
   };
 
   const handleProfileEdit = (e, close) => {
@@ -146,11 +159,13 @@ const Profile = () => {
   };
 
   const closeWishlistModal = () => {
+    setAddError('');
     setShowAddModal(false);
     wishlistSearch.dismiss();
   };
 
   const closeOfferModal = () => {
+    setAddError('');
     setShowAddOfferingsModal(false);
     offerSearch.dismiss();
   };
@@ -189,9 +204,12 @@ const Profile = () => {
           error={matchesError && 'Your matches could not be loaded.'}
           seeAllTo="/profile/matches"
           linkTo={(offer) => `/books/${offer._id}`}
-          metaOf={(offer) =>
-            [`from ${offer.owner.username}`, formatDistance(offer.distanceMiles)].filter(Boolean).join(' · ')
-          }
+          metaOf={(offer) => (
+            <>
+              from <UserLink user={offer.owner} />
+              {formatDistance(offer.distanceMiles) && ` · ${formatDistance(offer.distanceMiles)}`}
+            </>
+          )}
         />
       )}
 
@@ -202,6 +220,7 @@ const Profile = () => {
           emptyLabel="Loading wishlist..."
           seeAllTo="/profile/my-books"
           onAdd={() => setShowAddModal(true)}
+          feedback={wishlistFeedback.feedback}
         />
 
         <ShelfPreview
@@ -210,6 +229,7 @@ const Profile = () => {
           emptyLabel="Loading offerings..."
           seeAllTo="/profile/my-trades"
           onAdd={() => setShowAddOfferingsModal(true)}
+          feedback={offeringsFeedback.feedback}
         />
       </div>
 
@@ -223,6 +243,7 @@ const Profile = () => {
         <AddBookDialog
           title="Add a book to your wishlist"
           search={wishlistSearch}
+          error={addError}
           onSubmit={handleAddBook}
           onClose={closeWishlistModal}
         />
@@ -232,13 +253,11 @@ const Profile = () => {
         <AddBookDialog
           title="Add a book to your offerings"
           search={offerSearch}
+          error={addError}
           onSubmit={handleAddOffering}
           onClose={closeOfferModal}
         />
       )}
-
-      {showToastWishlist && <div className="toast" role="status">Book added to wishlist</div>}
-      {showToastOfferings && <div className="toast" role="status">Book added to offerings</div>}
     </main>
   );
 };

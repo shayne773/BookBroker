@@ -6,6 +6,8 @@ import Composer from "./MessagesDetail/Composer";
 import ProposeTradeDialog from "./MessagesDetail/ProposeTradeDialog";
 import usePolling from "./usePolling";
 import { refreshUnread } from "./unread";
+import UserLink from "./UserLink";
+import useFeedback from "./useFeedback";
 
 // How often an open conversation checks for new messages while the tab is visible.
 const THREAD_INTERVAL = 3000;
@@ -20,6 +22,8 @@ const MessagesDetail = () => {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
+  // How the last send went, shown under the message box.
+  const { feedback: sendFeedback, fail: sendFailed, clear: clearSendFeedback } = useFeedback();
 
   // ---- Exchange modal state ----
   const [showTradeModal, setShowTradeModal] = useState(false);
@@ -145,6 +149,7 @@ const MessagesDetail = () => {
     e.preventDefault();
     const content = text.trim();
     if (!content) return;
+    clearSendFeedback();
 
     try {
       const res = await authFetch(`${server}/messages/${otherUserId}`, {
@@ -157,7 +162,7 @@ const MessagesDetail = () => {
         const body = await res.json().catch(() => ({}));
         // A refusal the reader can act on, such as a block, is shown as the API words it.
         if (res.status === 403 && body.message) {
-          alert(body.message);
+          sendFailed(body.message);
           return;
         }
         throw new Error(`Send failed: ${res.status} ${body.message || ""}`);
@@ -172,7 +177,7 @@ const MessagesDetail = () => {
       if (isSessionExpiredError(err)) return;
 
       console.error("Failed to send message:", err);
-      alert("Failed to send message.");
+      sendFailed("Your message wasn't sent. Please try again.");
     }
   }
 
@@ -187,12 +192,21 @@ const MessagesDetail = () => {
 
       <div className="page-head">
         <div className="page-head__main person">
-          <span className="avatar" aria-hidden="true">
-            {(otherUser?.username || "?").slice(0, 1)}
-          </span>
+          {/* The initial repeats the name's link, so it stays out of the tab order. */}
+          <UserLink
+            user={otherUser}
+            className="avatar avatar--link"
+            tabIndex={-1}
+            aria-hidden="true"
+            fallback={<span className="avatar" aria-hidden="true">?</span>}
+          >
+            {otherUser?.username?.slice(0, 1)}
+          </UserLink>
           <div className="person__text">
             <p className="kicker">Conversation with</p>
-            <h1 className="page-title">{otherUser?.username || "Loading..."}</h1>
+            <h1 className="page-title">
+              {otherUser ? <UserLink user={otherUser} /> : "Loading..."}
+            </h1>
           </div>
         </div>
 
@@ -215,6 +229,7 @@ const MessagesDetail = () => {
         text={text}
         setText={setText}
         onSend={handleMessageSend}
+        feedback={sendFeedback}
         onTrade={() => setShowTradeModal(true)}
       />
 

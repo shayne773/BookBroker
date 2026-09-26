@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from './auth';
 import { reasonLabel } from './reports';
 import SuspendDialog from './AdminReports/SuspendDialog';
+import Feedback from './Feedback';
+import useFeedback from './useFeedback';
+import UserLink from './UserLink';
 
 const server = import.meta.env.VITE_SERVER_ADDRESS;
 
@@ -49,7 +52,8 @@ const AdminReports = () => {
   const [suspending, setSuspending] = useState(null); // the reader in the dialog
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState('');
-  const [toast, setToast] = useState('');
+  // How the last action went, above the list.
+  const { feedback, done } = useFeedback();
 
   useEffect(() => {
     let alive = true;
@@ -76,11 +80,6 @@ const AdminReports = () => {
     setFilter(value);
   };
 
-  const showToast = (message) => {
-    setToast(message);
-    setTimeout(() => setToast(''), 2500);
-  };
-
   // A reader can be the subject of several reports; each row shows their state.
   const updateReader = (readerId, changes) =>
     setReports((prev) =>
@@ -94,7 +93,7 @@ const AdminReports = () => {
     try {
       await adminRequest(`/reports/${report._id}/review`, { method: 'POST' });
       setReports((prev) => prev.filter((r) => r._id !== report._id));
-      showToast('Report marked reviewed');
+      done('Report marked reviewed');
     } catch (err) {
       if (isSessionExpiredError(err)) return;
       setError(err.message);
@@ -110,7 +109,7 @@ const AdminReports = () => {
         body: JSON.stringify({ note }),
       });
       updateReader(suspending._id, { suspended: true, suspension: data.suspension });
-      showToast(`${suspending.username} is suspended`);
+      done(`${suspending.username} is suspended`);
       setSuspending(null);
     } catch (err) {
       if (isSessionExpiredError(err)) return;
@@ -125,7 +124,7 @@ const AdminReports = () => {
     try {
       await adminRequest(`/users/${reader._id}/suspend`, { method: 'DELETE' });
       updateReader(reader._id, { suspended: false, suspension: undefined });
-      showToast(`${reader.username} is no longer suspended`);
+      done(`${reader.username} is no longer suspended`);
     } catch (err) {
       if (isSessionExpiredError(err)) return;
       setError(err.message);
@@ -165,6 +164,8 @@ const AdminReports = () => {
           {loaded && reports.length > 0 && <span className="section-count">{reports.length}</span>}
         </div>
 
+        <Feedback feedback={feedback} className="mb-4" />
+
         {error && <p className="notice notice--error mb-4" role="alert">{error}</p>}
 
         {!loaded && <p className="empty" role="status">Loading…</p>}
@@ -202,8 +203,6 @@ const AdminReports = () => {
           onClose={() => setSuspending(null)}
         />
       )}
-
-      {toast && <div className="toast" role="status">{toast}</div>}
     </main>
   );
 };
@@ -223,19 +222,11 @@ function ReportRow({ report, onReview, onSuspend, onUnsuspend }) {
 
       <div className="list-row__body">
         <h2 className="list-row__title">
-          {reported ? (
-            <Link to={`/users/${reported._id}`} className="headline-link">{reported.username}</Link>
-          ) : (
-            'Deleted reader'
-          )}
+          <UserLink user={reported} fallback="Deleted reader" />
         </h2>
         <p className="list-row__meta">
           {reasonLabel(report.reason)} · reported by{' '}
-          {reporter ? (
-            <Link to={`/users/${reporter._id}`} className="textlink-quiet">{reporter.username}</Link>
-          ) : (
-            'a deleted reader'
-          )}{' '}
+          <UserLink user={reporter} fallback="a deleted reader" className="textlink-quiet" />{' '}
           · {formatWhen(report.createdAt)}
         </p>
 
@@ -244,7 +235,12 @@ function ReportRow({ report, onReview, onSuspend, onUnsuspend }) {
         {report.reviewedAt && (
           <p className="list-row__meta">
             Reviewed {formatWhen(report.reviewedAt)}
-            {report.reviewedBy ? ` by ${report.reviewedBy.username}` : ''}
+            {report.reviewedBy && (
+              <>
+                {' by '}
+                <UserLink user={report.reviewedBy} />
+              </>
+            )}
           </p>
         )}
 

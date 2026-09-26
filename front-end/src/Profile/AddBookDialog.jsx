@@ -2,8 +2,9 @@ import { useId } from 'react';
 import { GoogleSuggestions } from '../Browse/SearchResults';
 
 // Search Google Books and add the chosen volume to a shelf. The search state
-// lives in the caller (see useBookSearch) so it outlasts the dialog.
-const AddBookDialog = ({ title, search, onSubmit, onClose }) => {
+// lives in the caller (see useBookSearch) so it outlasts the dialog. `error`
+// says why the last add failed.
+const AddBookDialog = ({ title, search, error, onSubmit, onClose }) => {
   const titleId = useId();
   const inputId = useId();
 
@@ -44,6 +45,7 @@ const AddBookDialog = ({ title, search, onSubmit, onClose }) => {
 
           {search.searching && <p className="hint" role="status">Searching…</p>}
           {search.error && <p className="notice notice--error" role="alert">{search.error}</p>}
+          {error && <p className="notice notice--error" role="alert">{error}</p>}
 
           <div className="dialog__foot">
             <button type="button" className="button button--quiet" onClick={onClose}>

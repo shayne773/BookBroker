@@ -2,6 +2,8 @@ import { vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import UserPage from './UserPage';
+import UserPageOffered from './UserPageOffered';
+import UserPageWishlist from './UserPageWishlist';
 
 const reader = { _id: 'them', username: 'rob', location: 'Queens', ratingsAvg: 0, ratingsCount: 0 };
 
@@ -38,11 +40,15 @@ afterEach(() => {
   delete global.fetch;
 });
 
-const renderPage = (id = 'them') =>
+const renderPage = (id = 'them', path = `/users/${id}`) =>
   render(
-    <MemoryRouter initialEntries={[`/users/${id}`]}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/users/:id" element={<UserPage />} />
+        <Route path="/users/:id/wishlist" element={<UserPageWishlist />} />
+        <Route path="/users/:id/offered" element={<UserPageOffered />} />
+        <Route path="/messages/:user" element={<h1>Conversation</h1>} />
+        <Route path="/profile" element={<h1>Your profile</h1>} />
       </Routes>
     </MemoryRouter>
   );
@@ -98,4 +104,63 @@ test('your own page offers neither block nor report', async () => {
   await waitFor(() => expect(calls.length).toBeGreaterThan(0));
   expect(screen.queryByRole('button', { name: 'Block' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Report' })).not.toBeInTheDocument();
+});
+
+test("another reader's page offers a Message action that opens your conversation with them", async () => {
+  renderPage();
+
+  const message = await screen.findByRole('link', { name: 'Message' });
+  expect(message).toHaveAttribute('href', '/messages/them');
+
+  fireEvent.click(message);
+  expect(await screen.findByRole('heading', { name: 'Conversation' })).toBeInTheDocument();
+});
+
+test('your own page offers no Message action', async () => {
+  renderPage('me');
+
+  await waitFor(() => expect(calls.some((c) => c.path === '/users/me')).toBe(true));
+  expect(screen.queryByRole('link', { name: 'Message' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Message' })).not.toBeInTheDocument();
+});
+
+test('while you block a reader, Message stays in view, disabled, saying why', async () => {
+  blockedByMe = true;
+  renderPage();
+
+  const message = await screen.findByRole('button', { name: 'Message' });
+  expect(message).toBeDisabled();
+  expect(message).toHaveAccessibleDescription('Unblock rob to message them');
+  expect(screen.queryByRole('link', { name: 'Message' })).not.toBeInTheDocument();
+  // Report and Unblock are still there beside it.
+  expect(screen.getByRole('button', { name: 'Report' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Unblock' })).toBeInTheDocument();
+});
+
+test('a block or unblock is confirmed in place on the page', async () => {
+  renderPage();
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Block' }));
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Block' }));
+
+  expect(await screen.findByText('rob is blocked')).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: 'Message' })).toBeDisabled();
+});
+
+test.each([
+  ['wishlist', 'Wishlist'],
+  ['offered', 'Offerings'],
+])("a reader's %s page names them, linked to their profile, with a Message action", async (shelf, title) => {
+  renderPage('them', `/users/them/${shelf}`);
+
+  expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
+  expect(await screen.findByRole('link', { name: 'rob' })).toHaveAttribute('href', '/users/them');
+  expect(screen.getByRole('link', { name: 'Message' })).toHaveAttribute('href', '/messages/them');
+});
+
+test('your own shelf page links your name to your profile and offers no Message action', async () => {
+  renderPage('me', '/users/me/wishlist');
+
+  expect(await screen.findByRole('link', { name: 'me' })).toHaveAttribute('href', '/profile');
+  expect(screen.queryByRole('link', { name: 'Message' })).not.toBeInTheDocument();
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import UserLink from '../UserLink';
 import { authFetch, isSessionExpiredError } from '../auth';
 import { setBlocked } from '../blocks';
 
@@ -62,7 +62,7 @@ const BlockedReaders = () => {
 
               <div className="list-row__body">
                 <h3 className="list-row__title">
-                  <Link to={`/users/${reader._id}`} className="headline-link">{reader.username}</Link>
+                  <UserLink user={reader} />
                 </h3>
                 <p className="list-row__meta">Blocked {formatDay(reader.blockedAt)}</p>
               </div>

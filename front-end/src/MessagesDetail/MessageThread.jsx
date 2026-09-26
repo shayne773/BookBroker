@@ -1,5 +1,8 @@
+import UserLink from "../UserLink";
+
 // The conversation itself, oldest first. `listRef` is the scrolling element,
-// which MessagesDetail keeps pinned to the newest message.
+// which MessagesDetail keeps pinned to the newest message. Every message not
+// yours is from `otherUser`, whose name links to their profile.
 export default function MessageThread({ listRef, loading, messages, myUserId, otherUser }) {
   return (
     <section ref={listRef} className="thread" aria-label="Messages">
@@ -20,7 +23,7 @@ export default function MessageThread({ listRef, loading, messages, myUserId, ot
           >
             {!isMine && (
               <span className="message__sender">
-                {m.sender?.username || otherUser?.username || "User"}
+                <UserLink user={otherUser} fallback="User" />
               </span>
             )}
 

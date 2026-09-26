@@ -82,10 +82,14 @@ test('the inbox marks a conversation with unread messages', async () => {
     </MemoryRouter>
   );
 
-  const bea = await screen.findByRole('link', { name: /bea/ });
+  const [bea, cal] = await screen.findAllByRole('listitem');
   expect(bea).toHaveClass('list-row--unread');
   expect(within(bea).getByText(/2 new/)).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /cal/ })).not.toHaveClass('list-row--unread');
+  expect(cal).not.toHaveClass('list-row--unread');
+
+  // The row opens the conversation; the name on it opens the reader's profile.
+  expect(within(bea).getByRole('link', { name: 'Open conversation with bea' })).toHaveAttribute('href', '/messages/bea');
+  expect(within(bea).getByRole('link', { name: 'bea' })).toHaveAttribute('href', '/users/bea');
 });
 
 test('an open conversation marks itself read and polls only for newer messages, pausing while hidden', async () => {
@@ -166,8 +170,7 @@ test('a message sent from the thread does not skip one the other person sent jus
   expect(screen.getAllByText('hi bea')).toHaveLength(1);
 });
 
-test('a message refused by a block shows the reason the API gives', async () => {
-  const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+test('a message refused by a block shows the reason the API gives under the message box', async () => {
   serve({
     'GET /users/bea': respond(200, { _id: 'bea', username: 'bea' }),
     'GET /messages/bea': respond(200, [message('m1', 'bea', 'hello', 1)]),
@@ -189,6 +192,58 @@ test('a message refused by a block shows the reason the API gives', async () => 
   fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'hi bea' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-  await waitFor(() => expect(alert).toHaveBeenCalledWith("You can't message this reader."));
-  alert.mockRestore();
+  const composer = screen.getByLabelText('Message').closest('form').parentElement;
+  expect(await within(composer).findByRole('status')).toHaveTextContent("You can't message this reader.");
+  // The text is kept, so nothing the reader wrote is lost.
+  expect(screen.getByLabelText('Message')).toHaveValue('hi bea');
+});
+
+test('a message that fails to send says so under the message box', async () => {
+  serve({
+    'GET /users/bea': respond(200, { _id: 'bea', username: 'bea' }),
+    'GET /messages/bea': respond(200, []),
+    'POST /messages/bea': respond(500, { message: 'Something went wrong' }),
+    'GET /messages/unread': respond(200, { conversations: 0 }),
+  });
+
+  render(
+    <MemoryRouter initialEntries={['/messages/bea']}>
+      <Routes>
+        <Route path="/messages/:user" element={<MessagesDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hi bea' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+  expect(await screen.findByText("Your message wasn't sent. Please try again.")).toBeInTheDocument();
+});
+
+test("the conversation's header links to the other reader's profile", async () => {
+  serve({
+    'GET /users/bea': respond(200, { _id: 'bea', username: 'bea' }),
+    'GET /messages/bea': respond(200, [message('m1', 'bea', 'hello', 1)]),
+    'POST /messages/bea/read': respond(204, null),
+    'GET /messages/unread': respond(200, { conversations: 0 }),
+  });
+
+  render(
+    <MemoryRouter initialEntries={['/messages/bea']}>
+      <Routes>
+        <Route path="/messages/:user" element={<MessagesDetail />} />
+        <Route path="/users/:id" element={<p>bea's profile</p>} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  const heading = await screen.findByRole('heading', { level: 1, name: 'bea' });
+  const link = within(heading).getByRole('link', { name: 'bea' });
+  expect(link).toHaveAttribute('href', '/users/bea');
+  // The sender's name on their messages links there too.
+  expect(within(screen.getByRole('region', { name: 'Messages' })).getByRole('link', { name: 'bea' }))
+    .toHaveAttribute('href', '/users/bea');
+
+  fireEvent.click(link);
+  expect(await screen.findByText("bea's profile")).toBeInTheDocument();
 });

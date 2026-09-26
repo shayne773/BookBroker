@@ -1,4 +1,6 @@
 import { deadlineDate } from "../exchangeStatus";
+import Feedback from "../Feedback";
+import UserLink from "../UserLink";
 
 // The two stages after both sides agree: confirming the hand-over, then
 // rating the other reader.
@@ -12,11 +14,11 @@ export function CompletionPanel({ ex, confirmedByMe }) {
 
       <dl className="facts facts--row">
         <CompletionRow
-          label={ex.requester?.username || "Requester"}
+          label={<UserLink user={ex.requester} fallback="Requester" />}
           done={!!ex.requesterConfirmedComplete}
         />
         <CompletionRow
-          label={ex.responder?.username || "Responder"}
+          label={<UserLink user={ex.responder} fallback="Responder" />}
           done={!!ex.responderConfirmedComplete}
         />
       </dl>
@@ -50,11 +52,14 @@ function CompletionRow({ label, done }) {
   );
 }
 
-export function RatingPanel({ otherName, ratedAlready, rating, setRating, busy, onRate }) {
+// `feedback` says how submitting the rating went.
+export function RatingPanel({ other, ratedAlready, rating, setRating, busy, onRate, feedback }) {
   return (
     <section className="section">
       <div className="section-head">
-        <h2 className="section-title">Rate {otherName || "User"}</h2>
+        <h2 className="section-title">
+          Rate <UserLink user={other} fallback="User" />
+        </h2>
       </div>
 
       {ratedAlready ? (
@@ -73,6 +78,8 @@ export function RatingPanel({ otherName, ratedAlready, rating, setRating, busy, 
           <p className="hint">Only rate after you’ve completed the exchange.</p>
         </div>
       )}
+
+      <Feedback feedback={feedback} />
     </section>
   );
 }
