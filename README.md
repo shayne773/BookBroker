@@ -124,9 +124,10 @@ address, create a new account with it.
 A reader can delete their account from the bottom of their profile, with their
 password and a typed confirmation. It is permanent, with no undo or grace period. It
 removes the account, its offered books (from browse, search, the map and everyone's
-matches), wishlist, the blocks it placed, its sessions and settings, and cancels its
-open offers and accepted trades not yet complete, freeing the other side's books (the
-other reader gets the usual cancellation email). Completed trades, ratings (so nobody's
+matches), wishlist, the blocks it placed, its sessions and settings. An accepted trade
+the other reader has already confirmed completes, as it would at its deadline; its
+other open offers and accepted trades are cancelled, freeing the other side's books
+(the other reader gets the usual completion or cancellation email). Completed trades, ratings (so nobody's
 average moves), conversations and reports stay for the other readers and admins,
 who see the reader as "Deleted reader". The address can then sign up again as a new
 account.

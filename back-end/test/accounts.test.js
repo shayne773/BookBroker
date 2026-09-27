@@ -3,7 +3,6 @@ import { api, confirmEmail, offerBook, outbox, signUp, TEST_PASSWORD } from "./h
 import { Block, Conversation, OfferedBook, Report, User, WishlistBook, WishlistNotice } from "../Data.js";
 import Exchange from "../Exchange.js";
 import { AuthToken } from "../lib/authTokens.js";
-import { LoginAttempt, throttleKey } from "../lib/loginThrottle.js";
 import { notificationsSettled } from "../lib/notifications.js";
 import { Session } from "../lib/sessions.js";
 
@@ -71,7 +70,7 @@ describe("deleting an account", () => {
   });
 
   describe("removes what is theirs alone", () => {
-    it("deletes the reader, their books, wishlist, blocks, sessions, links and counters", async () => {
+    it("deletes the reader, their books, wishlist, blocks, sessions and links", async () => {
       const cal = await signUp();
       await offerBook(ada);
       expect(await wishlist(ada, "9780000000001")).to.have.status(201);
@@ -79,8 +78,6 @@ describe("deleting an account", () => {
       expect(await api(cal.token).post(`/users/${ada.id}/block`)).to.have.status(200);
       const otherSession = await api().post("/auth/login").send({ email: ada.email, password: TEST_PASSWORD });
       await api().post("/auth/forgot-password").send({ email: ada.email });
-      await api().post("/auth/login").send({ email: ada.email, password: "Wr0ngPassword" });
-      await api().post("/auth/login").send({ email: bea.email, password: "Wr0ngPassword" });
       await WishlistNotice.create([
         { _id: `${ada.id}:9780000000001`, sentAt: new Date() },
         { _id: `${bea.id}:9780000000001`, sentAt: new Date() },
@@ -99,8 +96,6 @@ describe("deleting an account", () => {
       expect((await WishlistNotice.find().lean()).map((n) => n._id)).to.deep.equal([
         `${bea.id}:9780000000001`,
       ]);
-      expect(await LoginAttempt.exists({ _id: throttleKey(ada.email) })).to.equal(null);
-      expect(await LoginAttempt.exists({ _id: throttleKey(bea.email) })).to.not.equal(null);
 
       // Every browser they were signed in on is signed out.
       for (const token of [ada.token, otherSession.body.token]) {
@@ -149,6 +144,32 @@ describe("deleting an account", () => {
       await notificationsSettled();
       expect(outbox.filter((m) => m.to === bea.email).map((m) => m.subject)).to.deep.equal([
         "Deleted reader cancelled your trade",
+        "Deleted reader cancelled your trade",
+      ]);
+    });
+
+    it("completes an accepted trade the other reader already confirmed, as its deadline would", async () => {
+      const confirmedByBea = await trade(bea, ada, { accept: true });
+      const confirmedByAda = await trade(ada, bea, { accept: true });
+      for (const [user, { id }] of [[bea, confirmedByBea], [ada, confirmedByAda]]) {
+        expect(await api(user.token).post(`/exchanges/${id}/confirm-complete`)).to.have.status(200);
+      }
+      await notificationsSettled();
+      outbox.length = 0;
+
+      await deleteAccount(ada);
+
+      expect((await Exchange.findById(confirmedByBea.id)).status).to.equal("COMPLETED");
+      expect((await Exchange.findById(confirmedByAda.id)).status).to.equal("CANCELLED");
+      // The handed-over book is gone; the one from the cancelled trade is free again.
+      expect(await OfferedBook.exists({ _id: confirmedByBea.mine.id })).to.equal(null);
+      const left = await OfferedBook.find({ owner: bea.id }).lean();
+      expect(left.map((b) => String(b._id))).to.deep.equal([confirmedByAda.theirs.id]);
+      expect(left[0].locked).to.equal(false);
+
+      await notificationsSettled();
+      expect(outbox.filter((m) => m.to === bea.email).map((m) => m.subject)).to.have.members([
+        "Your trade is complete",
         "Deleted reader cancelled your trade",
       ]);
     });

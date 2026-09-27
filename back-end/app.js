@@ -67,7 +67,7 @@ const app = express();
 
 app.set("trust proxy", trustProxySetting());
 
-const loginThrottle = new LoginThrottle({ keyedBy: "email" });
+const loginThrottle = new LoginThrottle();
 
 const INVALID_CREDENTIALS_MESSAGE = "Invalid credentials";
 
@@ -83,7 +83,6 @@ const HOUR = 60 * 60 * 1000;
 const mailThrottles = (endpoint) => ({
   address: new LoginThrottle({
     scope: `${endpoint}:address`,
-    keyedBy: "email",
     windowMs: HOUR,
     lockoutMs: HOUR,
     accountMaxAttempts: 3,
@@ -103,7 +102,6 @@ const MAIL_THROTTLED_MESSAGE = "Too many requests. Please try again later.";
 // Reports are stored for review by hand, so one reader cannot bury them in volume.
 const reportThrottle = new LoginThrottle({
   scope: "report",
-  keyedBy: "user",
   windowMs: HOUR,
   lockoutMs: HOUR,
   accountMaxAttempts: 10,
@@ -114,7 +112,6 @@ const reportThrottle = new LoginThrottle({
 // cached in lib/googleBooks.js.
 const googleBooksThrottle = new LoginThrottle({
   scope: "google-books",
-  keyedBy: "user",
   windowMs: HOUR / 4,
   lockoutMs: HOUR / 4,
   accountMaxAttempts: 60,
@@ -127,7 +124,6 @@ const GOOGLE_BOOKS_THROTTLED_MESSAGE =
 const ZIP_CHANGES_PER_DAY = 3;
 const zipChangeThrottle = new LoginThrottle({
   scope: "zip-change",
-  keyedBy: "user",
   windowMs: 24 * HOUR,
   lockoutMs: 24 * HOUR,
   accountMaxAttempts: ZIP_CHANGES_PER_DAY,
@@ -136,7 +132,7 @@ const ZIP_CHANGE_THROTTLED_MESSAGE = `You can change your ZIP code ${ZIP_CHANGES
 
 // Deleting an account asks for its password again, so a signed-in browser left
 // open cannot be used to guess it: failures count as they do at sign-in.
-const deleteAccountThrottle = new LoginThrottle({ scope: "delete-account", keyedBy: "user" });
+const deleteAccountThrottle = new LoginThrottle({ scope: "delete-account" });
 const DELETE_ACCOUNT_THROTTLED_MESSAGE = "Too many wrong passwords. Please try again later.";
 
 // Answers 429 and returns true when the caller or the address is over its limit.

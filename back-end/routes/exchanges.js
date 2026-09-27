@@ -86,7 +86,6 @@ function proposerOf(exchange) {
 const HOUR = 60 * 60 * 1000;
 const proposalThrottle = new LoginThrottle({
   scope: "trade-proposal",
-  keyedBy: "user",
   windowMs: HOUR,
   lockoutMs: HOUR,
   accountMaxAttempts: 20,

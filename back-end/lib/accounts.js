@@ -3,8 +3,10 @@
 //
 // What goes: the user, their offered books (so they leave every listing, the
 // map and other readers' matches), their wishlist, the blocks they placed, their
-// sessions and emailed-link tokens, their notification state and every throttle
-// counter kept for them. Their open offers and accepted trades not yet complete
+// sessions and emailed-link tokens and their notification state. An accepted
+// trade the other reader has already confirmed completes, as it would at its
+// deadline (lib/tradeDeadlines.js): its books leave the market and the other
+// reader gets the "completed" email. Their other open offers and accepted trades
 // are cancelled, which releases the other side's books, and the other reader
 // gets the usual "cancelled" email.
 //
@@ -16,12 +18,16 @@ import mongoose from "mongoose";
 import Exchange from "../Exchange.js";
 import { Block, Conversation, OfferedBook, User, WishlistBook, WishlistNotice } from "../Data.js";
 import { AuthToken } from "./authTokens.js";
-import { forgetAccountThrottles } from "./loginThrottle.js";
 import { notifyTrade } from "./notifications.js";
 import { Session } from "./sessions.js";
-import { resolveTradeDeadlines } from "./tradeDeadlines.js";
+import { removeTradedBooks, resolveTradeDeadlines } from "./tradeDeadlines.js";
 
 const UNFINISHED = ["PENDING", "COUNTERED", "ACCEPTED"];
+
+// The trade is accepted and the side other than `uid` has confirmed it done.
+const confirmedByOther = (exchange, uid) =>
+  exchange.status === "ACCEPTED" &&
+  (exchange.requester.equals(uid) ? exchange.responderConfirmedComplete : exchange.requesterConfirmedComplete);
 
 /** Delete the account `userId` and everything that belongs to it alone. */
 export async function deleteAccount(userId) {
@@ -33,19 +39,31 @@ export async function deleteAccount(userId) {
   await resolveTradeDeadlines(theirTrades);
 
   let cancelled = [];
+  let completed = [];
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
       cancelled = [];
-      const user = await User.findById(uid).select("email").session(session).lean();
+      completed = [];
+      const user = await User.exists({ _id: uid }).session(session);
       if (!user) return;
 
       // Each update bumps the version (optimisticConcurrency in Exchange.js),
       // so a route saving one of these trades at the same moment fails.
-      cancelled = await Exchange.find({ ...theirTrades, status: { $in: UNFINISHED } })
-        .select("_id requester responder")
+      const unfinished = await Exchange.find({ ...theirTrades, status: { $in: UNFINISHED } })
+        .select("_id status requester responder requesterBooks responderBooks requesterConfirmedComplete responderConfirmedComplete")
         .session(session)
         .lean();
+      completed = unfinished.filter((ex) => confirmedByOther(ex, uid));
+      cancelled = unfinished.filter((ex) => !confirmedByOther(ex, uid));
+
+      await Exchange.updateMany(
+        { _id: { $in: completed.map((ex) => ex._id) }, status: "ACCEPTED" },
+        { $set: { status: "COMPLETED" }, $inc: { __v: 1 } },
+        { session }
+      );
+      for (const exchange of completed) await removeTradedBooks(exchange, session);
+
       const ids = cancelled.map((ex) => ex._id);
       await Exchange.updateMany(
         { _id: { $in: ids }, status: { $in: UNFINISHED } },
@@ -70,12 +88,12 @@ export async function deleteAccount(userId) {
         { $unset: { [`readAt.${uid}`]: "", [`seenAt.${uid}`]: "", [`notifiedAt.${uid}`]: "" } },
         { session }
       );
-      await forgetAccountThrottles({ userId: uid, email: user.email }, session);
       await User.deleteOne({ _id: uid }, { session });
     });
   } finally {
     await session.endSession();
   }
 
+  for (const exchange of completed) notifyTrade(exchange, "completed", uid);
   for (const exchange of cancelled) notifyTrade(exchange, "cancelled", uid);
 }

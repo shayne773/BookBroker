@@ -1,6 +1,5 @@
 import { expect } from "chai";
 import { AuthToken, hashToken } from "../lib/authTokens.js";
-import { retireEmailChanges } from "../lib/db.js";
 import { renderEmail, resolveFrontEndBaseUrl } from "../lib/mail.js";
 import { User } from "../Data.js";
 import {
@@ -345,28 +344,6 @@ describe("the account email", () => {
     expect(res).to.have.status(200);
     expect(res.body.email).to.equal(user.email);
     expect(res.body).to.not.have.property("pendingEmail");
-  });
-
-  it("drops a change left pending from before, and its link, at startup", async () => {
-    const user = await createUser();
-    const other = await createUser();
-    await User.collection.updateOne({ _id: user._id }, { $set: { pendingEmail: "moved@example.com" } });
-    await AuthToken.create({
-      _id: hashToken("old-link"),
-      purpose: "change-email",
-      user: user._id,
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-    });
-    await forgot(other.email);
-
-    await retireEmailChanges();
-
-    const stored = await User.collection.findOne({ _id: user._id });
-    expect(stored).to.not.have.property("pendingEmail");
-    expect(stored.email).to.equal(user.email);
-    expect(await AuthToken.countDocuments({ purpose: "change-email" })).to.equal(0);
-    // Other links are left alone.
-    expect(await AuthToken.countDocuments({ purpose: "reset-password" })).to.equal(1);
   });
 });
 

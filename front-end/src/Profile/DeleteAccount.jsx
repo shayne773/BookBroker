@@ -64,8 +64,8 @@ const DeleteAccount = () => {
       <div className="stack">
         <p className="hint">
           Deleting your account is permanent and can&rsquo;t be undone. Your offerings, wishlist,
-          blocks and settings are removed, and any trade offers or accepted trades not yet complete
-          are cancelled. Completed trades, ratings and messages stay with the other readers, under
+          blocks and settings are removed. An accepted trade the other reader has already confirmed
+          completes; your other trade offers and accepted trades are cancelled. Completed trades, ratings and messages stay with the other readers, under
           the name &ldquo;Deleted reader&rdquo;. To use this email again, create a new account.
         </p>
 

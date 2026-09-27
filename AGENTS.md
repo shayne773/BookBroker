@@ -115,8 +115,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Emailed-link tokens live in `back-end/lib/authTokens.js`: stored as a SHA-256 hash,
   single-use, expiring (confirm 24 h, reset 1 h).
 - An account's email never changes: `/user/edit` refuses one, and there is no change flow
-  (another address is a new account). `retireEmailChanges` (`lib/db.js`) clears data the
-  old flow left behind at startup.
+  (another address is a new account).
 - `User.emailVerified` defaults to `true` so accounts from before confirmation count as
   confirmed with no backfill; sign-up stores `false` and login refuses only an explicit
   `false`. Keep both halves if you touch it.
@@ -175,8 +174,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - `deleteAccount` (`back-end/lib/accounts.js`, `POST /user/delete`) is permanent and runs in
   one transaction; its header lists what is removed and what stays. Anything new keyed to a
-  reader must be removed there too. A throttle keyed per account declares `keyedBy: "user"`
-  or `"email"` so deletion clears its counters (`forgetAccountThrottles`).
+  reader must be removed there too.
 - A missing user is a deleted reader: populated refs come back null and the front end shows
   "Deleted reader" as plain text (`UserLink`'s default fallback, `readerMeta` empty). Routes
   that let one reader reach another must 404 on a missing one.
