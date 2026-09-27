@@ -60,12 +60,17 @@ const dueCompletion = (now) => ({
 
 /**
  * Takes a finished trade's books off the market, inside `session`: the traded
- * books are deleted, with their photos (cleanUpPhotosInBackground once
- * committed), and any other book it still locks is released.
+ * books are deleted, with their photos, and any other book it still locks is
+ * released. Returns the photo cleanup to pass to cleanUpPhotosInBackground
+ * once committed.
  */
 export async function removeTradedBooks(exchange, session) {
-  await removeOfferedBooks({ _id: { $in: [...exchange.requesterBooks, ...exchange.responderBooks] } }, { session });
+  const { cleanup } = await removeOfferedBooks(
+    { _id: { $in: [...exchange.requesterBooks, ...exchange.responderBooks] } },
+    { session }
+  );
   await releaseBooks(exchange._id, session);
+  return cleanup;
 }
 
 export function releaseBooks(exchangeId, session) {
@@ -90,6 +95,7 @@ async function expire(id, now) {
 async function autoComplete(id, now) {
   const session = await mongoose.startSession();
   let completed = null;
+  let cleanup = null;
   try {
     await session.withTransaction(async () => {
       completed = await Exchange.findOneAndUpdate(
@@ -97,13 +103,13 @@ async function autoComplete(id, now) {
         { $set: { status: "COMPLETED", autoCompleted: true, deadlineDays: COMPLETION_TIMEOUT_DAYS }, $inc: { __v: 1 } },
         { new: true, session }
       );
-      if (completed) await removeTradedBooks(completed, session);
+      cleanup = completed ? await removeTradedBooks(completed, session) : null;
     });
   } finally {
     await session.endSession();
   }
   if (!completed) return false;
-  cleanUpPhotosInBackground();
+  cleanUpPhotosInBackground(cleanup);
 
   // The side that confirmed "did" the completion; the silent side hears of it.
   const confirmer = completed.requesterConfirmedComplete ? completed.requester : completed.responder;

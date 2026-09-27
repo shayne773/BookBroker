@@ -15,9 +15,10 @@ import {
 } from './photos';
 
 // The owner's controls for their book's photos, on its page: add up to
-// MAX_PHOTOS, remove any, and move them into order, the first being the main
-// one. `onChange(photos)` hands the book's photos back after each change.
-const PhotoManager = ({ bookId, photos, onChange }) => {
+// MAX_PHOTOS (when `canUpload`, i.e. the Blob store is set up), remove any, and
+// move them into order, the first being the main one. `onChange(photos)` hands
+// the book's photos back after each change.
+const PhotoManager = ({ bookId, photos, canUpload, onChange }) => {
   const { feedback, done, fail, clear } = useFeedback();
   const [progress, setProgress] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -77,10 +78,12 @@ const PhotoManager = ({ bookId, photos, onChange }) => {
 
   return (
     <div className="photo-manager">
-      <p className="hint">
-        Show your copy: its condition, any notes or inscriptions. The first photo is the main one.
-        Photos are resized in your browser, and their location data is removed.
-      </p>
+      {canUpload && (
+        <p className="hint">
+          Show your copy: its condition, any notes or inscriptions. The first photo is the main one.
+          Photos are resized in your browser, and their location data is removed.
+        </p>
+      )}
 
       {photos.length > 0 && (
         <ol className="photo-manager__list">
@@ -124,7 +127,7 @@ const PhotoManager = ({ bookId, photos, onChange }) => {
         </ol>
       )}
 
-      {room > 0 ? (
+      {!canUpload ? null : room > 0 ? (
         <div className="photo-manager__add">
           <button
             type="button"

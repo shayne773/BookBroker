@@ -116,15 +116,34 @@ describe('the gallery', () => {
 });
 
 describe("the owner's photo controls", () => {
-  test('are hidden when photos are off (no Blob store) or the book is not yours', async () => {
-    await renderPage(bookWith({ photoUploads: false }));
+  test('are hidden when the book is not yours', async () => {
+    await renderPage(bookWith({ photos }));
     expect(screen.queryByRole('button', { name: /Add photos/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Remove photo/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Your photos/)).not.toBeInTheDocument();
+  });
+
+  test('still remove and reorder, but not add, when photos are off (no Blob store)', async () => {
+    await renderPage(bookWith({ photos, isOwner: true, photoUploads: false }));
+    expect(screen.getByRole('heading', { name: 'Your photos of this copy' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove photo 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move photo 2 earlier' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Add (more )?photos/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Report these photos' })).not.toBeInTheDocument();
+  });
+
+  test('give way to a note while an accepted trade holds the book', async () => {
+    await renderPage(bookWith({ photos, isOwner: true, photoUploads: true, locked: true }));
+    expect(screen.getByText(/in an accepted trade, so its photos can't change/)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Enlarge photo/ })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: /Remove photo/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Add (more )?photos/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Report these photos' })).not.toBeInTheDocument();
   });
 
   test('remove a photo', async () => {
     routes['DELETE /user/offered/b1/photos/p1'] = respond(200, { photos: [photos[1]] });
-    await renderPage(bookWith({ photos, photoUploads: true }));
+    await renderPage(bookWith({ photos, isOwner: true, photoUploads: true }));
 
     expect(screen.getByRole('heading', { name: 'Your photos of this copy' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Remove photo 1' }));
@@ -136,7 +155,7 @@ describe("the owner's photo controls", () => {
 
   test('move a photo, making it the main one', async () => {
     routes['PUT /user/offered/b1/photos/order'] = respond(200, { photos: [photos[1], photos[0]] });
-    await renderPage(bookWith({ photos, photoUploads: true }));
+    await renderPage(bookWith({ photos, isOwner: true, photoUploads: true }));
 
     // The first photo cannot move earlier.
     expect(screen.getByRole('button', { name: 'Move photo 1 earlier' })).toHaveAttribute('aria-disabled', 'true');
@@ -157,7 +176,7 @@ describe("the owner's photo controls", () => {
     routes['POST /user/offered/b1/photos'] = respond(201, { photos: [added] });
     vi.spyOn(blobUpload, 'put').mockImplementation(async (pathname) => ({ url: `https://blob.example/${pathname}` }));
 
-    await renderPage(bookWith({ photoUploads: true }));
+    await renderPage(bookWith({ isOwner: true, photoUploads: true }));
     const input = document.querySelector('input[type="file"]');
     expect(input).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp');
     fireEvent.change(input, { target: { files: [new File(['x'], 'copy.jpg', { type: 'image/jpeg' })] } });
@@ -172,7 +191,7 @@ describe("the owner's photo controls", () => {
   });
 
   test('say why a photo could not be added, inline', async () => {
-    await renderPage(bookWith({ photoUploads: true }));
+    await renderPage(bookWith({ isOwner: true, photoUploads: true }));
     const input = document.querySelector('input[type="file"]');
     fireEvent.change(input, { target: { files: [new File(['x'], 'scan.gif', { type: 'image/gif' })] } });
 

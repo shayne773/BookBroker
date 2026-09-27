@@ -434,16 +434,17 @@ router.post("/:id/confirm-complete", async (req, res) => {
     if (!ex.autoCompletesAt) ex.autoCompletesAt = completionDeadline();
 
     // if both confirmed -> finalize
+    let cleanup = null;
     if (ex.requesterConfirmedComplete && ex.responderConfirmedComplete) {
       ex.status = "COMPLETED";
-      await removeTradedBooks(ex, session);
+      cleanup = await removeTradedBooks(ex, session);
     }
 
     await ex.save({ session });
 
     await session.commitTransaction();
     if (ex.status === "COMPLETED") {
-      cleanUpPhotosInBackground();
+      cleanUpPhotosInBackground(cleanup);
       notifyTrade(ex, "completed", userId);
     }
     res.json({ message: "Completion recorded", status: ex.status });

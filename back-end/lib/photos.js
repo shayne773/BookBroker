@@ -9,13 +9,16 @@
 // Without BLOB_READ_WRITE_TOKEN photos are off: nothing can be uploaded and the
 // front end hides the controls. Photos stored meanwhile still show.
 //
-// A blob is only ever deleted through discardPhotos, which records its URL in a
-// PhotoCleanup with the change that drops it, so a deletion that fails is logged
-// and retried by the daily cron (/cron/photo-cleanup) rather than lost.
+// A blob is deleted through discardPhotos, or with its whole book through
+// discardBookBlobs, which record it in a PhotoCleanup with the change that drops
+// it, so a deletion that fails is logged and retried by the daily cron
+// (/cron/photo-cleanup) rather than lost. That cron also deletes uploads never
+// attached to their book (deleteUnattachedBlobs).
 import { randomBytes } from "node:crypto";
-import { del, head, BlobError, BlobNotFoundError } from "@vercel/blob";
+import mongoose from "mongoose";
+import { del, head, list, BlobError, BlobNotFoundError } from "@vercel/blob";
 import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
-import { MAX_PHOTOS, PhotoCleanup } from "../Data.js";
+import { MAX_PHOTOS, OfferedBook, PhotoCleanup } from "../Data.js";
 import { runInBackground } from "./background.js";
 
 export { MAX_PHOTOS };
@@ -43,6 +46,7 @@ export const blobStore = {
   clientToken: (options) => generateClientTokenFromReadWriteToken(options),
   head: (url) => head(url),
   del: (urls) => del(urls),
+  list: (options) => list(options),
 };
 
 // Every blob of a book lives under its own path, so a URL names its book.
@@ -107,35 +111,84 @@ export async function checkUpload(bookId, url) {
 
 const pending = new Set();
 
+// Records blobs for deletion, inside `session` when given: `urls`, and every
+// blob under the books of `bookIds`. Returns the record's id.
+async function recordCleanup({ urls = [], bookIds = [] }, session) {
+  const [record] = await PhotoCleanup.create([{ urls, prefixes: bookIds.map((id) => photoPrefix(id)) }], {
+    session,
+  });
+  return record._id;
+}
+
+// Records, then deletes in the background; the photos are already gone from
+// their book, so failing to record their blobs only leaves them in the store,
+// which is not worth failing the request over.
+async function recordAndCleanUp(blobs) {
+  try {
+    cleanUpPhotosInBackground(await recordCleanup(blobs));
+  } catch (err) {
+    console.error("Failed to record photo blobs for deletion:", err);
+  }
+}
+
 /**
  * Deletes the blobs at `urls`. The URLs are recorded first, inside `session`'s
  * transaction when there is one, so the record stands or falls with the change
  * that drops the photos. Without a session the blobs go right away, in the
- * background; with one, the caller starts that after committing
- * (cleanUpPhotosInBackground), and the daily cron covers any it misses.
+ * background; with one, this returns the record's id for the caller to pass to
+ * cleanUpPhotosInBackground once committed, and the daily cron covers any it misses.
  */
 export async function discardPhotos(urls, { session } = {}) {
-  if (!urls.length) return;
-  if (session) {
-    await PhotoCleanup.create([{ urls }], { session });
-    return;
-  }
+  if (!urls.length) return null;
+  if (session) return recordCleanup({ urls }, session);
+  await recordAndCleanUp({ urls });
+  return null;
+}
 
-  // The photos are already gone from the book; failing to record their blobs
-  // only leaves them in the store, which is not worth failing the request over.
+/**
+ * Deletes every blob of the books `bookIds`, attached as a photo or not, the
+ * way discardPhotos deletes URLs.
+ */
+export async function discardBookBlobs(bookIds, { session } = {}) {
+  if (!bookIds.length) return null;
+  if (session) return recordCleanup({ bookIds }, session);
+  await recordAndCleanUp({ bookIds });
+  return null;
+}
+
+// The URLs of every blob under `prefix`.
+async function blobsUnder(prefix) {
+  const urls = [];
+  let cursor;
+  do {
+    const page = await blobStore.list({ prefix, cursor });
+    urls.push(...page.blobs.map((blob) => blob.url));
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
+  return urls;
+}
+
+// Deletes the blobs of one cleanup record, then the record. A failure is
+// logged and the record kept, counted, for the cron. Returns whether it cleared.
+async function clearCleanup(record) {
   try {
-    await PhotoCleanup.create([{ urls }]);
+    const urls = [...record.urls];
+    for (const prefix of record.prefixes ?? []) urls.push(...(await blobsUnder(prefix)));
+    if (urls.length) await blobStore.del(urls);
+    await PhotoCleanup.deleteOne({ _id: record._id });
+    return true;
   } catch (err) {
-    console.error(`Failed to record photo blobs ${urls.join(", ")} for deletion:`, err);
+    console.error(`Failed to delete photo blobs ${[...record.urls, ...(record.prefixes ?? [])].join(", ")}:`, err);
+    await PhotoCleanup.updateOne({ _id: record._id }, { $inc: { attempts: 1 } });
+    return false;
   }
-  cleanUpPhotosInBackground();
 }
 
 const CLEANUP_BATCH = 100;
 
 /**
- * Deletes the blobs of every recorded cleanup, oldest first. A failure is
- * logged and its record kept, counted, for the next run. Returns how many
+ * Deletes the blobs of every recorded cleanup, oldest first, for the cron. A
+ * failure is logged and its record kept for the next run. Returns how many
  * records were cleared.
  */
 export async function cleanUpPhotos() {
@@ -149,23 +202,24 @@ export async function cleanUpPhotos() {
       .limit(CLEANUP_BATCH)
       .lean();
     for (const record of records) {
-      try {
-        await blobStore.del(record.urls);
-        await PhotoCleanup.deleteOne({ _id: record._id });
-        cleared += 1;
-      } catch (err) {
-        console.error(`Failed to delete photo blobs ${record.urls.join(", ")}:`, err);
-        failed.push(record._id);
-        await PhotoCleanup.updateOne({ _id: record._id }, { $inc: { attempts: 1 } });
-      }
+      if (await clearCleanup(record)) cleared += 1;
+      else failed.push(record._id);
     }
     if (records.length < CLEANUP_BATCH) return cleared;
   }
 }
 
-/** Runs cleanUpPhotos after the response, without holding it up. */
-export function cleanUpPhotosInBackground() {
-  const job = cleanUpPhotos().finally(() => pending.delete(job));
+/**
+ * Clears the one cleanup record `id` (from discardPhotos or discardBookBlobs)
+ * after the response, without holding it up. Older records are the cron's.
+ */
+export function cleanUpPhotosInBackground(id) {
+  if (!id) return;
+  const job = (async () => {
+    if (!photosEnabled()) return;
+    const record = await PhotoCleanup.findById(id).lean();
+    if (record) await clearCleanup(record);
+  })().finally(() => pending.delete(job));
   pending.add(job);
   runInBackground(job, "delete photo blobs");
 }
@@ -173,4 +227,35 @@ export function cleanUpPhotosInBackground() {
 /** Resolves when every blob deletion started so far has finished. */
 export async function photoCleanupSettled() {
   while (pending.size) await Promise.allSettled([...pending]);
+}
+
+// An upload's token lasts minutes, so a blob this old that no book shows was
+// never attached (or outlived its photo) and never will be.
+const UNATTACHED_AGE_MS = 24 * 60 * 60 * 1000;
+const LIST_BATCH = 1000;
+
+/**
+ * Deletes every blob under books/ older than a day that is not one of its
+ * book's photos, a page of the store at a time, for the cron. Returns how many
+ * blobs were deleted.
+ */
+export async function deleteUnattachedBlobs(now = Date.now()) {
+  if (!photosEnabled()) return 0;
+
+  let deleted = 0;
+  let cursor;
+  do {
+    const page = await blobStore.list({ prefix: "books/", cursor, limit: LIST_BATCH });
+    const old = page.blobs.filter((blob) => now - new Date(blob.uploadedAt).getTime() > UNATTACHED_AGE_MS);
+    const bookIds = [...new Set(old.map((blob) => blob.pathname.split("/")[1]))].filter((id) =>
+      mongoose.isValidObjectId(id)
+    );
+    const books = await OfferedBook.find({ _id: { $in: bookIds } }).select("photos.url").lean();
+    const attached = new Set(books.flatMap((book) => book.photos.map((photo) => photo.url)));
+    const unattached = old.map((blob) => blob.url).filter((url) => !attached.has(url));
+    if (unattached.length) await blobStore.del(unattached);
+    deleted += unattached.length;
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
+  return deleted;
 }

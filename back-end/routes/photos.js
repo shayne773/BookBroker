@@ -1,7 +1,8 @@
 // An owner's photos of one of their offered books, mounted at
 // /user/offered/:id/photos behind authMiddleware (lib/photos.js has the flow).
-// Only the owner reaches a book here: anyone else's reads as not found. Every
-// answer that changes the photos carries the book's `photos` as they now are.
+// Only the owner reaches a book here: anyone else's reads as not found. A book
+// an accepted trade holds (`locked`) keeps the photos the other reader agreed
+// to. Every answer that changes the photos carries the book's `photos` as they now are.
 import express from "express";
 import mongoose from "mongoose";
 import { OfferedBook } from "../Data.js";
@@ -27,7 +28,7 @@ const uploadThrottle = new LoginThrottle({
   scope: "photo-upload",
   windowMs: HOUR,
   lockoutMs: HOUR,
-  accountMaxAttempts: 40,
+  accountMaxAttempts: 12,
 });
 
 // Photos are at most 10,000 px a side; the browser sends 1600 at most.
@@ -41,10 +42,14 @@ const TOO_LARGE = `Photos must be under ${MAX_PHOTO_BYTES / (1024 * 1024)} MB.`;
 // The caller's own book `:id`, or null.
 async function ownBook(req) {
   if (!mongoose.isValidObjectId(req.params.id)) return null;
-  return OfferedBook.findOne({ _id: req.params.id, owner: req.user.userId }).select("photos").lean();
+  return OfferedBook.findOne({ _id: req.params.id, owner: req.user.userId }).select("photos locked").lean();
 }
 
-const ownBookFilter = (req) => ({ _id: req.params.id, owner: req.user.userId });
+// The caller's own book `:id` while its photos may change.
+const editableBookFilter = (req) => ({ _id: req.params.id, owner: req.user.userId, locked: false });
+
+const bookLocked = (res) =>
+  res.status(409).json({ message: "This book is in an accepted trade, so its photos can't change until the trade is over." });
 
 const photosUnavailable = (res) =>
   res.status(503).json({ message: "Photos are not available right now.", code: PHOTOS_UNAVAILABLE });
@@ -72,6 +77,7 @@ router.post("/upload-token", requirePhotoStore, async (req, res, next) => {
   try {
     const book = await ownBook(req);
     if (!book) return res.status(404).json({ message: BOOK_NOT_FOUND });
+    if (book.locked) return bookLocked(res);
     if (!Object.hasOwn(PHOTO_TYPES, contentType)) return res.status(400).json({ message: WRONG_TYPE });
     if (!Number.isInteger(size) || size <= 0) {
       return res.status(400).json({ message: "The photo's size is missing." });
@@ -111,7 +117,7 @@ router.post("/", requirePhotoStore, async (req, res, next) => {
 
     // The count is checked again here, since two uploads can pass the token's check together.
     const updated = await OfferedBook.findOneAndUpdate(
-      { ...ownBookFilter(req), "photos.url": { $ne: upload.url }, [`photos.${MAX_PHOTOS - 1}`]: { $exists: false } },
+      { ...editableBookFilter(req), "photos.url": { $ne: upload.url }, [`photos.${MAX_PHOTOS - 1}`]: { $exists: false } },
       { $push: { photos: { url: upload.url, width, height } } },
       { new: true, projection: "photos" }
     ).lean();
@@ -121,9 +127,10 @@ router.post("/", requirePhotoStore, async (req, res, next) => {
     if (current?.photos.some((photo) => photo.url === upload.url)) {
       return res.json({ photos: current.photos });
     }
-    // Gone meanwhile, or full: the upload has no book to go on.
+    // Gone meanwhile, locked or full: the upload has no book to go on.
     await discardPhotos([upload.url]);
     if (!current) return res.status(404).json({ message: BOOK_NOT_FOUND });
+    if (current.locked) return bookLocked(res);
     res.status(409).json({ message: TOO_MANY_PHOTOS });
   } catch (err) {
     storeFailure(err, res, next);
@@ -137,6 +144,7 @@ router.put("/order", async (req, res, next) => {
   try {
     const book = await ownBook(req);
     if (!book) return res.status(404).json({ message: BOOK_NOT_FOUND });
+    if (book.locked) return bookLocked(res);
 
     const byId = new Map(book.photos.map((photo) => [String(photo._id), photo]));
     const ids = Array.isArray(order) ? order.map(String) : [];
@@ -147,7 +155,7 @@ router.put("/order", async (req, res, next) => {
     // Applied only while the book still has exactly these photos.
     const photos = ids.map((id) => byId.get(id));
     const updated = await OfferedBook.findOneAndUpdate(
-      { ...ownBookFilter(req), photos: { $size: photos.length }, "photos._id": { $all: photos.map((p) => p._id) } },
+      { ...editableBookFilter(req), photos: { $size: photos.length }, "photos._id": { $all: photos.map((p) => p._id) } },
       { $set: { photos } },
       { new: true, projection: "photos" }
     ).lean();
@@ -162,12 +170,12 @@ router.put("/order", async (req, res, next) => {
 
 router.delete("/:photoId", async (req, res, next) => {
   try {
-    if (!mongoose.isValidObjectId(req.params.photoId) || !(await ownBook(req))) {
-      return res.status(404).json({ message: BOOK_NOT_FOUND });
-    }
+    const book = mongoose.isValidObjectId(req.params.photoId) ? await ownBook(req) : null;
+    if (!book) return res.status(404).json({ message: BOOK_NOT_FOUND });
+    if (book.locked) return bookLocked(res);
 
     const before = await OfferedBook.findOneAndUpdate(
-      { ...ownBookFilter(req), "photos._id": req.params.photoId },
+      { ...editableBookFilter(req), "photos._id": req.params.photoId },
       { $pull: { photos: { _id: req.params.photoId } } },
       { projection: "photos" }
     ).lean();

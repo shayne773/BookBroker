@@ -7,6 +7,7 @@ import { blobStore, MAX_PHOTO_BYTES, photoCleanupSettled } from "../lib/photos.j
 import { resolveTradeDeadlines } from "../lib/tradeDeadlines.js";
 
 const MB = 1024 * 1024;
+const DAY = 24 * 60 * 60 * 1000;
 
 describe("book photos", () => {
   let owner;
@@ -27,6 +28,18 @@ describe("book photos", () => {
   const addPhoto = (reader, url, id, size = { width: 1200, height: 1600 }) =>
     api(reader.token).post(photosPath(id)).send({ url, ...size });
   const storedPhotos = async (id = book.id) => (await OfferedBook.findById(id).lean()).photos;
+  const runCleanupCron = async () => {
+    process.env.CRON_SECRET = "test-cron-secret-0123456789";
+    try {
+      const cron = await api().get("/cron/photo-cleanup").set("Authorization", "Bearer test-cron-secret-0123456789");
+      expect(cron).to.have.status(200);
+      return cron.body;
+    } finally {
+      delete process.env.CRON_SECRET;
+    }
+  };
+  // Locks `book` as an accepted trade does.
+  const lock = () => OfferedBook.updateOne({ _id: book.id }, { $set: { locked: true } });
   const withPhotos = async (count, target = book) => {
     const urls = Array.from({ length: count }, () => store.upload(target.id));
     await OfferedBook.updateOne({ _id: target.id }, { $set: { photos: urls.map((url) => photo(url)) } });
@@ -34,6 +47,13 @@ describe("book photos", () => {
   };
 
   describe("POST /user/offered/:id/photos/upload-token", () => {
+    it("rations tokens to a dozen an hour per reader", async () => {
+      for (let i = 0; i < 12; i += 1) expect(await tokenFor(owner)).to.have.status(200);
+      const res = await tokenFor(owner);
+      expect(res).to.have.status(429);
+      expect(res).to.have.header("retry-after");
+    });
+
     it("gives the owner a token for one blob under the book, of that type and at most 2 MB", async () => {
       const res = await tokenFor(owner, { contentType: "image/webp", size: 500_000 });
 
@@ -217,18 +237,50 @@ describe("book photos", () => {
       expect(pending.urls).to.deep.equal([url]);
 
       store.failDeletes = false;
-      process.env.CRON_SECRET = "test-cron-secret-0123456789";
-      try {
-        const cron = await api()
-          .get("/cron/photo-cleanup")
-          .set("Authorization", "Bearer test-cron-secret-0123456789");
-        expect(cron).to.have.status(200);
-        expect(cron.body).to.deep.equal({ cleared: 1 });
-      } finally {
-        delete process.env.CRON_SECRET;
-      }
+      expect(await runCleanupCron()).to.deep.equal({ cleared: 1, unattached: 0 });
       expect(store.deleted).to.deep.equal([url]);
       expect(await PhotoCleanup.countDocuments()).to.equal(0);
+    });
+
+    it("leaves an earlier failed deletion to the cron rather than retrying it with every removal", async () => {
+      const [first, second] = await withPhotos(2);
+      const [firstPhoto, secondPhoto] = await storedPhotos();
+      store.failDeletes = true;
+      expect(await api(owner.token).delete(`${photosPath()}/${firstPhoto._id}`)).to.have.status(200);
+      await photoCleanupSettled();
+
+      store.failDeletes = false;
+      expect(await api(owner.token).delete(`${photosPath()}/${secondPhoto._id}`)).to.have.status(200);
+      await photoCleanupSettled();
+
+      expect(store.deleted).to.deep.equal([second]);
+      const [pending] = await PhotoCleanup.find().lean();
+      expect(pending.urls).to.deep.equal([first]);
+      expect(pending.attempts).to.equal(1);
+    });
+  });
+
+  describe("a book an accepted trade holds", () => {
+    it("keeps its photos: no new upload, addition, removal or reordering", async () => {
+      await withPhotos(2);
+      const ids = (await storedPhotos()).map((p) => String(p._id));
+      const url = store.upload(book.id);
+      await lock();
+
+      const refusals = [
+        await tokenFor(owner),
+        await addPhoto(owner, url),
+        await api(owner.token).delete(`${photosPath()}/${ids[0]}`),
+        await api(owner.token).put(`${photosPath()}/order`).send({ order: [ids[1], ids[0]] }),
+      ];
+      for (const res of refusals) {
+        expect(res).to.have.status(409);
+        expect(res.body.message).to.match(/accepted trade/);
+      }
+      expect(store.tokens).to.be.empty;
+      expect((await storedPhotos()).map((p) => String(p._id))).to.deep.equal(ids);
+      await photoCleanupSettled();
+      expect(store.deleted).to.deep.equal([url]);
     });
   });
 
@@ -263,10 +315,11 @@ describe("book photos", () => {
   });
 
   describe("what the other routes send", () => {
-    it("tells the owner, and only the owner, that they can add photos", async () => {
-      expect((await api(owner.token).get(`/books/${book.id}`)).body.photoUploads).to.equal(true);
-      expect((await api(other.token).get(`/books/${book.id}`)).body.photoUploads).to.equal(false);
-      expect((await api().get(`/books/${book.id}`)).body.photoUploads).to.equal(false);
+    it("tells the owner, and only the owner, that the book is theirs and they can add photos", async () => {
+      const mine = (await api(owner.token).get(`/books/${book.id}`)).body;
+      expect(mine).to.include({ isOwner: true, photoUploads: true });
+      expect((await api(other.token).get(`/books/${book.id}`)).body).to.include({ isOwner: false, photoUploads: false });
+      expect((await api().get(`/books/${book.id}`)).body).to.include({ isOwner: false, photoUploads: false });
       expect((await api(owner.token).get("/user")).body.photoUploads).to.equal(true);
     });
 
@@ -276,7 +329,7 @@ describe("book photos", () => {
 
       const page = await api(owner.token).get(`/books/${book.id}`);
       expect(page).to.have.status(200);
-      expect(page.body.photoUploads).to.equal(false);
+      expect(page.body).to.include({ isOwner: true, photoUploads: false });
       expect(page.body.photos.map((p) => p.url)).to.deep.equal([url]);
       expect((await api(owner.token).get("/user")).body.photoUploads).to.equal(false);
 
@@ -304,13 +357,16 @@ describe("book photos", () => {
   });
 
   describe("deleting a book's blobs with the book", () => {
-    it("when its owner takes it off their shelf", async () => {
+    it("when its owner takes it off their shelf, uploads never attached included", async () => {
       const urls = await withPhotos(2);
+      const unattached = store.upload(book.id);
+      const otherBooks = store.upload((await offerBook(owner)).id);
 
       expect(await api(owner.token).delete(`/user/offered/${book.id}`)).to.have.status(200);
 
       await photoCleanupSettled();
-      expect(store.deleted).to.have.members(urls);
+      expect(store.deleted).to.have.members([...urls, unattached]);
+      expect(store.blobs.has(otherBooks)).to.equal(true);
       expect(await PhotoCleanup.countDocuments()).to.equal(0);
     });
 
@@ -348,7 +404,9 @@ describe("book photos", () => {
       expect(await OfferedBook.countDocuments()).to.equal(0);
     });
 
-    it("when a trade completes on its own", async () => {
+    it("when a trade completes on its own, and only that trade's", async () => {
+      const [earlier] = await withPhotos(1, await offerBook(owner));
+      await PhotoCleanup.create({ urls: [earlier] });
       const { id, urls } = await confirmedTrade();
       await Exchange.updateOne({ _id: id }, { $set: { autoCompletesAt: new Date(Date.now() - 1000) } });
 
@@ -356,6 +414,39 @@ describe("book photos", () => {
 
       await photoCleanupSettled();
       expect(store.deleted).to.have.members(urls);
+      expect(await PhotoCleanup.countDocuments()).to.equal(1);
+    });
+  });
+
+  describe("the daily cron", () => {
+    it("deletes uploads over a day old that no book shows, and nothing else", async () => {
+      const lastWeek = new Date(Date.now() - 7 * DAY);
+      const [attached] = await withPhotos(1);
+      store.blobs.get(attached).uploadedAt = lastWeek;
+      const stale = store.upload(book.id, { uploadedAt: lastWeek });
+      const ofRemovedBook = store.upload("0123456789abcdef01234567", { uploadedAt: lastWeek });
+      const recent = store.upload(book.id, { uploadedAt: new Date(Date.now() - DAY / 2) });
+
+      expect(await runCleanupCron()).to.deep.equal({ cleared: 0, unattached: 2 });
+
+      expect(store.deleted).to.have.members([stale, ofRemovedBook]);
+      expect(store.blobs.has(attached)).to.equal(true);
+      expect(store.blobs.has(recent)).to.equal(true);
+    });
+
+    it("goes through the store a page at a time", async () => {
+      const lastWeek = new Date(Date.now() - 7 * DAY);
+      const stale = Array.from({ length: 1001 }, () => store.upload(book.id, { uploadedAt: lastWeek }));
+      const deletions = [];
+      const del = blobStore.del;
+      blobStore.del = async (urls) => {
+        deletions.push(urls.length);
+        return del(urls);
+      };
+
+      expect(await runCleanupCron()).to.deep.equal({ cleared: 0, unattached: stale.length });
+      expect(deletions).to.deep.equal([1000, 1]);
+      expect(store.blobs.size).to.equal(0);
     });
   });
 });

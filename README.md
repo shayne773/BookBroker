@@ -231,7 +231,9 @@ of at most 2 MB, and only the book's owner can add or remove its photos.
 A book's photos are deleted from the store with the book, however it leaves (its
 owner removes it, or a trade completes), and a photo with its removal. A deletion
 that fails is kept and retried by a daily cron job (`/api/cron/photo-cleanup`), so
-it never holds up what the reader was doing.
+it never holds up what the reader was doing; the same job deletes uploads more than
+a day old that were never added to their book. An owner gets at most 12 upload
+tokens an hour, and while an accepted trade holds a book its photos cannot change.
 
 Without `BLOB_READ_WRITE_TOKEN`, nothing offers photos and everything else works as
 before. To turn them on:

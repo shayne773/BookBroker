@@ -4,7 +4,7 @@
 import { timingSafeEqual } from "node:crypto";
 import express from "express";
 import { resolveTradeDeadlines } from "../lib/tradeDeadlines.js";
-import { cleanUpPhotos } from "../lib/photos.js";
+import { cleanUpPhotos, deleteUnattachedBlobs } from "../lib/photos.js";
 
 const router = express.Router();
 
@@ -30,11 +30,11 @@ router.get("/trade-deadlines", async (req, res, next) => {
   }
 });
 
-// Daily: deletes the photo blobs whose deletion failed or was left for later
-// (lib/photos.js).
+// Daily: deletes the photo blobs whose deletion failed or was left for later,
+// and uploads never attached to their book (lib/photos.js).
 router.get("/photo-cleanup", async (req, res, next) => {
   try {
-    res.json({ cleared: await cleanUpPhotos() });
+    res.json({ cleared: await cleanUpPhotos(), unattached: await deleteUnattachedBlobs() });
   } catch (err) {
     next(err);
   }

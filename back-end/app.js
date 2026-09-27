@@ -484,7 +484,8 @@ app.post("/logout", async (req, res, next) => {
 
 // A direct link opens a book wherever it is, beyond the caller's distance too,
 // and says how far away it is (beyond it, only that it is farther). The book's
-// photos come with it; `photoUploads` tells its owner they can add some.
+// photos come with it; `isOwner` tells its owner they can manage them, and
+// `photoUploads` that they can add some.
 app.get("/books/:id", optionalAuth, async (req, res, next) => {
   try {
     const book = await OfferedBook.findById(req.params.id).select("+ownerGeo");
@@ -500,11 +501,13 @@ app.get("/books/:id", optionalAuth, async (req, res, next) => {
 
     const owner = await User.findById(book.owner).select("username location");
     const { ownerGeo, ...result } = book.toObject();
+    const isOwner = req.user?.userId === String(book.owner);
     result.owner = owner ? { id: owner._id, username: owner.username, location: owner.location } : null;
     res.json({
       ...result,
       ...distanceFields(await readerArea(req.user?.userId), ownerGeo),
-      photoUploads: photosEnabled() && req.user?.userId === String(book.owner),
+      isOwner,
+      photoUploads: photosEnabled() && isOwner,
     });
   } catch (err) {
     // A malformed id is simply "no such book" as far as the caller is
@@ -1065,9 +1068,9 @@ app.delete("/user/wishlist/:id", authMiddleware, async (req, res) => {
 
 app.delete("/user/offered/:id", authMiddleware, async (req, res) => {
   try {
-    const removed = mongoose.isValidObjectId(req.params.id)
+    const { removed } = mongoose.isValidObjectId(req.params.id)
       ? await removeOfferedBooks({ _id: req.params.id, owner: req.user.userId })
-      : 0;
+      : { removed: 0 };
 
     if (!removed) return res.status(404).json({ message: "Book not found or not authorized" });
     res.json({ message: "Book successfully deleted" });

@@ -185,10 +185,16 @@ const BookPage = () => {
             {/* The owner's own photos of their copy; the catalogue cover stays the main image. */}
             {(photos.length > 0 || book.photoUploads) && (
               <section className="book__section">
-                <h2 className="fact__term">{book.photoUploads ? 'Your photos of this copy' : 'Photos of this copy'}</h2>
+                <h2 className="fact__term">{book.isOwner ? 'Your photos of this copy' : 'Photos of this copy'}</h2>
                 <PhotoGallery photos={photos} title={book.title} />
-                {book.photoUploads ? (
-                  <PhotoManager bookId={id} photos={photos} onChange={setPhotos} />
+                {book.isOwner ? (
+                  book.locked ? (
+                    <p className="hint mt-3">
+                      This book is in an accepted trade, so its photos can't change until the trade is over.
+                    </p>
+                  ) : (
+                    <PhotoManager bookId={id} photos={photos} canUpload={book.photoUploads} onChange={setPhotos} />
+                  )
                 ) : (
                   // Photos are the owner's; reporting them is reporting the owner.
                   book.owner?.id && (

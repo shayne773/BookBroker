@@ -216,7 +216,9 @@ wishlistNoticeSchema.index({ sentAt: 1 }, { expireAfterSeconds: WISHLIST_NOTICE_
 // cron to retry, until the TTL gives up on it.
 const PHOTO_CLEANUP_TTL_SECONDS = 30 * 24 * 60 * 60;
 const photoCleanupSchema = new Schema({
-  urls: { type: [String], required: true },
+  urls: { type: [String], default: [] },
+  // Path prefixes, one per removed book, whose every blob goes.
+  prefixes: { type: [String], default: [] },
   createdAt: { type: Date, default: Date.now },
   attempts: { type: Number, default: 0 },
 });
