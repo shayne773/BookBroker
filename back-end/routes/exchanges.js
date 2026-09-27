@@ -6,7 +6,7 @@ import { BLOCKED_TRADE_MESSAGE, isBlockedBetween } from "../lib/blocks.js";
 import { isSuspended } from "../lib/suspensions.js";
 import { LoginThrottle } from "../lib/loginThrottle.js";
 import { notifyTrade } from "../lib/notifications.js";
-import { cleanUpPhotosInBackground } from "../lib/photos.js";
+import { discardBookBlobs } from "../lib/photos.js";
 import {
   completionDeadline,
   proposalExpiry,
@@ -434,17 +434,17 @@ router.post("/:id/confirm-complete", async (req, res) => {
     if (!ex.autoCompletesAt) ex.autoCompletesAt = completionDeadline();
 
     // if both confirmed -> finalize
-    let cleanup = null;
+    let removedBooks = [];
     if (ex.requesterConfirmedComplete && ex.responderConfirmedComplete) {
       ex.status = "COMPLETED";
-      cleanup = await removeTradedBooks(ex, session);
+      removedBooks = await removeTradedBooks(ex, session);
     }
 
     await ex.save({ session });
 
     await session.commitTransaction();
     if (ex.status === "COMPLETED") {
-      cleanUpPhotosInBackground(cleanup);
+      discardBookBlobs(removedBooks);
       notifyTrade(ex, "completed", userId);
     }
     res.json({ message: "Completion recorded", status: ex.status });

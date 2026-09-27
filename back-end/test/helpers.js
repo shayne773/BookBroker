@@ -10,7 +10,7 @@ import { createSession } from "../lib/sessions.js";
 import { normalizeEmail } from "../lib/validation.js";
 import { lookupZip } from "../lib/zipCodes.js";
 import { bookPosition } from "../lib/nearby.js";
-import { blobStore } from "../lib/photos.js";
+import { blobStore, photoPrefix } from "../lib/photos.js";
 import { BlobNotFoundError } from "@vercel/blob";
 
 use(chaiHttp);
@@ -189,15 +189,18 @@ export function googleVolume(id, { isbn, title = `Book ${id}`, thumbnail = `http
 
 // Turns photos on against a fake Vercel Blob store for one test (test/setup.js
 // turns them off again). `upload(bookId)` puts a blob in it the way the browser
-// would and returns its URL; `blobs` maps URL to { pathname, contentType, size, uploadedAt };
+// would (under `prefix`, by default the book's in this namespace) and returns its URL; `blobs` maps URL to { pathname, contentType, size, uploadedAt };
 // `tokens` has the options of each client token issued, `deleted` every URL
 // deleted. Set `failDeletes` to make deletion fail.
 export function mockBlobStore() {
   process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_teststore_secret";
   const store = { blobs: new Map(), tokens: [], deleted: [], failDeletes: false };
 
-  store.upload = (bookId, { contentType = "image/jpeg", size = 250_000, uploadedAt = new Date() } = {}) => {
-    const pathname = `books/${bookId}/${new mongoose.Types.ObjectId()}.jpg`;
+  store.upload = (
+    bookId,
+    { contentType = "image/jpeg", size = 250_000, uploadedAt = new Date(), prefix = photoPrefix(bookId) } = {}
+  ) => {
+    const pathname = `${prefix}${new mongoose.Types.ObjectId()}.jpg`;
     const url = `https://teststore.public.blob.vercel-storage.com/${pathname}`;
     store.blobs.set(url, { pathname, contentType, size, uploadedAt });
     return url;

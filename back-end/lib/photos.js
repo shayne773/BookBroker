@@ -9,16 +9,18 @@
 // Without BLOB_READ_WRITE_TOKEN photos are off: nothing can be uploaded and the
 // front end hides the controls. Photos stored meanwhile still show.
 //
+// Every blob lives under this deployment's namespace (photoNamespace), so
+// deployments or databases sharing a store never touch each other's blobs.
+//
 // A blob is deleted through discardPhotos, or with its whole book through
-// discardBookBlobs, which record it in a PhotoCleanup with the change that drops
-// it, so a deletion that fails is logged and retried by the daily cron
-// (/cron/photo-cleanup) rather than lost. That cron also deletes uploads never
-// attached to their book (deleteUnattachedBlobs).
+// discardBookBlobs, in the background and best effort: whatever they miss, the
+// daily cron (/cron/photo-cleanup) deletes with the uploads never attached to
+// their book (deleteUnattachedBlobs).
 import { randomBytes } from "node:crypto";
 import mongoose from "mongoose";
 import { del, head, list, BlobError, BlobNotFoundError } from "@vercel/blob";
 import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
-import { MAX_PHOTOS, OfferedBook, PhotoCleanup } from "../Data.js";
+import { MAX_PHOTOS, OfferedBook } from "../Data.js";
 import { runInBackground } from "./background.js";
 
 export { MAX_PHOTOS };
@@ -49,8 +51,13 @@ export const blobStore = {
   list: (options) => list(options),
 };
 
-// Every blob of a book lives under its own path, so a URL names its book.
-const photoPrefix = (bookId) => `books/${bookId}/`;
+// The environment and database this API runs against, e.g. "production-bookbroker".
+export const photoNamespace = () =>
+  `${process.env.VERCEL_ENV || process.env.NODE_ENV || "development"}-${mongoose.connection.name}`;
+
+// Every book's blobs live under their own path in the namespace, so a URL names its book.
+const booksPrefix = () => `${photoNamespace()}/books/`;
+export const photoPrefix = (bookId) => `${booksPrefix()}${bookId}/`;
 
 /**
  * A client token for one photo of `bookId` of `contentType`: `{ token, pathname }`.
@@ -111,49 +118,20 @@ export async function checkUpload(bookId, url) {
 
 const pending = new Set();
 
-// Records blobs for deletion, inside `session` when given: `urls`, and every
-// blob under the books of `bookIds`. Returns the record's id.
-async function recordCleanup({ urls = [], bookIds = [] }, session) {
-  const [record] = await PhotoCleanup.create([{ urls, prefixes: bookIds.map((id) => photoPrefix(id)) }], {
-    session,
-  });
-  return record._id;
+// Runs `work` after the response, without holding it up. A failure is only
+// logged: the daily cron deletes whatever it leaves.
+function inBackground(work, what) {
+  const job = (async () => {
+    if (photosEnabled()) await work();
+  })().finally(() => pending.delete(job));
+  pending.add(job);
+  runInBackground(job, what);
 }
 
-// Records, then deletes in the background; the photos are already gone from
-// their book, so failing to record their blobs only leaves them in the store,
-// which is not worth failing the request over.
-async function recordAndCleanUp(blobs) {
-  try {
-    cleanUpPhotosInBackground(await recordCleanup(blobs));
-  } catch (err) {
-    console.error("Failed to record photo blobs for deletion:", err);
-  }
-}
-
-/**
- * Deletes the blobs at `urls`. The URLs are recorded first, inside `session`'s
- * transaction when there is one, so the record stands or falls with the change
- * that drops the photos. Without a session the blobs go right away, in the
- * background; with one, this returns the record's id for the caller to pass to
- * cleanUpPhotosInBackground once committed, and the daily cron covers any it misses.
- */
-export async function discardPhotos(urls, { session } = {}) {
-  if (!urls.length) return null;
-  if (session) return recordCleanup({ urls }, session);
-  await recordAndCleanUp({ urls });
-  return null;
-}
-
-/**
- * Deletes every blob of the books `bookIds`, attached as a photo or not, the
- * way discardPhotos deletes URLs.
- */
-export async function discardBookBlobs(bookIds, { session } = {}) {
-  if (!bookIds.length) return null;
-  if (session) return recordCleanup({ bookIds }, session);
-  await recordAndCleanUp({ bookIds });
-  return null;
+/** Deletes the blobs at `urls`, in the background. */
+export function discardPhotos(urls) {
+  if (!urls.length) return;
+  inBackground(() => blobStore.del(urls), "delete photo blobs");
 }
 
 // The URLs of every blob under `prefix`.
@@ -168,60 +146,18 @@ async function blobsUnder(prefix) {
   return urls;
 }
 
-// Deletes the blobs of one cleanup record, then the record. A failure is
-// logged and the record kept, counted, for the cron. Returns whether it cleared.
-async function clearCleanup(record) {
-  try {
-    const urls = [...record.urls];
-    for (const prefix of record.prefixes ?? []) urls.push(...(await blobsUnder(prefix)));
+/**
+ * Deletes every blob of the books `bookIds`, attached as a photo or not, in
+ * the background. Inside a transaction, call it once committed.
+ */
+export function discardBookBlobs(bookIds) {
+  if (!bookIds?.length) return;
+  const prefixes = bookIds.map((id) => photoPrefix(id));
+  inBackground(async () => {
+    const urls = [];
+    for (const prefix of prefixes) urls.push(...(await blobsUnder(prefix)));
     if (urls.length) await blobStore.del(urls);
-    await PhotoCleanup.deleteOne({ _id: record._id });
-    return true;
-  } catch (err) {
-    console.error(`Failed to delete photo blobs ${[...record.urls, ...(record.prefixes ?? [])].join(", ")}:`, err);
-    await PhotoCleanup.updateOne({ _id: record._id }, { $inc: { attempts: 1 } });
-    return false;
-  }
-}
-
-const CLEANUP_BATCH = 100;
-
-/**
- * Deletes the blobs of every recorded cleanup, oldest first, for the cron. A
- * failure is logged and its record kept for the next run. Returns how many
- * records were cleared.
- */
-export async function cleanUpPhotos() {
-  if (!photosEnabled()) return 0;
-
-  let cleared = 0;
-  const failed = [];
-  for (;;) {
-    const records = await PhotoCleanup.find({ _id: { $nin: failed } })
-      .sort({ createdAt: 1 })
-      .limit(CLEANUP_BATCH)
-      .lean();
-    for (const record of records) {
-      if (await clearCleanup(record)) cleared += 1;
-      else failed.push(record._id);
-    }
-    if (records.length < CLEANUP_BATCH) return cleared;
-  }
-}
-
-/**
- * Clears the one cleanup record `id` (from discardPhotos or discardBookBlobs)
- * after the response, without holding it up. Older records are the cron's.
- */
-export function cleanUpPhotosInBackground(id) {
-  if (!id) return;
-  const job = (async () => {
-    if (!photosEnabled()) return;
-    const record = await PhotoCleanup.findById(id).lean();
-    if (record) await clearCleanup(record);
-  })().finally(() => pending.delete(job));
-  pending.add(job);
-  runInBackground(job, "delete photo blobs");
+  }, "delete book blobs");
 }
 
 /** Resolves when every blob deletion started so far has finished. */
@@ -235,19 +171,20 @@ const UNATTACHED_AGE_MS = 24 * 60 * 60 * 1000;
 const LIST_BATCH = 1000;
 
 /**
- * Deletes every blob under books/ older than a day that is not one of its
- * book's photos, a page of the store at a time, for the cron. Returns how many
- * blobs were deleted.
+ * Deletes every blob of this namespace's books older than a day that is not one
+ * of its book's photos, a page of the store at a time, for the cron. Returns how
+ * many blobs were deleted.
  */
 export async function deleteUnattachedBlobs(now = Date.now()) {
   if (!photosEnabled()) return 0;
 
+  const prefix = booksPrefix();
   let deleted = 0;
   let cursor;
   do {
-    const page = await blobStore.list({ prefix: "books/", cursor, limit: LIST_BATCH });
+    const page = await blobStore.list({ prefix, cursor, limit: LIST_BATCH });
     const old = page.blobs.filter((blob) => now - new Date(blob.uploadedAt).getTime() > UNATTACHED_AGE_MS);
-    const bookIds = [...new Set(old.map((blob) => blob.pathname.split("/")[1]))].filter((id) =>
+    const bookIds = [...new Set(old.map((blob) => blob.pathname.slice(prefix.length).split("/")[0]))].filter((id) =>
       mongoose.isValidObjectId(id)
     );
     const books = await OfferedBook.find({ _id: { $in: bookIds } }).select("photos.url").lean();

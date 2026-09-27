@@ -1,9 +1,9 @@
 import { expect } from "chai";
 import { api, mockBlobStore, offerBook, photo, signUp } from "./helpers.js";
-import { OfferedBook, PhotoCleanup } from "../Data.js";
+import { OfferedBook } from "../Data.js";
 import Exchange from "../Exchange.js";
 import { BlobStoreNotFoundError } from "@vercel/blob";
-import { blobStore, MAX_PHOTO_BYTES, photoCleanupSettled } from "../lib/photos.js";
+import { blobStore, MAX_PHOTO_BYTES, photoCleanupSettled, photoPrefix } from "../lib/photos.js";
 import { resolveTradeDeadlines } from "../lib/tradeDeadlines.js";
 
 const MB = 1024 * 1024;
@@ -59,7 +59,7 @@ describe("book photos", () => {
 
       expect(res).to.have.status(200);
       expect(res.body.token).to.be.a("string");
-      expect(res.body.pathname).to.match(new RegExp(`^books/${book.id}/[0-9a-f]{32}\\.webp$`));
+      expect(res.body.pathname).to.match(new RegExp(`^${photoPrefix(book.id)}[0-9a-f]{32}\\.webp$`));
       const [options] = store.tokens;
       expect(options).to.include({
         pathname: res.body.pathname,
@@ -148,11 +148,19 @@ describe("book photos", () => {
     });
 
     it("refuses a URL the store does not have", async () => {
-      const res = await addPhoto(owner, `https://teststore.public.blob.vercel-storage.com/books/${book.id}/x.jpg`);
+      const res = await addPhoto(owner, `https://teststore.public.blob.vercel-storage.com/${photoPrefix(book.id)}x.jpg`);
       expect(res).to.have.status(400);
       expect(await addPhoto(owner, "http://example.com/a.jpg")).to.have.status(400);
       expect(await addPhoto(owner, "not a url")).to.have.status(400);
       expect(await storedPhotos()).to.be.empty;
+    });
+
+    it("refuses an upload for the same book id in another namespace and leaves it alone", async () => {
+      const url = store.upload(book.id, { prefix: `production-bookbroker/books/${book.id}/` });
+
+      expect(await addPhoto(owner, url)).to.have.status(400);
+      await photoCleanupSettled();
+      expect(store.deleted).to.be.empty;
     });
 
     it("refuses another book's upload and leaves it alone", async () => {
@@ -210,7 +218,6 @@ describe("book photos", () => {
       expect(res.body.photos.map((p) => p.url)).to.deep.equal([second]);
       await photoCleanupSettled();
       expect(store.deleted).to.deep.equal([first]);
-      expect(await PhotoCleanup.countDocuments()).to.equal(0);
     });
 
     it("lets nobody but the owner remove a photo", async () => {
@@ -224,39 +231,39 @@ describe("book photos", () => {
       expect(store.deleted).to.be.empty;
     });
 
-    it("still removes the photo when its blob cannot be deleted, and the cron retries it", async () => {
+    it("still removes the photo when its blob cannot be deleted, and the cron deletes it later", async () => {
       const [url] = await withPhotos(1);
       const [stored] = await storedPhotos();
+      store.blobs.get(url).uploadedAt = new Date(Date.now() - 7 * DAY);
       store.failDeletes = true;
 
       expect(await api(owner.token).delete(`${photosPath()}/${stored._id}`)).to.have.status(200);
       await photoCleanupSettled();
       expect(await storedPhotos()).to.be.empty;
-      const [pending] = await PhotoCleanup.find().lean();
-      expect(pending).to.include({ attempts: 1 });
-      expect(pending.urls).to.deep.equal([url]);
+      expect(store.blobs.has(url)).to.equal(true);
 
       store.failDeletes = false;
-      expect(await runCleanupCron()).to.deep.equal({ cleared: 1, unattached: 0 });
+      expect(await runCleanupCron()).to.deep.equal({ unattached: 1 });
       expect(store.deleted).to.deep.equal([url]);
-      expect(await PhotoCleanup.countDocuments()).to.equal(0);
     });
 
-    it("leaves an earlier failed deletion to the cron rather than retrying it with every removal", async () => {
-      const [first, second] = await withPhotos(2);
-      const [firstPhoto, secondPhoto] = await storedPhotos();
-      store.failDeletes = true;
-      expect(await api(owner.token).delete(`${photosPath()}/${firstPhoto._id}`)).to.have.status(200);
-      await photoCleanupSettled();
+    it("answers that the book is locked when a trade locks it during the removal", async () => {
+      await withPhotos(1);
+      const [stored] = await storedPhotos();
+      const findOneAndUpdate = OfferedBook.findOneAndUpdate;
+      OfferedBook.findOneAndUpdate = function (...args) {
+        OfferedBook.findOneAndUpdate = findOneAndUpdate;
+        return { lean: async () => (await lock(), findOneAndUpdate.apply(this, args).lean()) };
+      };
 
-      store.failDeletes = false;
-      expect(await api(owner.token).delete(`${photosPath()}/${secondPhoto._id}`)).to.have.status(200);
-      await photoCleanupSettled();
-
-      expect(store.deleted).to.deep.equal([second]);
-      const [pending] = await PhotoCleanup.find().lean();
-      expect(pending.urls).to.deep.equal([first]);
-      expect(pending.attempts).to.equal(1);
+      try {
+        const res = await api(owner.token).delete(`${photosPath()}/${stored._id}`);
+        expect(res).to.have.status(409);
+        expect(res.body.message).to.match(/accepted trade/);
+      } finally {
+        OfferedBook.findOneAndUpdate = findOneAndUpdate;
+      }
+      expect(await storedPhotos()).to.have.length(1);
     });
   });
 
@@ -367,7 +374,17 @@ describe("book photos", () => {
       await photoCleanupSettled();
       expect(store.deleted).to.have.members([...urls, unattached]);
       expect(store.blobs.has(otherBooks)).to.equal(true);
-      expect(await PhotoCleanup.countDocuments()).to.equal(0);
+    });
+
+    it("only in this namespace, leaving the same book id's blobs elsewhere in the store", async () => {
+      const urls = await withPhotos(1);
+      const elsewhere = store.upload(book.id, { prefix: `production-bookbroker/books/${book.id}/` });
+
+      expect(await api(owner.token).delete(`/user/offered/${book.id}`)).to.have.status(200);
+
+      await photoCleanupSettled();
+      expect(store.deleted).to.deep.equal(urls);
+      expect(store.blobs.has(elsewhere)).to.equal(true);
     });
 
     it("not when someone else tries to", async () => {
@@ -405,8 +422,7 @@ describe("book photos", () => {
     });
 
     it("when a trade completes on its own, and only that trade's", async () => {
-      const [earlier] = await withPhotos(1, await offerBook(owner));
-      await PhotoCleanup.create({ urls: [earlier] });
+      const [untraded] = await withPhotos(1, await offerBook(owner));
       const { id, urls } = await confirmedTrade();
       await Exchange.updateOne({ _id: id }, { $set: { autoCompletesAt: new Date(Date.now() - 1000) } });
 
@@ -414,7 +430,7 @@ describe("book photos", () => {
 
       await photoCleanupSettled();
       expect(store.deleted).to.have.members(urls);
-      expect(await PhotoCleanup.countDocuments()).to.equal(1);
+      expect(store.blobs.has(untraded)).to.equal(true);
     });
   });
 
@@ -427,11 +443,26 @@ describe("book photos", () => {
       const ofRemovedBook = store.upload("0123456789abcdef01234567", { uploadedAt: lastWeek });
       const recent = store.upload(book.id, { uploadedAt: new Date(Date.now() - DAY / 2) });
 
-      expect(await runCleanupCron()).to.deep.equal({ cleared: 0, unattached: 2 });
+      expect(await runCleanupCron()).to.deep.equal({ unattached: 2 });
 
       expect(store.deleted).to.have.members([stale, ofRemovedBook]);
       expect(store.blobs.has(attached)).to.equal(true);
       expect(store.blobs.has(recent)).to.equal(true);
+    });
+
+    it("never touches another namespace's blobs, even for a book id this database has", async () => {
+      const lastWeek = new Date(Date.now() - 7 * DAY);
+      const elsewhere = [
+        store.upload(book.id, { prefix: `production-bookbroker/books/${book.id}/`, uploadedAt: lastWeek }),
+        store.upload(book.id, { prefix: `books/${book.id}/`, uploadedAt: lastWeek }),
+        store.upload("0123456789abcdef01234567", { prefix: "preview-bookbroker/books/0123456789abcdef01234567/", uploadedAt: lastWeek }),
+      ];
+      const stale = store.upload(book.id, { uploadedAt: lastWeek });
+
+      expect(await runCleanupCron()).to.deep.equal({ unattached: 1 });
+
+      expect(store.deleted).to.deep.equal([stale]);
+      for (const url of elsewhere) expect(store.blobs.has(url), url).to.equal(true);
     });
 
     it("goes through the store a page at a time", async () => {
@@ -444,7 +475,7 @@ describe("book photos", () => {
         return del(urls);
       };
 
-      expect(await runCleanupCron()).to.deep.equal({ cleared: 0, unattached: stale.length });
+      expect(await runCleanupCron()).to.deep.equal({ unattached: stale.length });
       expect(deletions).to.deep.equal([1000, 1]);
       expect(store.blobs.size).to.equal(0);
     });

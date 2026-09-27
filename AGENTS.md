@@ -86,11 +86,13 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   straight to Vercel Blob: `front-end/src/photos.js` resizes and re-encodes (dropping EXIF), and
   `back-end/routes/photos.js` only issues one-upload client tokens and checks the uploaded URL
   (`lib/photos.js`). Without `BLOB_READ_WRITE_TOKEN` photos are off and the UI hidden.
+- Blob paths are `<environment>-<database>/books/<id>/...` (`photoPrefix` in `lib/photos.js`), and
+  every prefix delete and sweep stays inside the current namespace, so stores shared by
+  deployments or databases never lose another's blobs.
 - Delete offered books only through `removeOfferedBooks` (`lib/offeredBooks.js`), which deletes
-  the book's whole `books/<id>/` prefix, and drop a photo only through `discardPhotos`: both
-  record the blobs in `PhotoCleanup`, inside the caller's transaction if any (then pass the
-  returned id to `cleanUpPhotosInBackground` after commit, which clears only that record); the
-  daily `/cron/photo-cleanup` retries failures and deletes uploads never attached after a day.
+  the book's whole prefix (inside a transaction, pass the returned `bookIds` to `discardBookBlobs`
+  after commit), and drop a photo only through `discardPhotos`. Both delete best effort in the
+  background; the daily `/cron/photo-cleanup` deletes every blob over a day old that no book shows.
   A `locked` book's photos cannot change.
 - Lists send `photoCount`, never the URLs (`presentStages` in `lib/nearby.js`). Tests never reach
   Blob: `test/setup.js` refuses `blobStore`, and `mockBlobStore` in `test/helpers.js` fakes it.

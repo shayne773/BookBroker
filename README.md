@@ -229,10 +229,13 @@ the store before it keeps its URL. The store holds only JPEG, PNG and WebP image
 of at most 2 MB, and only the book's owner can add or remove its photos.
 
 A book's photos are deleted from the store with the book, however it leaves (its
-owner removes it, or a trade completes), and a photo with its removal. A deletion
-that fails is kept and retried by a daily cron job (`/api/cron/photo-cleanup`), so
-it never holds up what the reader was doing; the same job deletes uploads more than
-a day old that were never added to their book. An owner gets at most 12 upload
+owner removes it, or a trade completes), and a photo with its removal, after the
+response so it never holds up what the reader was doing. A daily cron job
+(`/api/cron/photo-cleanup`) deletes every blob more than a day old that no book
+shows, which covers a deletion that failed and uploads never added to their book.
+Blobs live under a namespace named after the environment and database
+(`production-bookbroker/books/<id>/...`), and deletions and the daily job only
+ever touch their own namespace. An owner gets at most 12 upload
 tokens an hour, and while an accepted trade holds a book its photos cannot change.
 
 Without `BLOB_READ_WRITE_TOKEN`, nothing offers photos and everything else works as
@@ -243,9 +246,10 @@ before. To turn them on:
 2. Connect it to the project for the environments that should have photos
    (Production, and Preview if you like). Vercel then adds `BLOB_READ_WRITE_TOKEN`
    to those environments itself; redeploy for it to take effect.
-3. To have photos locally, copy that token into `back-end/.env` (or run
-   `vercel env pull`). Uploads from `localhost` then go to the same store, so use a
-   separate store for development if you want to keep them apart.
+3. To have photos locally, create a **separate** Blob store for development and put
+   its token in `back-end/.env`. Never copy the production token (nor `vercel env
+   pull` it) into a local `.env`: local runs would then write to, and could delete
+   from, the production store.
 
 ## Demo data
 
@@ -324,7 +328,7 @@ build:
    | `FRONTEND_BASE_URL` | The site's Vercel address, e.g. `https://your-project.vercel.app`, with no trailing slash. Emailed links point here. |
    | `ADMIN_EMAILS` | Comma-separated confirmed emails of the admin accounts; unset means no admins. A change takes effect on the next deployment (redeploy), not a restart. |
    | `NODE_ENV` | `production`. The API then refuses to start without `FRONTEND_BASE_URL` rather than emailing links to `localhost`. |
-   | `CRON_SECRET` | A random string of at least 16 characters (e.g. `openssl rand -hex 32`). Vercel sends it with the daily cron jobs in `vercel.json`, which expire unanswered trade offers, complete trades one side has confirmed and retry failed photo deletions; without it the jobs are refused. |
+   | `CRON_SECRET` | A random string of at least 16 characters (e.g. `openssl rand -hex 32`). Vercel sends it with the daily cron jobs in `vercel.json`, which expire unanswered trade offers, complete trades one side has confirmed and delete photo blobs no book shows; without it the jobs are refused. |
    | `BLOB_READ_WRITE_TOKEN` | Added by Vercel when a Blob store is connected to the project; see [Book photos](#book-photos). Without it there are no photos. |
 
    Do not set `VITE_SERVER_ADDRESS` or `CORS_ALLOWED_ORIGINS` on Vercel: the site

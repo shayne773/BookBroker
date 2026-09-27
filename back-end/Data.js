@@ -209,21 +209,6 @@ const wishlistNoticeSchema = new Schema(
 );
 wishlistNoticeSchema.index({ sentAt: 1 }, { expireAfterSeconds: WISHLIST_NOTICE_INTERVAL_SECONDS });
 
-// Photo cleanup
-// Blobs waiting to be deleted from Vercel Blob (lib/photos.js). A record is written
-// with the change that drops the photos, inside the same transaction if there is
-// one, and removed once its blobs are gone; a failed deletion stays for the daily
-// cron to retry, until the TTL gives up on it.
-const PHOTO_CLEANUP_TTL_SECONDS = 30 * 24 * 60 * 60;
-const photoCleanupSchema = new Schema({
-  urls: { type: [String], default: [] },
-  // Path prefixes, one per removed book, whose every blob goes.
-  prefixes: { type: [String], default: [] },
-  createdAt: { type: Date, default: Date.now },
-  attempts: { type: Number, default: 0 },
-});
-photoCleanupSchema.index({ createdAt: 1 }, { expireAfterSeconds: PHOTO_CLEANUP_TTL_SECONDS });
-
 // Blocks and reports
 // A block works both ways: neither reader can message or propose a trade to the
 // other, and neither sees the other's offers. Only the blocker can lift it.
@@ -269,8 +254,6 @@ const Message =
   mongoose.models.Message || mongoose.model("Message", messageSchema);
 const WishlistNotice =
   mongoose.models.WishlistNotice || mongoose.model("WishlistNotice", wishlistNoticeSchema);
-const PhotoCleanup =
-  mongoose.models.PhotoCleanup || mongoose.model("PhotoCleanup", photoCleanupSchema);
 const Block = mongoose.models.Block || mongoose.model("Block", blockSchema);
 const Report = mongoose.models.Report || mongoose.model("Report", reportSchema);
 
@@ -308,7 +291,6 @@ export {
   WishlistNotice,
   WISHLIST_NOTICE_INTERVAL_SECONDS,
   MAX_PHOTOS,
-  PhotoCleanup,
   Block,
   Report,
   REPORT_REASONS,

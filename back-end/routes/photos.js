@@ -111,7 +111,7 @@ router.post("/", requirePhotoStore, async (req, res, next) => {
 
     const upload = await checkUpload(book._id, url);
     if (upload.problem) {
-      if (upload.discard) await discardPhotos([url]);
+      if (upload.discard) discardPhotos([url]);
       return res.status(400).json({ message: upload.problem });
     }
 
@@ -128,7 +128,7 @@ router.post("/", requirePhotoStore, async (req, res, next) => {
       return res.json({ photos: current.photos });
     }
     // Gone meanwhile, locked or full: the upload has no book to go on.
-    await discardPhotos([upload.url]);
+    discardPhotos([upload.url]);
     if (!current) return res.status(404).json({ message: BOOK_NOT_FOUND });
     if (current.locked) return bookLocked(res);
     res.status(409).json({ message: TOO_MANY_PHOTOS });
@@ -179,10 +179,13 @@ router.delete("/:photoId", async (req, res, next) => {
       { $pull: { photos: { _id: req.params.photoId } } },
       { projection: "photos" }
     ).lean();
-    if (!before) return res.status(404).json({ message: "Photo not found" });
+    if (!before) {
+      if ((await ownBook(req))?.locked) return bookLocked(res);
+      return res.status(404).json({ message: "Photo not found" });
+    }
 
     const removed = before.photos.find((photo) => String(photo._id) === req.params.photoId);
-    await discardPhotos([removed.url]);
+    discardPhotos([removed.url]);
     res.json({ photos: before.photos.filter((photo) => photo !== removed) });
   } catch (err) {
     next(err);
