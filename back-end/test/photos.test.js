@@ -3,7 +3,7 @@ import { api, mockBlobStore, offerBook, photo, signUp } from "./helpers.js";
 import { OfferedBook } from "../Data.js";
 import Exchange from "../Exchange.js";
 import { BlobStoreNotFoundError } from "@vercel/blob";
-import { blobStore, MAX_PHOTO_BYTES, photoCleanupSettled, photoPrefix } from "../lib/photos.js";
+import { blobStore, MAX_PHOTO_BYTES, photoCleanupSettled, photoNamespace, photoPrefix } from "../lib/photos.js";
 import { resolveTradeDeadlines } from "../lib/tradeDeadlines.js";
 
 const MB = 1024 * 1024;
@@ -38,6 +38,12 @@ describe("book photos", () => {
       delete process.env.CRON_SECRET;
     }
   };
+  // A connection to the same database name on another cluster, and where its blobs of `id` live.
+  const otherCluster = {
+    name: "bookbroker-test",
+    getClient: () => ({ options: { srvHost: "cluster1.other.mongodb.net", hosts: [] } }),
+  };
+  const otherClusterPrefix = (id) => `${photoNamespace(otherCluster)}/books/${id}/`;
   // Locks `book` as an accepted trade does.
   const lock = () => OfferedBook.updateOne({ _id: book.id }, { $set: { locked: true } });
   const withPhotos = async (count, target = book) => {
@@ -155,8 +161,8 @@ describe("book photos", () => {
       expect(await storedPhotos()).to.be.empty;
     });
 
-    it("refuses an upload for the same book id in another namespace and leaves it alone", async () => {
-      const url = store.upload(book.id, { prefix: `production-bookbroker/books/${book.id}/` });
+    it("refuses an upload for the same book id from another cluster and leaves it alone", async () => {
+      const url = store.upload(book.id, { prefix: otherClusterPrefix(book.id) });
 
       expect(await addPhoto(owner, url)).to.have.status(400);
       await photoCleanupSettled();
@@ -376,9 +382,9 @@ describe("book photos", () => {
       expect(store.blobs.has(otherBooks)).to.equal(true);
     });
 
-    it("only in this namespace, leaving the same book id's blobs elsewhere in the store", async () => {
+    it("only this cluster's, leaving the same book id's blobs from another cluster in the store", async () => {
       const urls = await withPhotos(1);
-      const elsewhere = store.upload(book.id, { prefix: `production-bookbroker/books/${book.id}/` });
+      const elsewhere = store.upload(book.id, { prefix: otherClusterPrefix(book.id) });
 
       expect(await api(owner.token).delete(`/user/offered/${book.id}`)).to.have.status(200);
 
@@ -434,6 +440,29 @@ describe("book photos", () => {
     });
   });
 
+  describe("photoNamespace", () => {
+    const connection = (srvHost, name = "bookbroker") => ({
+      name,
+      getClient: () => ({ options: { srvHost, hosts: [] } }),
+    });
+
+    it("is stable for one cluster and database, and differs for another cluster or database", () => {
+      const namespace = photoNamespace(connection("cluster0.abc.mongodb.net"));
+      expect(namespace).to.match(/^[0-9a-f]{16}$/);
+      expect(photoNamespace(connection("Cluster0.ABC.mongodb.net"))).to.equal(namespace);
+      expect(photoNamespace(connection("cluster1.abc.mongodb.net"))).not.to.equal(namespace);
+      expect(photoNamespace(connection("cluster0.abc.mongodb.net", "other"))).not.to.equal(namespace);
+    });
+
+    it("names the cluster by its members, whatever their order, when there is no SRV host", () => {
+      const members = (...hosts) => ({ name: "bookbroker", getClient: () => ({ options: { hosts } }) });
+      expect(photoNamespace(members("a.example:27017", "b.example:27017"))).to.equal(
+        photoNamespace(members("b.example:27017", "a.example:27017"))
+      );
+      expect(photoNamespace(members("a.example:27017"))).not.to.equal(photoNamespace(members("c.example:27017")));
+    });
+  });
+
   describe("the daily cron", () => {
     it("deletes uploads over a day old that no book shows, and nothing else", async () => {
       const lastWeek = new Date(Date.now() - 7 * DAY);
@@ -450,12 +479,15 @@ describe("book photos", () => {
       expect(store.blobs.has(recent)).to.equal(true);
     });
 
-    it("never touches another namespace's blobs, even for a book id this database has", async () => {
+    it("never touches another cluster's blobs, even for a book id this database has", async () => {
       const lastWeek = new Date(Date.now() - 7 * DAY);
       const elsewhere = [
-        store.upload(book.id, { prefix: `production-bookbroker/books/${book.id}/`, uploadedAt: lastWeek }),
+        store.upload(book.id, { prefix: otherClusterPrefix(book.id), uploadedAt: lastWeek }),
         store.upload(book.id, { prefix: `books/${book.id}/`, uploadedAt: lastWeek }),
-        store.upload("0123456789abcdef01234567", { prefix: "preview-bookbroker/books/0123456789abcdef01234567/", uploadedAt: lastWeek }),
+        store.upload("0123456789abcdef01234567", {
+          prefix: otherClusterPrefix("0123456789abcdef01234567"),
+          uploadedAt: lastWeek,
+        }),
       ];
       const stale = store.upload(book.id, { uploadedAt: lastWeek });
 
@@ -463,6 +495,23 @@ describe("book photos", () => {
 
       expect(store.deleted).to.deep.equal([stale]);
       for (const url of elsewhere) expect(store.blobs.has(url), url).to.equal(true);
+    });
+
+    it("cleans up after every environment on this database, Preview included", async () => {
+      const lastWeek = new Date(Date.now() - 7 * DAY);
+      let fromPreview;
+      process.env.VERCEL_ENV = "preview";
+      try {
+        fromPreview = store.upload(book.id, { uploadedAt: lastWeek });
+      } finally {
+        process.env.VERCEL_ENV = "production";
+      }
+      try {
+        expect(await runCleanupCron()).to.deep.equal({ unattached: 1 });
+      } finally {
+        delete process.env.VERCEL_ENV;
+      }
+      expect(store.deleted).to.deep.equal([fromPreview]);
     });
 
     it("goes through the store a page at a time", async () => {

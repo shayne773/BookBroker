@@ -233,9 +233,11 @@ owner removes it, or a trade completes), and a photo with its removal, after the
 response so it never holds up what the reader was doing. A daily cron job
 (`/api/cron/photo-cleanup`) deletes every blob more than a day old that no book
 shows, which covers a deletion that failed and uploads never added to their book.
-Blobs live under a namespace named after the environment and database
-(`production-bookbroker/books/<id>/...`), and deletions and the daily job only
-ever touch their own namespace. An owner gets at most 12 upload
+Blobs live under a namespace that is a short hash of the MongoDB cluster's host
+and the database name (`<namespace>/books/<id>/...`), so every deployment on one
+database, Preview and production alike, shares it, and deletions and the daily
+job only ever touch their own. Moving the database to a new cluster host starts a
+new namespace and leaves the old blobs behind. An owner gets at most 12 upload
 tokens an hour, and while an accepted trade holds a book its photos cannot change.
 
 Without `BLOB_READ_WRITE_TOKEN`, nothing offers photos and everything else works as

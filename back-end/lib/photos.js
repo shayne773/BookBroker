@@ -9,14 +9,14 @@
 // Without BLOB_READ_WRITE_TOKEN photos are off: nothing can be uploaded and the
 // front end hides the controls. Photos stored meanwhile still show.
 //
-// Every blob lives under this deployment's namespace (photoNamespace), so
-// deployments or databases sharing a store never touch each other's blobs.
+// Every blob lives under its database's namespace (photoNamespace), so
+// databases sharing a store never touch each other's blobs.
 //
 // A blob is deleted through discardPhotos, or with its whole book through
 // discardBookBlobs, in the background and best effort: whatever they miss, the
 // daily cron (/cron/photo-cleanup) deletes with the uploads never attached to
 // their book (deleteUnattachedBlobs).
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import mongoose from "mongoose";
 import { del, head, list, BlobError, BlobNotFoundError } from "@vercel/blob";
 import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
@@ -51,9 +51,19 @@ export const blobStore = {
   list: (options) => list(options),
 };
 
-// The environment and database this API runs against, e.g. "production-bookbroker".
-export const photoNamespace = () =>
-  `${process.env.VERCEL_ENV || process.env.NODE_ENV || "development"}-${mongoose.connection.name}`;
+/**
+ * The database `connection` is to, as a short stable hash of its cluster's
+ * host(s) and its name: never the credentials, and not the environment, so
+ * every deployment on one database (Preview and production) shares its blobs.
+ */
+export function photoNamespace(connection = mongoose.connection) {
+  const { srvHost, hosts } = connection.getClient().options;
+  const cluster = srvHost ?? hosts.map((host) => String(host)).sort().join(",");
+  return createHash("sha256")
+    .update(`${cluster.toLowerCase()}/${connection.name}`)
+    .digest("hex")
+    .slice(0, 16);
+}
 
 // Every book's blobs live under their own path in the namespace, so a URL names its book.
 const booksPrefix = () => `${photoNamespace()}/books/`;

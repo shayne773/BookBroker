@@ -86,9 +86,10 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   straight to Vercel Blob: `front-end/src/photos.js` resizes and re-encodes (dropping EXIF), and
   `back-end/routes/photos.js` only issues one-upload client tokens and checks the uploaded URL
   (`lib/photos.js`). Without `BLOB_READ_WRITE_TOKEN` photos are off and the UI hidden.
-- Blob paths are `<environment>-<database>/books/<id>/...` (`photoPrefix` in `lib/photos.js`), and
-  every prefix delete and sweep stays inside the current namespace, so stores shared by
-  deployments or databases never lose another's blobs.
+- Blob paths are `<namespace>/books/<id>/...` (`photoPrefix` in `lib/photos.js`), the namespace a
+  stable hash of the MongoDB cluster host(s) and database name (not the environment: Preview and
+  production share it). Every prefix delete and sweep stays inside it, so databases sharing a
+  store never lose another's blobs; changing the cluster host orphans the old namespace.
 - Delete offered books only through `removeOfferedBooks` (`lib/offeredBooks.js`), which deletes
   the book's whole prefix (inside a transaction, pass the returned `bookIds` to `discardBookBlobs`
   after commit), and drop a photo only through `discardPhotos`. Both delete best effort in the
