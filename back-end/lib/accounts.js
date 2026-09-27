@@ -94,6 +94,6 @@ export async function deleteAccount(userId) {
     await session.endSession();
   }
 
-  for (const exchange of completed) notifyTrade(exchange, "completed", uid);
+  for (const exchange of completed) notifyTrade(exchange, "completedByDeletion", uid);
   for (const exchange of cancelled) notifyTrade(exchange, "cancelled", uid);
 }

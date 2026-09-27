@@ -168,10 +168,16 @@ describe("deleting an account", () => {
       expect(left[0].locked).to.equal(false);
 
       await notificationsSettled();
-      expect(outbox.filter((m) => m.to === bea.email).map((m) => m.subject)).to.have.members([
+      const toBea = outbox.filter((m) => m.to === bea.email);
+      expect(toBea.map((m) => m.subject)).to.have.members([
         "Your trade is complete",
         "Deleted reader cancelled your trade",
       ]);
+      const completion = toBea.find((m) => m.subject === "Your trade is complete");
+      expect(completion.text).to.include(
+        "The other reader deleted their account. You had confirmed the trade, so it is now complete."
+      );
+      expect(completion.text).to.not.include("confirmed the trade, so it is complete.");
     });
 
     it("keeps completed trades and every rating, so nobody's average changes", async () => {
