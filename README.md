@@ -126,9 +126,9 @@ password and a typed confirmation. It is permanent, with no undo or grace period
 removes the account, its offered books (from browse, search, the map and everyone's
 matches), wishlist, the blocks it placed, its sessions and settings. An accepted trade
 the other reader has already confirmed completes, as it would at its deadline; its
-other open offers and accepted trades are cancelled, freeing the other side's books
-(the other reader gets the usual completion or cancellation email). Completed trades, ratings (so nobody's
-average moves), conversations and reports stay for the other readers and admins,
+other open offers and accepted trades are cancelled, freeing the other side's books.
+Either way the other reader gets an email about the trade. Completed trades, ratings
+(so nobody's average moves), conversations and reports stay for the other readers and admins,
 who see the reader as "Deleted reader". The address can then sign up again as a new
 account.
 

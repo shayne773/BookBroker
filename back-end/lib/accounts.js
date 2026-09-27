@@ -6,7 +6,8 @@
 // sessions and emailed-link tokens and their notification state. An accepted
 // trade the other reader has already confirmed completes, as it would at its
 // deadline (lib/tradeDeadlines.js): its books leave the market and the other
-// reader gets the "completed" email. Their other open offers and accepted trades
+// reader is emailed that it completed because this reader deleted their account
+// (not that they confirmed it). Their other open offers and accepted trades
 // are cancelled, which releases the other side's books, and the other reader
 // gets the usual "cancelled" email.
 //
