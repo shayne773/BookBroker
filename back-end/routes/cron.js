@@ -4,6 +4,7 @@
 import { timingSafeEqual } from "node:crypto";
 import express from "express";
 import { resolveTradeDeadlines } from "../lib/tradeDeadlines.js";
+import { cleanUpPhotos } from "../lib/photos.js";
 
 const router = express.Router();
 
@@ -24,6 +25,16 @@ router.use(requireCronSecret);
 router.get("/trade-deadlines", async (req, res, next) => {
   try {
     res.json(await resolveTradeDeadlines());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Daily: deletes the photo blobs whose deletion failed or was left for later
+// (lib/photos.js).
+router.get("/photo-cleanup", async (req, res, next) => {
+  try {
+    res.json({ cleared: await cleanUpPhotos() });
   } catch (err) {
     next(err);
   }

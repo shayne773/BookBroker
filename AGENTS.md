@@ -80,6 +80,19 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Tests never reach the network: `test/setup.js` makes `http.get` (`lib/http.js`) throw,
   and `mockHttp` in `test/helpers.js` answers it for one test.
 
+## Book photos
+
+- An owner's photos of an offered book (`OfferedBook.photos`, at most 4) go from the browser
+  straight to Vercel Blob: `front-end/src/photos.js` resizes and re-encodes (dropping EXIF), and
+  `back-end/routes/photos.js` only issues one-upload client tokens and checks the uploaded URL
+  (`lib/photos.js`). Without `BLOB_READ_WRITE_TOKEN` photos are off and the UI hidden.
+- Delete offered books only through `removeOfferedBooks` (`lib/offeredBooks.js`), and drop a photo
+  only through `discardPhotos`: both record the blobs in `PhotoCleanup`, inside the caller's
+  transaction if any (then call `cleanUpPhotosInBackground` after commit); the daily
+  `/cron/photo-cleanup` retries failures.
+- Lists send `photoCount`, never the URLs (`presentStages` in `lib/nearby.js`). Tests never reach
+  Blob: `test/setup.js` refuses `blobStore`, and `mockBlobStore` in `test/helpers.js` fakes it.
+
 ## Account emails
 
 - Every stored or queried address goes through `normalizeEmail` (`back-end/lib/validation.js`)

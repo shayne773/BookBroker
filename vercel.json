@@ -7,7 +7,10 @@
   "functions": {
     "api/index.js": { "maxDuration": 30, "includeFiles": "back-end/data/**" }
   },
-  "crons": [{ "path": "/api/cron/trade-deadlines", "schedule": "0 4 * * *" }],
+  "crons": [
+    { "path": "/api/cron/trade-deadlines", "schedule": "0 4 * * *" },
+    { "path": "/api/cron/photo-cleanup", "schedule": "30 4 * * *" }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }

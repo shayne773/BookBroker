@@ -101,12 +101,15 @@ export function geoNearStage(area, query) {
   };
 }
 
-// A pipeline's last stages: the distance as display miles (when there is one)
-// and the book's position fields removed. Every book listed from a pipeline ends here.
+// A pipeline's last stages: the distance as display miles (when there is one),
+// the number of the owner's photos in place of the photos themselves, which
+// only the book page shows, and the book's position fields removed. Every book
+// listed from a pipeline ends here.
 export function presentStages(area) {
   return [
     ...(area ? [{ $set: { distanceMiles: displayMilesExpr("$distance") } }] : []),
-    { $unset: ["distance", "ownerGeo", "ownerPlace", "ownerPlacePoint"] },
+    { $set: { photoCount: { $size: { $ifNull: ["$photos", []] } } } },
+    { $unset: ["distance", "ownerGeo", "ownerPlace", "ownerPlacePoint", "photos"] },
   ];
 }
 

@@ -1,11 +1,11 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import BookCover from './BookCover';
 
 // A whole wishlist or offerings shelf, one book per row. Your own shelves pass
 // `onRemove`; another reader's are read-only. `renderExtra(book)` adds a line
 // under a book's author, e.g. who is offering it. `aside` sits beside the title,
-// e.g. the owner's Message action.
-const ShelfPage = ({ kicker, title, aside, books, emptyLabel, onRemove, renderExtra }) => {
+// e.g. the owner's Message action. `linkTo(book)` makes each title open that book.
+const ShelfPage = ({ kicker, title, aside, books, emptyLabel, onRemove, renderExtra, linkTo }) => {
   const navigate = useNavigate();
 
   return (
@@ -33,7 +33,13 @@ const ShelfPage = ({ kicker, title, aside, books, emptyLabel, onRemove, renderEx
               </span>
 
               <div className="book-row__body">
-                <h2 className="book-row__title">{book.title}</h2>
+                <h2 className="book-row__title">
+                  {linkTo ? (
+                    <Link to={linkTo(book)} className="headline-link">{book.title}</Link>
+                  ) : (
+                    book.title
+                  )}
+                </h2>
                 {book.author && <p className="book-row__meta">{book.author}</p>}
                 {renderExtra?.(book)}
               </div>

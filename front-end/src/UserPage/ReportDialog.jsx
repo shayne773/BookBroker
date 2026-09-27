@@ -6,10 +6,12 @@ import { REPORT_REASONS } from '../reports';
 const DETAILS_MAX_LENGTH = 1000;
 
 // Report a reader: one reason from the fixed list, and optional details. The
-// report is stored for review; the reader is not told.
-const ReportDialog = ({ user, onClose, onReported }) => {
-  const [reason, setReason] = useState('');
-  const [details, setDetails] = useState('');
+// report is stored for review; the reader is not told. A report about
+// something of theirs, such as a book's photos, starts from `initialReason`
+// and `initialDetails` naming it.
+const ReportDialog = ({ user, initialReason = '', initialDetails = '', onClose, onReported }) => {
+  const [reason, setReason] = useState(initialReason);
+  const [details, setDetails] = useState(initialDetails);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 

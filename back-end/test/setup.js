@@ -8,6 +8,7 @@ import { mail } from "../lib/mail.js";
 import { http } from "../lib/http.js";
 import { clearGoogleBooksCache } from "../lib/googleBooks.js";
 import { notificationsSettled, wishlistPacing } from "../lib/notifications.js";
+import { blobStore, photoCleanupSettled } from "../lib/photos.js";
 
 // The CORS allowlist is read when app.js is imported, which happens after this file.
 process.env.CORS_ALLOWED_ORIGINS =
@@ -35,6 +36,17 @@ const refuseNetwork = async (url) => {
 };
 http.get = refuseNetwork;
 
+// No test may reach Vercel Blob: photos are off (no BLOB_READ_WRITE_TOKEN)
+// and every store call fails, unless a test installs mockBlobStore (helpers.js).
+const refuseBlobStore = () => {
+  for (const call of Object.keys(blobStore)) {
+    blobStore[call] = async () => {
+      throw new Error(`test tried to reach Vercel Blob (${call})`);
+    };
+  }
+};
+refuseBlobStore();
+
 let replSet;
 
 export const mochaHooks = {
@@ -50,11 +62,14 @@ export const mochaHooks = {
 
   beforeEach() {
     delete process.env.GOOGLE_BOOKS_API_KEY;
+    delete process.env.BLOB_READ_WRITE_TOKEN;
   },
 
   async afterEach() {
     // Notifications are sent in the background; none may outlive its test.
     await notificationsSettled();
+    await photoCleanupSettled();
+    refuseBlobStore();
     outbox.length = 0;
     http.get = refuseNetwork;
     clearGoogleBooksCache();

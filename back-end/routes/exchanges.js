@@ -6,6 +6,7 @@ import { BLOCKED_TRADE_MESSAGE, isBlockedBetween } from "../lib/blocks.js";
 import { isSuspended } from "../lib/suspensions.js";
 import { LoginThrottle } from "../lib/loginThrottle.js";
 import { notifyTrade } from "../lib/notifications.js";
+import { cleanUpPhotosInBackground } from "../lib/photos.js";
 import {
   completionDeadline,
   proposalExpiry,
@@ -441,7 +442,10 @@ router.post("/:id/confirm-complete", async (req, res) => {
     await ex.save({ session });
 
     await session.commitTransaction();
-    if (ex.status === "COMPLETED") notifyTrade(ex, "completed", userId);
+    if (ex.status === "COMPLETED") {
+      cleanUpPhotosInBackground();
+      notifyTrade(ex, "completed", userId);
+    }
     res.json({ message: "Completion recorded", status: ex.status });
   } catch (caught) {
     await session.abortTransaction();

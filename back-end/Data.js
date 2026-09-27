@@ -116,6 +116,15 @@ wishlistBookSchema.index({ userId: 1 });
 // A new offer looks up the readers who wishlisted its ISBN.
 wishlistBookSchema.index({ isbn: 1 });
 
+// A photo of an offered book, taken by its owner: a public Vercel Blob URL
+// under the book's own path, and the image's size in pixels (lib/photos.js).
+const MAX_PHOTOS = 4;
+const photoSchema = new Schema({
+  url: { type: String, required: true },
+  width: { type: Number, required: true },
+  height: { type: Number, required: true },
+});
+
 // Offered book schema
 const offeredBookSchema = new Schema({
   owner: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -127,6 +136,9 @@ const offeredBookSchema = new Schema({
   isbn: String,
   genre: String,
   desc: String,
+  // The owner's photos of their copy, the first one the main one; at most
+  // MAX_PHOTOS. Lists send only their number, `photoCount` (lib/nearby.js).
+  photos: { type: [photoSchema], default: [] },
   locked: { type: Boolean, default: false },
   lockedByExchange: { type: mongoose.Schema.Types.ObjectId, ref: "Exchange", default: null },
   createdAt: { type: Date, default: Date.now },
@@ -197,6 +209,19 @@ const wishlistNoticeSchema = new Schema(
 );
 wishlistNoticeSchema.index({ sentAt: 1 }, { expireAfterSeconds: WISHLIST_NOTICE_INTERVAL_SECONDS });
 
+// Photo cleanup
+// Blobs waiting to be deleted from Vercel Blob (lib/photos.js). A record is written
+// with the change that drops the photos, inside the same transaction if there is
+// one, and removed once its blobs are gone; a failed deletion stays for the daily
+// cron to retry, until the TTL gives up on it.
+const PHOTO_CLEANUP_TTL_SECONDS = 30 * 24 * 60 * 60;
+const photoCleanupSchema = new Schema({
+  urls: { type: [String], required: true },
+  createdAt: { type: Date, default: Date.now },
+  attempts: { type: Number, default: 0 },
+});
+photoCleanupSchema.index({ createdAt: 1 }, { expireAfterSeconds: PHOTO_CLEANUP_TTL_SECONDS });
+
 // Blocks and reports
 // A block works both ways: neither reader can message or propose a trade to the
 // other, and neither sees the other's offers. Only the blocker can lift it.
@@ -242,6 +267,8 @@ const Message =
   mongoose.models.Message || mongoose.model("Message", messageSchema);
 const WishlistNotice =
   mongoose.models.WishlistNotice || mongoose.model("WishlistNotice", wishlistNoticeSchema);
+const PhotoCleanup =
+  mongoose.models.PhotoCleanup || mongoose.model("PhotoCleanup", photoCleanupSchema);
 const Block = mongoose.models.Block || mongoose.model("Block", blockSchema);
 const Report = mongoose.models.Report || mongoose.model("Report", reportSchema);
 
@@ -278,6 +305,8 @@ export {
   Message,
   WishlistNotice,
   WISHLIST_NOTICE_INTERVAL_SECONDS,
+  MAX_PHOTOS,
+  PhotoCleanup,
   Block,
   Report,
   REPORT_REASONS,

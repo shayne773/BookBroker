@@ -22,6 +22,8 @@ import mongoose from "mongoose";
 import Exchange from "../Exchange.js";
 import { OfferedBook } from "../Data.js";
 import { notifyTrade } from "./notifications.js";
+import { removeOfferedBooks } from "./offeredBooks.js";
+import { cleanUpPhotosInBackground } from "./photos.js";
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;
@@ -58,10 +60,11 @@ const dueCompletion = (now) => ({
 
 /**
  * Takes a finished trade's books off the market, inside `session`: the traded
- * books are deleted and any other book it still locks is released.
+ * books are deleted, with their photos (cleanUpPhotosInBackground once
+ * committed), and any other book it still locks is released.
  */
 export async function removeTradedBooks(exchange, session) {
-  await OfferedBook.deleteMany({ _id: { $in: [...exchange.requesterBooks, ...exchange.responderBooks] } }, { session });
+  await removeOfferedBooks({ _id: { $in: [...exchange.requesterBooks, ...exchange.responderBooks] } }, { session });
   await releaseBooks(exchange._id, session);
 }
 
@@ -100,6 +103,7 @@ async function autoComplete(id, now) {
     await session.endSession();
   }
   if (!completed) return false;
+  cleanUpPhotosInBackground();
 
   // The side that confirmed "did" the completion; the silent side hears of it.
   const confirmer = completed.requesterConfirmedComplete ? completed.requester : completed.responder;

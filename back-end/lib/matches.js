@@ -35,7 +35,7 @@ export async function wishlistMatches(userId, ownerFields) {
     await listBooks({
       area: await readerArea(userId),
       match: { ...(await marketFilter(userId)), isbn: { $in: isbns } },
-      stages: [{ $project: { title: 1, author: 1, cover: 1, isbn: 1, owner: 1, createdAt: 1, distance: 1 } }],
+      stages: [{ $project: { title: 1, author: 1, cover: 1, isbn: 1, owner: 1, createdAt: 1, distance: 1, photos: 1 } }],
       limit: MATCHES_MAX_OFFERS,
     }),
     { path: "owner", select: ownerFields, options: { lean: true } }

@@ -72,6 +72,7 @@ its default and when it is required. The variables it reads, by name:
 | `FRONTEND_BASE_URL` | Base URL emailed links point at; required in production. |
 | `TRUST_PROXY` | Number of proxies in front of the API; optional on Vercel, where it defaults to `1`. |
 | `ADMIN_EMAILS` | Comma-separated emails of the admin accounts; unset means no admins. |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob store for book photos; unset means no photos. See [Book photos](#book-photos). |
 
 There is no login-signing secret: a sign-in token is an opaque server-side session,
 not a JWT.
@@ -209,6 +210,41 @@ cd back-end
 npm run place-books
 ```
 
+## Book photos
+
+An owner can add up to four photos of their copy of an offered book, when they offer
+it or later from the book's page, where they can also remove them and put them in
+order (the first is the main one). The book's page shows them in a gallery below
+the catalogue cover, which stays the book's image everywhere; lists and the map
+only say how many photos a book has. Anyone who objects to a book's photos reports
+its owner through the usual report, which names the book.
+
+The photos live in a [Vercel Blob](https://vercel.com/docs/vercel-blob) store, and
+their bytes never pass through the API. The browser shrinks each photo to at most
+1600 px on its long edge and re-encodes it as a JPEG well under 2 MB, which also
+drops its EXIF metadata (such as where it was taken); it then asks the API for a
+client token that allows exactly one upload, of that type and size, to a path under
+that book, and sends the photo straight to Blob. The API checks the upload against
+the store before it keeps its URL. The store holds only JPEG, PNG and WebP images
+of at most 2 MB, and only the book's owner can add or remove its photos.
+
+A book's photos are deleted from the store with the book, however it leaves (its
+owner removes it, or a trade completes), and a photo with its removal. A deletion
+that fails is kept and retried by a daily cron job (`/api/cron/photo-cleanup`), so
+it never holds up what the reader was doing.
+
+Without `BLOB_READ_WRITE_TOKEN`, nothing offers photos and everything else works as
+before. To turn them on:
+
+1. In the Vercel project, open **Storage → Create Database → Blob**, name the store
+   and give it **public** access (the photos are shown by their URLs).
+2. Connect it to the project for the environments that should have photos
+   (Production, and Preview if you like). Vercel then adds `BLOB_READ_WRITE_TOKEN`
+   to those environments itself; redeploy for it to take effect.
+3. To have photos locally, copy that token into `back-end/.env` (or run
+   `vercel env pull`). Uploads from `localhost` then go to the same store, so use a
+   separate store for development if you want to keep them apart.
+
 ## Demo data
 
 The seed needs `MONGODB_URI` and `GOOGLE_BOOKS_API_KEY` in `back-end/.env`.
@@ -286,7 +322,8 @@ build:
    | `FRONTEND_BASE_URL` | The site's Vercel address, e.g. `https://your-project.vercel.app`, with no trailing slash. Emailed links point here. |
    | `ADMIN_EMAILS` | Comma-separated confirmed emails of the admin accounts; unset means no admins. A change takes effect on the next deployment (redeploy), not a restart. |
    | `NODE_ENV` | `production`. The API then refuses to start without `FRONTEND_BASE_URL` rather than emailing links to `localhost`. |
-   | `CRON_SECRET` | A random string of at least 16 characters (e.g. `openssl rand -hex 32`). Vercel sends it with the daily cron job in `vercel.json`, which expires unanswered trade offers and completes trades one side has confirmed; without it the job is refused. |
+   | `CRON_SECRET` | A random string of at least 16 characters (e.g. `openssl rand -hex 32`). Vercel sends it with the daily cron jobs in `vercel.json`, which expire unanswered trade offers, complete trades one side has confirmed and retry failed photo deletions; without it the jobs are refused. |
+   | `BLOB_READ_WRITE_TOKEN` | Added by Vercel when a Blob store is connected to the project; see [Book photos](#book-photos). Without it there are no photos. |
 
    Do not set `VITE_SERVER_ADDRESS` or `CORS_ALLOWED_ORIGINS` on Vercel: the site
    calls `/api` on its own origin, which needs neither.
@@ -313,7 +350,8 @@ After the first deployment of the map, run `npm run place-books` the same way (s
   Resend and an `EMAIL_FROM` on that domain.
 - **Plan.** Vercel's free Hobby plan is for personal, non-commercial use only; a
   commercial deployment needs a paid plan. The function's `maxDuration` in
-  `vercel.json` (30 seconds) and its one daily cron job are within the Hobby limits.
+  `vercel.json` (30 seconds) and its two daily cron jobs are within the Hobby limits,
+  as is a Blob store for photos of this size.
 - **Trade deadlines.** An offer nobody answers expires 14 days after the proposal or
   the latest counter, and an accepted trade that one side has confirmed completes by
   itself 7 days after that confirmation. The daily cron job

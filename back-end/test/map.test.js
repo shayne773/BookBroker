@@ -113,7 +113,7 @@ describe("the map", () => {
     const [far] = (await areaBooks(viewer, "Chicago, IL")).books;
     expect(far).to.include({ title: "Chicago", distanceLabel: "More than 25 mi away" });
     expect(far).to.not.have.property("distanceMiles");
-    expect(Object.keys(far)).to.have.members(["_id", "title", "author", "year", "cover", "distanceLabel"]);
+    expect(Object.keys(far)).to.have.members(["_id", "title", "author", "year", "cover", "photoCount", "distanceLabel"]);
 
     expect((await areaBooks(viewer, "Nowhere, ZZ")).books).to.deep.equal([]);
   });

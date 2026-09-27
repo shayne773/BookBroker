@@ -14,6 +14,7 @@ import DeleteAccount from './Profile/DeleteAccount';
 import { formatDistance } from './distance';
 import useFeedback from './useFeedback';
 import UserLink from './UserLink';
+import { uploadPhotos } from './photos';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -32,6 +33,10 @@ const Profile = () => {
   const offeringsFeedback = useFeedback();
   const [addError, setAddError] = useState('');
   const [editError, setEditError] = useState('');
+  // Photos chosen in the offer dialog, uploaded once the book is added.
+  const [offerPhotos, setOfferPhotos] = useState([]);
+  const [offerProgress, setOfferProgress] = useState(null);
+  const [offerBusy, setOfferBusy] = useState(false);
 
   const { matches, loaded: matchesLoaded, error: matchesError } = useWishlistMatches();
   // Every offer of a wishlisted book, for the preview; the full list groups them by book.
@@ -115,17 +120,47 @@ const Profile = () => {
     });
   };
 
-  const handleAddOffering = (e) => {
+  // Adds the offered book, then uploads any photos chosen for it. A photo that
+  // fails does not undo the book: the shelf says so, and it can be added from
+  // the book's page.
+  const handleAddOffering = async (e) => {
     e.preventDefault();
-    if (!offerSearch.selected) return;
+    if (!offerSearch.selected || offerBusy) return;
 
-    addBook('/user/add-offered-book', { ...offerSearch.selected, owner: userId }, {
-      close: () => setShowAddOfferingsModal(false),
-      search: offerSearch,
-      reload: loadOffered,
-      feedback: offeringsFeedback,
-      label: 'offerings',
-    });
+    const title = offerSearch.selected.title || 'Book';
+    setAddError('');
+    setOfferBusy(true);
+    try {
+      const res = await authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/add-offered-book`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...offerSearch.selected, owner: userId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'That book could not be added. Please try again.');
+
+      const failed = offerPhotos.length
+        ? await uploadPhotos(data.id, offerPhotos, { onProgress: setOfferProgress, onPhotos: () => {} })
+        : [];
+
+      setShowAddOfferingsModal(false);
+      offerSearch.reset();
+      setOfferPhotos([]);
+      loadOffered();
+      if (failed.length) {
+        const which = failed.length === 1 ? 'a photo' : `${failed.length} photos`;
+        offeringsFeedback.fail(`${title} added to your offerings, but ${which} couldn't be uploaded. You can add photos from the book's page.`);
+      } else {
+        offeringsFeedback.done(`${title} added to your offerings`);
+      }
+    } catch (err) {
+      if (isSessionExpiredError(err)) return;
+      console.error(err);
+      setAddError(err.message);
+    } finally {
+      setOfferBusy(false);
+      setOfferProgress(null);
+    }
   };
 
   const handleProfileEdit = (e, close) => {
@@ -163,6 +198,7 @@ const Profile = () => {
   };
 
   const closeOfferModal = () => {
+    if (offerBusy) return;
     setAddError('');
     setShowAddOfferingsModal(false);
     offerSearch.dismiss();
@@ -251,6 +287,10 @@ const Profile = () => {
           title="Add a book to your offerings"
           search={offerSearch}
           error={addError}
+          busy={offerBusy}
+          photos={user.photoUploads ? offerPhotos : undefined}
+          onPhotos={setOfferPhotos}
+          progress={offerProgress}
           onSubmit={handleAddOffering}
           onClose={closeOfferModal}
         />

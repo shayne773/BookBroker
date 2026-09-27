@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import BookCover from '../BookCover';
 import DistanceLabel from '../DistanceLabel';
+import { photoCountLabel } from '../photos';
 import { formatDistance } from '../distance';
 import { readerMeta } from '../rating';
 import UserLink from '../UserLink';
@@ -69,6 +70,9 @@ const WishlistMatches = () => {
                             {' · '}
                             <DistanceLabel miles={offer.distanceMiles} />
                           </>
+                        )}
+                        {photoCountLabel(offer.photoCount) && (
+                          <span className="photo-count"> · {photoCountLabel(offer.photoCount)}</span>
                         )}
                       </span>
                       {/* The line's own link, stretched over it; the name opens their profile. */}

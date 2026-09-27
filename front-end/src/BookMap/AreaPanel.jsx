@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from '../auth';
 import BookCover from '../BookCover';
 import DistanceLabel from '../DistanceLabel';
+import PhotoCount from '../PhotoCount';
 import { booksCount } from '../bookMap';
 
 const areaUrl = (place, offset, searchKey) =>
@@ -95,6 +96,7 @@ const AreaPanel = ({ place, count, searchKey = '', onClose }) => {
                 </Link>
                 <p className="map-book__meta">{book.author || '[NO AUTHOR]'}</p>
                 <DistanceLabel miles={book.distanceMiles} label={book.distanceLabel} block />
+                <PhotoCount count={book.photoCount} block />
               </div>
             </li>
           ))}
