@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { api, mockBlobStore, offerBook, photo, signUp } from "./helpers.js";
+import { api, mockBlobStore, offerBook, photo, signUp, TEST_PASSWORD } from "./helpers.js";
 import { OfferedBook } from "../Data.js";
 import Exchange from "../Exchange.js";
 import { BlobStoreNotFoundError } from "@vercel/blob";
@@ -437,6 +437,25 @@ describe("book photos", () => {
       await photoCleanupSettled();
       expect(store.deleted).to.have.members(urls);
       expect(store.blobs.has(untraded)).to.equal(true);
+    });
+
+    it("when its owner deletes their account, with a trade the other side had confirmed", async () => {
+      const shelved = await offerBook(owner);
+      const theirs = await offerBook(other);
+      const urls = [...(await withPhotos(1)), ...(await withPhotos(1, shelved)), ...(await withPhotos(2, theirs))];
+      const proposed = await api(owner.token)
+        .post("/exchanges")
+        .send({ responderId: other.id, requesterBooks: [book.id], responderBooks: [theirs.id] });
+      const id = proposed.body._id;
+      expect(await api(other.token).post(`/exchanges/${id}/accept`)).to.have.status(200);
+      expect(await api(other.token).post(`/exchanges/${id}/confirm-complete`)).to.have.status(200);
+      const [elsewhere] = await withPhotos(1, await offerBook(other));
+
+      expect(await api(owner.token).post("/user/delete").send({ password: TEST_PASSWORD })).to.have.status(200);
+
+      await photoCleanupSettled();
+      expect(store.deleted).to.have.members(urls);
+      expect(store.blobs.has(elsewhere)).to.equal(true);
     });
   });
 

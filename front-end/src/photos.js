@@ -114,17 +114,25 @@ export async function uploadPhoto(bookId, file, { onProgress } = {}) {
     'This photo could not be uploaded.'
   );
 
+  // The SDK throttles progress with a trailing timer, so its last report can
+  // come after put() has settled; it is dropped then, or it would bring back a
+  // progress line the caller has already cleared.
+  let uploading = true;
   let uploaded;
   try {
     uploaded = await blobUpload.put(pathname, blob, {
       access: 'public',
       token,
       contentType: 'image/jpeg',
-      onUploadProgress: ({ percentage }) => onProgress?.(Math.round(percentage)),
+      onUploadProgress: ({ percentage }) => {
+        if (uploading) onProgress?.(Math.round(percentage));
+      },
     });
   } catch (err) {
     console.error('Photo upload failed:', err);
     throw new PhotoError('This photo could not be uploaded. Check your connection and try again.');
+  } finally {
+    uploading = false;
   }
 
   const { photos } = await answer(

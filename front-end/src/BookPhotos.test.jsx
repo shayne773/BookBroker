@@ -174,7 +174,12 @@ describe("the owner's photo controls", () => {
     routes['POST /user/offered/b1/photos/upload-token'] = respond(200, { token: 't', pathname: 'books/b1/new.jpg' });
     const added = { _id: 'p3', url: 'https://blob.example/books/b1/new.jpg', width: 1600, height: 1200 };
     routes['POST /user/offered/b1/photos'] = respond(201, { photos: [added] });
-    vi.spyOn(blobUpload, 'put').mockImplementation(async (pathname) => ({ url: `https://blob.example/${pathname}` }));
+    // The last progress report comes on a timer after put() has resolved, as the SDK's throttle sends it.
+    vi.spyOn(blobUpload, 'put').mockImplementation(async (pathname, blob, options) => {
+      options.onUploadProgress({ loaded: 1, total: 2, percentage: 40 });
+      setTimeout(() => options.onUploadProgress({ loaded: 2, total: 2, percentage: 100 }), 0);
+      return { url: `https://blob.example/${pathname}` };
+    });
 
     await renderPage(bookWith({ isOwner: true, photoUploads: true }));
     const input = document.querySelector('input[type="file"]');
@@ -183,6 +188,9 @@ describe("the owner's photo controls", () => {
 
     expect(await screen.findByText('Photo added')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Enlarge photo 1 of 1' })).toBeInTheDocument();
+    // Once the upload is done its progress line goes, and a late report does not bring it back.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(screen.queryByText(/Uploading photo/)).not.toBeInTheDocument();
     expect(requests.find((r) => r.key === 'POST /user/offered/b1/photos').body).toEqual({
       url: 'https://blob.example/books/b1/new.jpg',
       width: 1600,

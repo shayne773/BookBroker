@@ -180,6 +180,26 @@ describe('uploadPhoto', () => {
     });
   });
 
+  test('drops a progress report that arrives after the upload has finished', async () => {
+    api({
+      'POST /user/offered/b1/photos/upload-token': respond(200, { token: 't', pathname: 'books/b1/a.jpg' }),
+      'POST /user/offered/b1/photos': respond(201, { photos: [] }),
+    });
+    // The SDK's throttle reports the last 100% on a trailing timer, after put() resolves.
+    let late;
+    vi.spyOn(blobUpload, 'put').mockImplementation(async (pathname, blob, options) => {
+      options.onUploadProgress({ loaded: 1, total: 2, percentage: 50 });
+      late = () => options.onUploadProgress({ loaded: 2, total: 2, percentage: 100 });
+      return { url: `https://blob.example/${pathname}` };
+    });
+    const progress = [];
+
+    await uploadPhoto('b1', cameraFile(), { onProgress: (p) => progress.push(p) });
+    late();
+
+    expect(progress).toEqual([50]);
+  });
+
   test("stops with the API's words when it refuses the upload", async () => {
     api({ 'POST /user/offered/b1/photos/upload-token': respond(409, { message: 'A book can have up to 4 photos.' }) });
     const put = vi.spyOn(blobUpload, 'put');
