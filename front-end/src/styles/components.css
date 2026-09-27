@@ -581,11 +581,13 @@
   cursor: default;
 }
 
-/* A quiet button stays borderless when aria-disabled. */
+/* A quiet button stays borderless when aria-disabled, and dims so it reads as
+   unavailable beside its enabled neighbours (the photo manager's arrows). */
 .button--quiet[aria-disabled='true'],
 .button--quiet[aria-disabled='true']:hover,
 .button--quiet[aria-disabled='true']:focus-visible {
   border-color: transparent;
+  opacity: 0.4;
 }
 
 /* Done: the fill drains to paper and a check draws in beside the new label,
