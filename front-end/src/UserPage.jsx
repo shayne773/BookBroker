@@ -80,6 +80,26 @@ const UserPage = () => {
 
   const canAct = !isMe && user?._id;
 
+  if (user.deleted) {
+    return (
+      <main className="page">
+        <button type="button" className="back-link" onClick={() => navigate(-1)}>
+          <span className="back-link__mark" aria-hidden="true">&larr;</span>
+          Back
+        </button>
+
+        <div className="page-head">
+          <div className="page-head__main">
+            <p className="kicker">Reader</p>
+            <h1 className="page-title">Deleted reader</h1>
+          </div>
+        </div>
+
+        <p className="hint">This reader has deleted their account.</p>
+      </main>
+    );
+  }
+
   return (
     <main className="page">
       <button type="button" className="back-link" onClick={() => navigate(-1)}>

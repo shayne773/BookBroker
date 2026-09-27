@@ -16,6 +16,8 @@ export default function Login() {
     const from = location.state?.from;
     const redirectTo = from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : '/home';
     const sessionEnded = Boolean(location.state?.sessionEnded);
+    // Set by the profile's Delete account section on its way out.
+    const accountDeleted = Boolean(location.state?.accountDeleted);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -53,6 +55,9 @@ export default function Login() {
     return (
         <AuthShell kicker="Welcome back" title="Sign in">
             <form className="form" onSubmit={handleSubmit}>
+                {accountDeleted && !error && (
+                    <p className="notice" role="status">Your account has been deleted.</p>
+                )}
                 {sessionEnded && !error && (
                     <p className="notice" role="status">Your session has ended. Please sign in again.</p>
                 )}

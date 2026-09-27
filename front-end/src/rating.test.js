@@ -15,9 +15,14 @@ test('a reader nobody has rated shows "No ratings yet", never a number', () => {
 });
 
 test('the meta line joins location and rating, leaving out a missing location', () => {
-  expect(readerMeta({ location: 'Queens', ratingsAvg: 4.5, ratingsCount: 2 })).toBe(
+  expect(readerMeta({ username: 'bea', location: 'Queens', ratingsAvg: 4.5, ratingsCount: 2 })).toBe(
     'Queens · 4.5 of 5 · 2 ratings'
   );
-  expect(readerMeta({ ratingsCount: 0 })).toBe('No ratings yet');
-  expect(readerMeta({ ratingsCount: 0 }, { noLocation: '—' })).toBe('— · No ratings yet');
+  expect(readerMeta({ username: 'bea', ratingsCount: 0 })).toBe('No ratings yet');
+  expect(readerMeta({ username: 'bea', ratingsCount: 0 }, { noLocation: '—' })).toBe('— · No ratings yet');
+});
+
+test('a reader who deleted their account has no meta line', () => {
+  expect(readerMeta(null)).toBe('');
+  expect(readerMeta({ id: 'gone', username: null, ratingsCount: 0 }, { noLocation: '—' })).toBe('');
 });

@@ -11,8 +11,8 @@ export default function ExchangeBooks({ ex }) {
       </div>
 
       <div className="split">
-        <Side name={<UserLink user={ex.requester} fallback="Requester" />} books={ex.requesterBooks || []} />
-        <Side name={<UserLink user={ex.responder} fallback="Responder" />} books={ex.responderBooks || []} />
+        <Side name={<UserLink user={ex.requester} />} books={ex.requesterBooks || []} />
+        <Side name={<UserLink user={ex.responder} />} books={ex.responderBooks || []} />
       </div>
 
       <p className="hint mt-4">

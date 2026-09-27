@@ -247,3 +247,50 @@ test("the conversation's header links to the other reader's profile", async () =
   fireEvent.click(link);
   expect(await screen.findByText("bea's profile")).toBeInTheDocument();
 });
+
+test('a conversation with a reader who deleted their account stays readable, with no one to reply to', async () => {
+  serve({
+    'GET /users/gone': respond(404, { message: 'User not found' }),
+    'GET /messages/gone': respond(200, [message('m1', 'gone', 'still have it?', 1)]),
+    'POST /messages/gone/read': respond(204, null),
+    'GET /messages/unread': respond(200, { conversations: 0 }),
+  });
+
+  render(
+    <MemoryRouter initialEntries={['/messages/gone']}>
+      <Routes>
+        <Route path="/messages/:user" element={<MessagesDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  expect(await screen.findByRole('heading', { level: 1, name: 'Deleted reader' })).toBeInTheDocument();
+  const thread = screen.getByRole('region', { name: 'Messages' });
+  expect(await within(thread).findByText('still have it?')).toBeInTheDocument();
+  expect(within(thread).getByText('Deleted reader')).toBeInTheDocument();
+  expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+  expect(screen.getByText(/deleted their account, so you can.t reply/)).toBeInTheDocument();
+});
+
+test('the inbox names a reader who deleted their account as plain text', async () => {
+  serve({
+    'GET /messages': respond(200, [
+      {
+        id: 'c1',
+        otherUser: { id: 'gone', deleted: true, username: null, location: null, ratingsAvg: 0, ratingsCount: 0 },
+        lastMessage: 'bye',
+        lastAt: '2026-09-23T10:00:00.000Z',
+        unread: 0,
+      },
+    ]),
+  });
+
+  render(<Messages />, { wrapper: MemoryRouter });
+
+  const title = await screen.findByRole('heading', { level: 2, name: 'Deleted reader' });
+  expect(within(title).queryByRole('link')).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Open conversation with Deleted reader' }))
+    .toHaveAttribute('href', '/messages/gone');
+  expect(screen.queryByText(/No ratings yet/)).not.toBeInTheDocument();
+});

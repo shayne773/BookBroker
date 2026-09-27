@@ -37,6 +37,8 @@ export default function ExchangeDetail() {
     return String(ex.requester._id) === String(userId);
   }, [ex, userId]);
 
+  // Null when the other reader has deleted their account: the trade stays, with
+  // no one to message or rate.
   const otherUser = useMemo(() => {
     if (!ex) return null;
     return meIsRequester ? ex.responder : ex.requester;
@@ -243,11 +245,13 @@ export default function ExchangeDetail() {
           </h1>
           {readerMeta(otherUser) && <p className="page-lede">{readerMeta(otherUser)}</p>}
         </div>
-        <div className="page-head__aside">
-          <Link className="button button--secondary button--small" to={`/messages/${otherUser?._id}`}>
-            Chat
-          </Link>
-        </div>
+        {otherUser && (
+          <div className="page-head__aside">
+            <Link className="button button--secondary button--small" to={`/messages/${otherUser._id}`}>
+              Chat
+            </Link>
+          </div>
+        )}
       </div>
 
       <ExchangeProgress ex={ex} />
@@ -294,7 +298,7 @@ export default function ExchangeDetail() {
 
       {ex.status === "ACCEPTED" && <CompletionPanel ex={ex} confirmedByMe={!!myConfirmed} />}
 
-      {ex.status === "COMPLETED" && (
+      {ex.status === "COMPLETED" && otherUser && (
         <RatingPanel
           other={otherUser}
           feedback={ratingFeedback.feedback}

@@ -11,7 +11,8 @@
 // Mongoose starts building them on connect; this waits for that same build.
 
 import mongoose from "mongoose";
-import { OfferedBook } from "../Data.js";
+import { OfferedBook, User } from "../Data.js";
+import { AuthToken } from "./authTokens.js";
 
 export const DB_NAME = "bookbroker";
 
@@ -24,6 +25,7 @@ export function connectDatabase(uri = process.env.MONGODB_URI) {
     .connect(uri, { dbName: DB_NAME, serverSelectionTimeoutMS: 10_000 })
     .then(async (connection) => {
       await OfferedBook.init();
+      await retireEmailChanges();
       return connection;
     })
     .catch((err) => {
@@ -31,4 +33,20 @@ export function connectDatabase(uri = process.env.MONGODB_URI) {
       throw err;
     });
   return connecting;
+}
+
+// Accounts can no longer change their email, so an address still waiting for
+// confirmation from before then, and the link mailed to it, are dropped. Both
+// fields are gone from the schemas, so this goes through the driver. A failure
+// is only logged: it leaves inert data behind and must not stop the API.
+export async function retireEmailChanges() {
+  try {
+    await User.collection.updateMany(
+      { pendingEmail: { $exists: true } },
+      { $unset: { pendingEmail: "" } }
+    );
+    await AuthToken.collection.deleteMany({ purpose: "change-email" });
+  } catch (err) {
+    console.error("Failed to clear retired email changes:", err);
+  }
 }

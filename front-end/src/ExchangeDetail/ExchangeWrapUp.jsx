@@ -14,11 +14,11 @@ export function CompletionPanel({ ex, confirmedByMe }) {
 
       <dl className="facts facts--row">
         <CompletionRow
-          label={<UserLink user={ex.requester} fallback="Requester" />}
+          label={<UserLink user={ex.requester} />}
           done={!!ex.requesterConfirmedComplete}
         />
         <CompletionRow
-          label={<UserLink user={ex.responder} fallback="Responder" />}
+          label={<UserLink user={ex.responder} />}
           done={!!ex.responderConfirmedComplete}
         />
       </dl>
@@ -58,7 +58,7 @@ export function RatingPanel({ other, ratedAlready, rating, setRating, busy, onRa
     <section className="section">
       <div className="section-head">
         <h2 className="section-title">
-          Rate <UserLink user={other} fallback="User" />
+          Rate <UserLink user={other} />
         </h2>
       </div>
 

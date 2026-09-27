@@ -115,10 +115,17 @@ export const registerValidators = [
   zipChain("zip"),
 ];
 
+export const EMAIL_UNCHANGEABLE_MESSAGE =
+  "Your email address can't be changed. To use another one, create a new account.";
+
 // The profile form submits the whole user object and leaves fields it is not
 // changing blank, so each field is validated only when one is actually sent.
+// An account keeps the address it signed up with, so any email is refused.
 export const userEditValidators = [
-  emailChain("user.email").optional({ values: "falsy" }),
+  body("user.email")
+    .optional({ values: "falsy" })
+    .custom(() => false)
+    .withMessage(EMAIL_UNCHANGEABLE_MESSAGE),
   zipChain("user.zip").optional({ values: "falsy" }),
   body("user.maxDistanceMiles")
     .optional({ values: "null" })

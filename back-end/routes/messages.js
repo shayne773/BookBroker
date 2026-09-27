@@ -136,11 +136,13 @@ router.get("/", async (req, res, next) => {
                 username: otherUser.username,
               }
             : {
+                // They deleted their account; the thread stays readable.
                 id: otherUserId,
+                deleted: true,
                 location: null,
                 ratingsAvg: 0,
                 ratingsCount: 0,
-                username: "Unknown",
+                username: null,
               },
           lastMessage: lastMsg?.content || "",
           lastAt: lastMsg?.createdAt || null,
@@ -260,6 +262,11 @@ router.post("/:user", async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const otherUserId = otherUserParam(req);
+
+    // Nobody can write to a reader who has deleted their account.
+    if (String(userId) !== String(otherUserId) && !(await User.exists({ _id: otherUserId }))) {
+      throw httpError(404, "User not found");
+    }
 
     // A block, in either direction, stops messages both ways; a suspended
     // reader cannot be written to at all.

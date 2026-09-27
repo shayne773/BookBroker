@@ -21,6 +21,11 @@
 //
 // Store errors propagate to the caller: the login route fails rather than
 // letting an attempt through unthrottled.
+//
+// A throttle built with `keyedBy: "user"` (counting per account id) or
+// `keyedBy: "email"` (per address) is registered, so deleting an account clears
+// every counter kept for it (`forgetAccountThrottles`). One keyed by client
+// address is not the account's and is left to expire.
 
 import { createHash } from "node:crypto";
 import mongoose from "mongoose";
@@ -60,14 +65,19 @@ export function throttleKey(account, scope = "") {
     .digest("hex");
 }
 
+const accountThrottles = new Set();
+
 export class LoginThrottle {
   /**
-   * @param {object} [options] `scope` namespaces the counters; `windowMs`,
-   *   `lockoutMs` and `accountMaxAttempts` override DEFAULT_OPTIONS.
+   * @param {object} [options] `scope` namespaces the counters; `keyedBy`
+   *   ("user" or "email") says what they count per, when that is the account;
+   *   `windowMs`, `lockoutMs` and `accountMaxAttempts` override DEFAULT_OPTIONS.
    */
-  constructor({ scope = "", ...options } = {}) {
+  constructor({ scope = "", keyedBy = null, ...options } = {}) {
     this.scope = scope;
+    this.keyedBy = keyedBy;
     this.options = { ...DEFAULT_OPTIONS, ...options };
+    if (keyedBy === "user" || keyedBy === "email") accountThrottles.add(this);
   }
 
   /** @returns {Promise<{ limited: boolean, retryAfterSeconds: number }>} */
@@ -149,6 +159,17 @@ export class LoginThrottle {
 
     await LoginAttempt.deleteOne({ _id: key });
   }
+}
+
+/**
+ * Delete every counter an account-keyed throttle holds for the account with
+ * `userId` and `email`, inside `session` when one is given.
+ */
+export function forgetAccountThrottles({ userId, email }, session = null) {
+  const keys = [...accountThrottles]
+    .map((throttle) => throttleKey(throttle.keyedBy === "user" ? String(userId) : email, throttle.scope))
+    .filter(Boolean);
+  return LoginAttempt.deleteMany({ _id: { $in: keys } }, { session });
 }
 
 export const LOGIN_THROTTLED_MESSAGE =

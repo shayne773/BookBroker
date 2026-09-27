@@ -55,6 +55,15 @@ test('a reader who cannot be shown reads as plain text', () => {
   expect(screen.queryByRole('link')).not.toBeInTheDocument();
 });
 
+test('a reader who deleted their account reads as "Deleted reader", never a link', () => {
+  for (const user of [null, undefined, { id: 'gone', username: null, deleted: true }]) {
+    const { unmount } = renderLink({ user, children: 'G' });
+    expect(screen.getByText('Said by Deleted reader')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    unmount();
+  }
+});
+
 test('takes a class for running text in place of its own', () => {
   renderLink({ user: { _id: 'rob', username: 'rob' }, className: 'textlink' });
 

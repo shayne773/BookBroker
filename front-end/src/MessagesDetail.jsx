@@ -48,8 +48,11 @@ const MessagesDetail = () => {
     el.scrollTop = el.scrollHeight;
   }, []);
 
+  // A reader who has deleted their account is gone (404), but the conversation
+  // with them stays readable.
   const loadOtherUser = useCallback(async () => {
     const res = await authFetch(`${server}/users/${otherUserId}`);
+    if (res.status === 404) return { _id: otherUserId, username: null, deleted: true };
     if (!res.ok) throw new Error(`Failed to load user: ${res.status}`);
     return res.json();
   }, [server, otherUserId]);
@@ -225,13 +228,19 @@ const MessagesDetail = () => {
         otherUser={otherUser}
       />
 
-      <Composer
-        text={text}
-        setText={setText}
-        onSend={handleMessageSend}
-        feedback={sendFeedback}
-        onTrade={() => setShowTradeModal(true)}
-      />
+      {otherUser?.deleted ? (
+        <p className="hint" role="status">
+          This reader has deleted their account, so you can&rsquo;t reply.
+        </p>
+      ) : (
+        <Composer
+          text={text}
+          setText={setText}
+          onSend={handleMessageSend}
+          feedback={sendFeedback}
+          onTrade={() => setShowTradeModal(true)}
+        />
+      )}
 
       {showTradeModal && (
         <ProposeTradeDialog

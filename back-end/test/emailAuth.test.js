@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { AuthToken, hashToken } from "../lib/authTokens.js";
+import { retireEmailChanges } from "../lib/db.js";
 import { renderEmail, resolveFrontEndBaseUrl } from "../lib/mail.js";
 import { User } from "../Data.js";
 import {
@@ -327,181 +328,45 @@ describe("password reset", () => {
   });
 });
 
-describe("changing the account email", () => {
+describe("the account email", () => {
   beforeEach(clearDatabase);
 
-  const NEW_EMAIL = "moved@example.com";
-  const requestChange = async (user, email = NEW_EMAIL) =>
-    api().post("/user/edit").set(await authHeader(user)).send({ user: { email } });
-  const confirmChange = (token) => api().post("/auth/confirm-email-change").send({ token });
+  it("has no change to confirm", async () => {
+    const res = await api().post("/auth/confirm-email-change").send({ token: "anything" });
 
-  it("mails a link to the new address and keeps the current email in effect", async () => {
+    expect(res).to.have.status(404);
+  });
+
+  it("is shown on the profile, with nothing pending", async () => {
     const user = await createUser();
 
-    const res = await requestChange(user);
+    const res = await api().get("/user").set(await authHeader(user));
 
     expect(res).to.have.status(200);
-    expect(res.body.confirmationSentTo).to.equal(NEW_EMAIL);
-    expect(res.body.user.email).to.equal(user.email);
-    expect(res.body.user.pendingEmail).to.equal(NEW_EMAIL);
-    expect(outbox.map((m) => m.to)).to.deep.equal([NEW_EMAIL]);
-    expect(outbox[0].link).to.match(/^http:\/\/localhost:3000\/confirm-email-change\?token=/);
-
-    const stored = await User.findById(user._id);
-    expect(stored.email).to.equal(user.email);
-    expect(stored.emailVerified).to.equal(true);
-
-    expect(await login(user.email)).to.have.status(200);
-    expect(await login(NEW_EMAIL)).to.have.status(400);
-
-    await forgot(user.email);
-    expect(outbox.at(-1).to).to.equal(user.email);
-    await forgot(NEW_EMAIL);
-    expect(outbox.at(-1).to).to.equal(user.email);
-  });
-
-  it("switches the email when the link is followed", async () => {
-    const user = await createUser();
-    await requestChange(user);
-
-    const res = await confirmChange(emailedToken(NEW_EMAIL, "/confirm-email-change"));
-
-    expect(res).to.have.status(200);
-    const stored = await User.findById(user._id);
-    expect(stored.email).to.equal(NEW_EMAIL);
-    expect(stored.pendingEmail).to.equal(undefined);
-    expect(stored.emailVerified).to.equal(true);
-    expect(await login(NEW_EMAIL)).to.have.status(200);
-    expect(await login(user.email)).to.have.status(400);
-  });
-
-  it("revokes reset links sent to the old address", async () => {
-    const user = await createUser();
-    await forgot(user.email);
-    const resetToken = emailedToken(user.email, "/reset-password");
-
-    await requestChange(user);
-    await confirmChange(emailedToken(NEW_EMAIL, "/confirm-email-change"));
-
-    const res = await reset(resetToken);
-    expect(res).to.have.status(400);
-    expect(res.body.code).to.equal("TOKEN_INVALID");
-  });
-
-  it("accepts the link only once", async () => {
-    const user = await createUser();
-    await requestChange(user);
-    const token = emailedToken(NEW_EMAIL, "/confirm-email-change");
-
-    expect(await confirmChange(token)).to.have.status(200);
-    const again = await confirmChange(token);
-    expect(again).to.have.status(400);
-    expect(again.body.code).to.equal("TOKEN_INVALID");
-  });
-
-  it("refuses an expired link and leaves the email alone", async () => {
-    const user = await createUser();
-    await requestChange(user);
-    await expireAllTokens();
-
-    const res = await confirmChange(emailedToken(NEW_EMAIL, "/confirm-email-change"));
-
-    expect(res).to.have.status(400);
-    expect((await User.findById(user._id)).email).to.equal(user.email);
-  });
-
-  it("refuses an address another account already holds, whatever its casing", async () => {
-    await createUser({ email: "Taken@Example.com" });
-    const user = await createUser();
-
-    const res = await requestChange(user, "TAKEN@example.com");
-
-    expect(res).to.have.status(409);
-    expect(outbox).to.have.length(0);
-    expect((await User.findById(user._id)).pendingEmail).to.equal(undefined);
-  });
-
-  it("refuses at confirmation an address another account took in the meantime", async () => {
-    const user = await createUser();
-    await requestChange(user);
-    const token = emailedToken(NEW_EMAIL, "/confirm-email-change");
-    await createUser({ email: "Moved@Example.com" });
-
-    const res = await confirmChange(token);
-
-    expect(res).to.have.status(409);
-    const stored = await User.findById(user._id);
-    expect(stored.email).to.equal(user.email);
-    expect(await login(user.email)).to.have.status(200);
-  });
-
-  it("does not accept another purpose's token", async () => {
-    const user = await createUser();
-    await requestChange(user);
-    await forgot(user.email);
-
-    const res = await confirmChange(emailedToken(user.email, "/reset-password"));
-
-    expect(res).to.have.status(400);
-    expect((await User.findById(user._id)).email).to.equal(user.email);
-  });
-
-  const profile = async (user) => api().get("/user").set(await authHeader(user));
-
-  it("stops reporting a change as pending once its link has expired", async () => {
-    const user = await createUser();
-    await requestChange(user);
-    expect((await profile(user)).body.pendingEmail).to.equal(NEW_EMAIL);
-
-    await expireAllTokens();
-
-    const res = await profile(user);
-    expect(res).to.have.status(200);
+    expect(res.body.email).to.equal(user.email);
     expect(res.body).to.not.have.property("pendingEmail");
-    expect((await User.findById(user._id)).pendingEmail).to.equal(undefined);
   });
 
-  it("drops an expired pending change on the next edit", async () => {
+  it("drops a change left pending from before, and its link, at startup", async () => {
     const user = await createUser();
-    await requestChange(user);
-    await expireAllTokens();
+    const other = await createUser();
+    await User.collection.updateOne({ _id: user._id }, { $set: { pendingEmail: "moved@example.com" } });
+    await AuthToken.create({
+      _id: hashToken("old-link"),
+      purpose: "change-email",
+      user: user._id,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    await forgot(other.email);
 
-    const res = await api()
-      .post("/user/edit")
-      .set(await authHeader(user))
-      .send({ user: { username: "renamed", email: user.email } });
+    await retireEmailChanges();
 
-    expect(res).to.have.status(200);
-    expect(res.body.user).to.not.have.property("pendingEmail");
-    expect((await User.findById(user._id)).pendingEmail).to.equal(undefined);
-  });
-
-  it("keeps a live pending change through a username or ZIP code edit", async () => {
-    const user = await createUser();
-    await requestChange(user);
-
-    const res = await api()
-      .post("/user/edit")
-      .set(await authHeader(user))
-      .send({ user: { username: "renamed", zip: "11375", email: user.email } });
-
-    expect(res).to.have.status(200);
-    expect(res.body.user.pendingEmail).to.equal(NEW_EMAIL);
-    expect((await profile(user)).body.pendingEmail).to.equal(NEW_EMAIL);
-
-    const confirmed = await confirmChange(emailedToken(NEW_EMAIL, "/confirm-email-change"));
-    expect(confirmed).to.have.status(200);
-    expect((await User.findById(user._id)).email).to.equal(NEW_EMAIL);
-  });
-
-  it("limits change requests for one address", async () => {
-    const user = await createUser();
-    for (let i = 0; i < 3; i += 1) expect(await requestChange(user)).to.have.status(200);
-
-    const res = await requestChange(user);
-
-    expect(res).to.have.status(429);
-    expect(outbox).to.have.length(3);
+    const stored = await User.collection.findOne({ _id: user._id });
+    expect(stored).to.not.have.property("pendingEmail");
+    expect(stored.email).to.equal(user.email);
+    expect(await AuthToken.countDocuments({ purpose: "change-email" })).to.equal(0);
+    // Other links are left alone.
+    expect(await AuthToken.countDocuments({ purpose: "reset-password" })).to.equal(1);
   });
 });
 

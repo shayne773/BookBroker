@@ -22,7 +22,8 @@ a shelf of offered books and a wishlist, see which wishlist books other readers
 nearby are offering,
 propose and accept trades, message other users, rate a trading partner and see each
 reader's average rating, block or report another reader, and get email about new
-messages, trades and newly offered wishlist books (each category can be turned off).
+messages, trades and newly offered wishlist books (each category can be turned off),
+and delete your account (see [Your account](#your-account)).
 Admins read the reports on a private page and can suspend a reader's account.
 
 [Contributing Guidelines](./CONTRIBUTING.md) · [Agent and architecture notes](./AGENTS.md)
@@ -75,8 +76,8 @@ its default and when it is required. The variables it reads, by name:
 There is no login-signing secret: a sign-in token is an opaque server-side session,
 not a JWT.
 
-Without `RESEND_API_KEY` the API sends no email — sign-up confirmation, password
-reset and email-change links, and notification emails, are logged to the back-end
+Without `RESEND_API_KEY` the API sends no email — sign-up confirmation and password
+reset links, and notification emails, are logged to the back-end
 console instead, so you can follow them locally. Without `GOOGLE_BOOKS_API_KEY`,
 book search reports that it is temporarily unavailable.
 
@@ -114,6 +115,21 @@ cd front-end
 npm install
 npm run dev      # npm run build / npm run preview for the production bundle
 ```
+
+## Your account
+
+An account keeps the email it signed up with; it cannot be changed. To use another
+address, create a new account with it.
+
+A reader can delete their account from the bottom of their profile, with their
+password and a typed confirmation. It is permanent, with no undo or grace period. It
+removes the account, its offered books (from browse, search, the map and everyone's
+matches), wishlist, the blocks it placed, its sessions and settings, and cancels its
+open offers and accepted trades not yet complete, freeing the other side's books (the
+other reader gets the usual cancellation email). Completed trades, ratings (so nobody's
+average moves), conversations and reports stay for the other readers and admins,
+who see the reader as "Deleted reader". The address can then sign up again as a new
+account.
 
 ## Location
 

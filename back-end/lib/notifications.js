@@ -159,8 +159,9 @@ async function send(recipient, category, { subject, sentence, action, path }) {
   });
 }
 
+// A reader who is gone has deleted their account (lib/accounts.js).
 const usernameOf = async (userId) =>
-  (await User.findById(userId).select("username").lean())?.username || "A reader";
+  (await User.findById(userId).select("username").lean())?.username || "Deleted reader";
 
 // --------------------
 // Events

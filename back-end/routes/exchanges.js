@@ -86,6 +86,7 @@ function proposerOf(exchange) {
 const HOUR = 60 * 60 * 1000;
 const proposalThrottle = new LoginThrottle({
   scope: "trade-proposal",
+  keyedBy: "user",
   windowMs: HOUR,
   lockoutMs: HOUR,
   accountMaxAttempts: 20,
@@ -117,6 +118,7 @@ router.post("/", async (req, res) => {
     if (!responderId) return res.status(400).json({ message: "responderId required" });
     if (String(responderId) === String(userId)) return res.status(400).json({ message: "Cannot exchange with yourself" });
     if (!mongoose.isValidObjectId(responderId)) return res.status(400).json({ message: "Invalid responderId" });
+    if (!(await User.exists({ _id: responderId }))) return res.status(404).json({ message: "User not found" });
     if (!(await canTrade(userId, responderId))) {
       return res.status(403).json({ message: BLOCKED_TRADE_MESSAGE });
     }
