@@ -159,8 +159,9 @@ async function send(recipient, category, { subject, sentence, action, path }) {
   });
 }
 
+// A reader who is gone has deleted their account (lib/accounts.js).
 const usernameOf = async (userId) =>
-  (await User.findById(userId).select("username").lean())?.username || "A reader";
+  (await User.findById(userId).select("username").lean())?.username || "Deleted reader";
 
 // --------------------
 // Events
@@ -219,6 +220,10 @@ const TRADE_EVENTS = {
   declined: { subject: (who) => `${who} declined your trade`, sentence: (who) => `${who} declined your trade.` },
   cancelled: { subject: (who) => `${who} cancelled your trade`, sentence: (who) => `${who} cancelled your trade.` },
   completed: { subject: () => "Your trade is complete", sentence: (who) => `${who} confirmed the trade, so it is complete.` },
+  completedByDeletion: {
+    subject: () => "Your trade is complete",
+    sentence: () => "The other reader deleted their account. You had confirmed the trade, so it is now complete.",
+  },
 };
 
 /** `actorId` just did `event` (a key of TRADE_EVENTS) on `exchange`; the other side hears of it. */

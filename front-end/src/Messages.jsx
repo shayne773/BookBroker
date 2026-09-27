@@ -138,7 +138,7 @@ const Messages = () => {
                   <Link
                     to={`/messages/${u.id}`}
                     className="stretch-link"
-                    aria-label={`Open conversation with ${u.username || "this reader"}`}
+                    aria-label={`Open conversation with ${u.username || "Deleted reader"}`}
                   >
                     <span className="textlink-arrow__mark" aria-hidden="true">&rarr;</span>
                   </Link>

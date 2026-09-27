@@ -23,7 +23,7 @@ export default function MessageThread({ listRef, loading, messages, myUserId, ot
           >
             {!isMine && (
               <span className="message__sender">
-                <UserLink user={otherUser} fallback="User" />
+                <UserLink user={otherUser} />
               </span>
             )}
 

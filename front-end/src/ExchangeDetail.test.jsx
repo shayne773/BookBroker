@@ -142,3 +142,23 @@ test("the trade list names the other reader, linked to their profile, beside the
     '/exchanges/ex1'
   );
 });
+
+test('a trade with a reader who deleted their account names them as plain text, with no one to chat to or rate', async () => {
+  serve({ ...base, requester: null, status: 'COMPLETED', requesterConfirmedComplete: true, responderConfirmedComplete: true });
+
+  renderAt('/exchanges/ex1');
+
+  expect(await screen.findByRole('heading', { level: 1, name: 'Deleted reader' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Chat' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Submit Rating' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Deleted reader' })).not.toBeInTheDocument();
+});
+
+test('the trades list names a reader who deleted their account as plain text', async () => {
+  serve({ ...base, requester: null, status: 'CANCELLED' });
+
+  renderAt('/exchanges');
+
+  expect(await screen.findByText('Deleted reader')).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Deleted reader' })).not.toBeInTheDocument();
+});

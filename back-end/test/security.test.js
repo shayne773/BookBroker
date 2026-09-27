@@ -17,6 +17,7 @@ import {
   confirmEmail,
   createOfferedBook,
   createUser,
+  outbox,
   TEST_PASSWORD,
 } from "./helpers.js";
 
@@ -554,77 +555,38 @@ describe("POST /user/edit", () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /user/edit - an address change cannot strand another account
+// POST /user/edit - an account keeps the address it signed up with
 // ---------------------------------------------------------------------------
-describe("POST /user/edit email changes", () => {
+describe("POST /user/edit and the email", () => {
   beforeEach(resetState);
 
-  it("refuses an address another account already holds, whatever its casing", async () => {
-    const owner = await createUser({ email: "bob@x.com" });
-    const attacker = await createUser();
+  const edit = async (user, fields) =>
+    request.execute(app).post("/user/edit").set(await authHeader(user)).send({ user: fields });
 
-    const res = await request
-      .execute(app)
-      .post("/user/edit")
-      .set(await authHeader(attacker))
-      .send({ user: { email: "Bob@X.com" } });
+  for (const [what, email] of [
+    ["a new address", "  Renamed@Example.COM "],
+    ["another account's address", "Bob@X.com"],
+    ["something that is not an address", "not-an-address"],
+  ]) {
+    it(`refuses ${what} and changes nothing`, async () => {
+      await createUser({ email: "bob@x.com" });
+      const user = await createUser();
 
-    expect(res).to.have.status(409);
-    expect(res.body.message).to.equal("Email already in use");
+      const res = await edit(user, { username: "renamed", email });
 
-    const stillMine = await User.findById(attacker._id).select("email");
-    expect(stillMine.email).to.equal(attacker.email);
+      expect(res).to.have.status(400);
+      expect(res.body.message).to.match(/can't be changed/);
+      const unchanged = await User.findById(user._id).select("username email").lean();
+      expect(unchanged.email).to.equal(user.email);
+      expect(unchanged.username).to.equal(user.username);
+      expect(outbox).to.have.length(0);
+    });
+  }
 
-    // The owner can still sign in with the address they registered.
-    const signIn = await request
-      .execute(app)
-      .post("/auth/login")
-      .send({ email: "Bob@X.com", password: TEST_PASSWORD });
-
-    expect(signIn).to.have.status(200);
-    expect(signIn.body).to.have.property("token");
-    expect(signIn.body.user.id).to.equal(owner._id.toString());
-  });
-
-  it("rejects an address that is not a valid email", async () => {
+  it("still allows an edit that sends no address", async () => {
     const user = await createUser();
 
-    const res = await request
-      .execute(app)
-      .post("/user/edit")
-      .set(await authHeader(user))
-      .send({ user: { email: "not-an-address" } });
-
-    expect(res).to.have.status(400);
-
-    const unchanged = await User.findById(user._id).select("email");
-    expect(unchanged.email).to.equal(user.email);
-  });
-
-  it("holds a changed address normalized, pending confirmation", async () => {
-    const user = await createUser();
-
-    const res = await request
-      .execute(app)
-      .post("/user/edit")
-      .set(await authHeader(user))
-      .send({ user: { email: "  Renamed@Example.COM " } });
-
-    expect(res).to.have.status(200);
-
-    const updated = await User.findById(user._id).select("email pendingEmail");
-    expect(updated.pendingEmail).to.equal("renamed@example.com");
-    expect(updated.email).to.equal(user.email);
-  });
-
-  it("still allows an edit that leaves the address alone", async () => {
-    const user = await createUser();
-
-    const res = await request
-      .execute(app)
-      .post("/user/edit")
-      .set(await authHeader(user))
-      .send({ user: { username: "renamed", zip: "11375" } });
+    const res = await edit(user, { username: "renamed", zip: "11375", email: "" });
 
     expect(res).to.have.status(200);
 

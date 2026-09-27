@@ -15,7 +15,8 @@ import { isSuspended, SUSPENDED_LOGIN_MESSAGE } from "./lib/suspensions.js";
 import { buildCorsOptions } from "./lib/cors.js";
 import { trustProxySetting } from "./lib/proxy.js";
 import { LOGIN_THROTTLED_MESSAGE, LoginThrottle } from "./lib/loginThrottle.js";
-import { consumeToken, hasLiveToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/authTokens.js";
+import { deleteAccount } from "./lib/accounts.js";
+import { consumeToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/authTokens.js";
 import { mail, resolveFrontEndBaseUrl } from "./lib/mail.js";
 import { createSession, endSession, endUserSessions, useSession } from "./lib/sessions.js";
 import { captureCover } from "./lib/covers.js";
@@ -95,7 +96,6 @@ const mailThrottles = (endpoint) => ({
 });
 const resendConfirmationThrottles = mailThrottles("resend-confirmation");
 const forgotPasswordThrottles = mailThrottles("forgot-password");
-const changeEmailThrottles = mailThrottles("change-email");
 
 const MAIL_THROTTLED_MESSAGE = "Too many requests. Please try again later.";
 
@@ -130,6 +130,11 @@ const zipChangeThrottle = new LoginThrottle({
 });
 const ZIP_CHANGE_THROTTLED_MESSAGE = `You can change your ZIP code ${ZIP_CHANGES_PER_DAY} times a day. Please try again tomorrow.`;
 
+// Deleting an account asks for its password again, so a signed-in browser left
+// open cannot be used to guess it: failures count as they do at sign-in.
+const deleteAccountThrottle = new LoginThrottle({ scope: "delete-account" });
+const DELETE_ACCOUNT_THROTTLED_MESSAGE = "Too many wrong passwords. Please try again later.";
+
 // Answers 429 and returns true when the caller or the address is over its limit.
 async function mailRequestLimited(throttles, req, res, email) {
   let limit = await throttles.client.hit(req.ip);
@@ -161,21 +166,6 @@ async function sendEmailConfirmation(user) {
     mail.sendEmailConfirmation(user.email, frontEndLink("/confirm-email", token)),
     "email confirmation"
   );
-}
-
-// A pending email counts only while the link mailed to it can still be used.
-// Once that token has expired or been spent, the stale address is dropped; the
-// filter on its value keeps a newer request made meanwhile.
-async function withLivePendingEmail(user) {
-  if (!user?.pendingEmail) return user;
-  if (await hasLiveToken(TOKEN_PURPOSES.changeEmail, user._id)) return user;
-
-  await User.updateOne(
-    { _id: user._id, pendingEmail: user.pendingEmail },
-    { $unset: { pendingEmail: 1 } }
-  );
-  user.pendingEmail = undefined;
-  return user;
 }
 
 // --------------------
@@ -238,7 +228,7 @@ const optionalAuth = async (req, res, next) => {
 const PUBLIC_USER_FIELDS = "_id username location ratingsAvg ratingsCount";
 
 // The caller's own settings, on top of the public fields, for their profile.
-const OWN_USER_FIELDS = `${PUBLIC_USER_FIELDS} email pendingEmail zip maxDistanceMiles`;
+const OWN_USER_FIELDS = `${PUBLIC_USER_FIELDS} email zip maxDistanceMiles`;
 
 //exchange routes
 app.use("/exchanges", authMiddleware, exchangesRouter);
@@ -367,43 +357,6 @@ app.post("/auth/confirm-email", async (req, res, next) => {
     }
 
     res.json({ message: "Email confirmed. You can sign in now." });
-  } catch (err) {
-    next(err);
-  }
-});
-
-app.post("/auth/confirm-email-change", async (req, res, next) => {
-  try {
-    const userId = await consumeToken(TOKEN_PURPOSES.changeEmail, req.body?.token);
-    const user = userId ? await User.findById(userId) : null;
-
-    if (!user?.pendingEmail) {
-      return res.status(400).json({
-        message: "This confirmation link has expired or has already been used.",
-        code: TOKEN_INVALID,
-      });
-    }
-
-    // Another account may have taken the address since the link was sent.
-    const owner = await User.findOne({ email: user.pendingEmail });
-    if (owner && !owner._id.equals(user._id)) {
-      await User.updateOne({ _id: user._id }, { $unset: { pendingEmail: 1 } });
-      return res.status(409).json({ message: "Email already in use" });
-    }
-
-    user.email = user.pendingEmail;
-    user.pendingEmail = undefined;
-    try {
-      await user.save();
-    } catch (err) {
-      if (err?.code !== 11000) throw err;
-      return res.status(409).json({ message: "Email already in use" });
-    }
-
-    // Reset links went to the old address; none of them may outlive the change.
-    await revokeTokens(TOKEN_PURPOSES.resetPassword, user._id);
-
-    res.json({ message: "Email changed. Use your new address to sign in." });
   } catch (err) {
     next(err);
   }
@@ -724,8 +677,8 @@ app.get("/browse", authMiddleware, async (req, res, next) => {
 
 app.get("/user", authMiddleware, async (req, res, next) => {
   try {
-    const me = await withLivePendingEmail(
-      await User.findById(req.user.userId).select(`${OWN_USER_FIELDS} emailVerified notifications`)
+    const me = await User.findById(req.user.userId).select(
+      `${OWN_USER_FIELDS} emailVerified notifications`
     );
     if (!me) return res.status(404).json({ message: "User not found" });
 
@@ -1014,7 +967,7 @@ app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { username } = req.body.user;
-    const { email, zip, maxDistanceMiles } = matchedData(req).user ?? {};
+    const { zip, maxDistanceMiles } = matchedData(req).user ?? {};
 
     const update = {};
     if (username?.trim()) update.username = username.trim();
@@ -1038,21 +991,6 @@ app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
       update.geo = where.point;
     }
 
-    // A new address only becomes the account's email once the link mailed to it
-    // is followed; until then it is held as pending.
-    let pendingEmail = null;
-    if (email) {
-      const owner = await User.findOne({ email });
-      if (owner && owner._id.toString() !== userId) {
-        return res.status(409).json({ message: "Email already in use" });
-      }
-      if (!owner) {
-        if (await mailRequestLimited(changeEmailThrottles, req, res, email)) return;
-        pendingEmail = email;
-        update.pendingEmail = email;
-      }
-    }
-
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { $set: update },
@@ -1062,23 +1000,38 @@ app.post("/user/edit", authMiddleware, userEditValidators, async (req, res) => {
       await moveOwnerBooks(userId, { geo: where.point, location: where.place });
     }
 
-    if (pendingEmail && updatedUser) {
-      const token = await issueToken(TOKEN_PURPOSES.changeEmail, updatedUser._id);
-      sendInBackground(
-        mail.sendEmailChangeConfirmation(pendingEmail, frontEndLink("/confirm-email-change", token)),
-        "email change confirmation"
-      );
-      return res.json({
-        message: `We sent a confirmation link to ${pendingEmail}. Your email changes once you follow it.`,
-        confirmationSentTo: pendingEmail,
-        user: updatedUser,
-      });
-    }
-
-    res.json({ message: "User updated", user: await withLivePendingEmail(updatedUser) });
+    res.json({ message: "User updated", user: updatedUser });
   } catch (err) {
     console.error("Error updating user:", err);
     res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// body: { password }. Deletes the caller's account for good (lib/accounts.js),
+// which also ends every session of theirs, this one included.
+app.post("/user/delete", authMiddleware, async (req, res, next) => {
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  const { userId } = req.user;
+
+  try {
+    const limit = await deleteAccountThrottle.check(userId);
+    if (limit.limited) {
+      res.set("Retry-After", String(limit.retryAfterSeconds));
+      return res.status(429).json({ message: DELETE_ACCOUNT_THROTTLED_MESSAGE });
+    }
+
+    const user = await User.findById(userId).select("password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (!password || !(await bcrypt.compare(password, user.password))) {
+      await deleteAccountThrottle.recordFailure(userId);
+      return res.status(400).json({ message: "That password isn't right." });
+    }
+
+    await deleteAccount(userId);
+    res.json({ message: "Your account has been deleted." });
+  } catch (err) {
+    next(err);
   }
 });
 

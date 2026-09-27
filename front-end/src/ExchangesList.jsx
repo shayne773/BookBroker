@@ -167,7 +167,7 @@ function ExchangeRow({ ex, other, completed = false }) {
         {/* The row's own link, stretched over it; the name above opens their profile. */}
         <Link to={`/exchanges/${ex._id}`} className="stretch-link">
           {completed ? "View" : "View / Respond"}
-          <span className="visually-hidden"> exchange with {other?.username || "this reader"}</span>
+          <span className="visually-hidden"> exchange with {other?.username || "Deleted reader"}</span>
           <span className="textlink-arrow__mark" aria-hidden="true">&rarr;</span>
         </Link>
       </div>

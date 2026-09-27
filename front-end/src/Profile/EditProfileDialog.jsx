@@ -1,7 +1,8 @@
 import Popup from 'reactjs-popup';
 
 // The account details form, opened from the profile head. Where the reader
-// trades is set in its own section of the profile (LocationSettings).
+// trades is set in its own section of the profile (LocationSettings). The email
+// is the one the account signed up with and cannot be changed.
 const EditProfileDialog = ({ onSubmit }) => (
   <Popup
     trigger={<button type="button" className="button button--secondary">Edit profile</button>}
@@ -21,11 +22,6 @@ const EditProfileDialog = ({ onSubmit }) => (
           <label className="field">
             <span className="field__label">Username</span>
             <input className="input" type="text" name="username" id="username" />
-          </label>
-
-          <label className="field">
-            <span className="field__label">Email</span>
-            <input className="input" type="text" name="email" id="email" />
           </label>
 
           <div className="dialog__foot">

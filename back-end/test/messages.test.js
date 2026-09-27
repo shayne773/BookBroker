@@ -95,14 +95,16 @@ describe("messages", () => {
       expect(await unreadCount(ada)).to.equal(0);
     });
 
-    it("sends a long message, and to an id with no account behind it", async () => {
+    it("sends a long message, but none to an id with no account behind it", async () => {
       const long = "x".repeat(5000);
       await send(ada, bea, long);
       const thread = await api(bea.token).get(`/messages/${ada.id}`);
       expect(thread.body[0].content).to.equal(long);
 
-      const nobody = { id: String(new mongoose.Types.ObjectId()) };
-      await send(ada, nobody, "anyone there?");
+      const nobody = String(new mongoose.Types.ObjectId());
+      const res = await api(ada.token).post(`/messages/${nobody}`).send({ content: "anyone there?" });
+      expect(res).to.have.status(404);
+      expect(await Conversation.countDocuments({ users: nobody })).to.equal(0);
     });
 
     it("needs a signed-in user", async () => {

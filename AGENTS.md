@@ -113,9 +113,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   Resend and an `EMAIL_FROM` on it. Links are built from `FRONTEND_BASE_URL` (required in
   production), never the request's Host. See `back-end/.env.example`.
 - Emailed-link tokens live in `back-end/lib/authTokens.js`: stored as a SHA-256 hash,
-  single-use, expiring (confirm 24 h, reset 1 h, email change 24 h).
-- A profile email change is held in `User.pendingEmail`; `email` stays in effect for sign-in
-  and reset until `/auth/confirm-email-change` switches it and revokes reset links.
+  single-use, expiring (confirm 24 h, reset 1 h).
+- An account's email never changes: `/user/edit` refuses one, and there is no change flow
+  (another address is a new account).
 - `User.emailVerified` defaults to `true` so accounts from before confirmation count as
   confirmed with no backfill; sign-up stores `false` and login refuses only an explicit
   `false`. Keep both halves if you touch it.
@@ -169,6 +169,15 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Unread state is `Conversation.readAt` (per-participant marker) against the denormalised
   `lastMessageAt` / `lastMessageBy` (`back-end/routes/messages.js`); anything that writes a
   message must update both. `front-end/src/unread.js` holds the one shared navbar count.
+
+## Account deletion
+
+- `deleteAccount` (`back-end/lib/accounts.js`, `POST /user/delete`) is permanent and runs in
+  one transaction; its header lists what is removed and what stays. Anything new keyed to a
+  reader must be removed there too.
+- A missing user is a deleted reader: populated refs come back null and the front end shows
+  "Deleted reader" as plain text (`UserLink`'s default fallback, `readerMeta` empty). Routes
+  that let one reader reach another must 404 on a missing one.
 
 ## Location and distance
 

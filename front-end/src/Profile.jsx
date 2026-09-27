@@ -10,6 +10,7 @@ import useWishlistMatches from './Profile/useWishlistMatches';
 import BlockedReaders from './Profile/BlockedReaders';
 import NotificationSettings from './Profile/NotificationSettings';
 import LocationSettings from './Profile/LocationSettings';
+import DeleteAccount from './Profile/DeleteAccount';
 import { formatDistance } from './distance';
 import useFeedback from './useFeedback';
 import UserLink from './UserLink';
@@ -30,7 +31,7 @@ const Profile = () => {
   const wishlistFeedback = useFeedback();
   const offeringsFeedback = useFeedback();
   const [addError, setAddError] = useState('');
-  const [editNotice, setEditNotice] = useState(null);
+  const [editError, setEditError] = useState('');
 
   const { matches, loaded: matchesLoaded, error: matchesError } = useWishlistMatches();
   // Every offer of a wishlisted book, for the preview; the full list groups them by book.
@@ -129,10 +130,9 @@ const Profile = () => {
 
   const handleProfileEdit = (e, close) => {
     e.preventDefault();
-    const username = e.target.username.value;
-    const email = e.target.email.value;
+    const username = e.target.elements.username.value;
 
-    const data = { user: { username, email } };
+    const data = { user: { username } };
 
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/edit`, {
       method: 'POST',
@@ -143,9 +143,7 @@ const Profile = () => {
       .then(({ ok, data }) => {
         fetchUserData();
         close();
-        if (!ok) setEditNotice({ error: true, message: data.message || 'Your profile could not be updated.' });
-        else if (data.confirmationSentTo) setEditNotice({ error: false, message: data.message });
-        else setEditNotice(null);
+        setEditError(ok ? '' : data.message || 'Your profile could not be updated.');
       })
       .catch(err => {
         if (isSessionExpiredError(err)) return;
@@ -187,12 +185,9 @@ const Profile = () => {
         </button>
       </ProfileHead>
 
-      {editNotice && (
-        <p
-          className={editNotice.error ? 'notice notice--error mt-4' : 'notice mt-4'}
-          role={editNotice.error ? 'alert' : 'status'}
-        >
-          {editNotice.message}
+      {editError && (
+        <p className="notice notice--error mt-4" role="alert">
+          {editError}
         </p>
       )}
 
@@ -238,6 +233,8 @@ const Profile = () => {
       <NotificationSettings settings={user.notifications} />
 
       <BlockedReaders />
+
+      <DeleteAccount />
 
       {showAddModal && (
         <AddBookDialog

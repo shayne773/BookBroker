@@ -1,5 +1,5 @@
-// Single-use, time-limited tokens for the links we email: confirming an address,
-// resetting a password and confirming a changed address.
+// Single-use, time-limited tokens for the links we email: confirming an address
+// and resetting a password.
 //
 // The raw token exists only in the emailed link. The database keeps its SHA-256
 // digest, so a leaked collection cannot be replayed as links. A token is 32
@@ -16,7 +16,6 @@ const HOUR = 60 * 60 * 1000;
 export const TOKEN_PURPOSES = {
   confirmEmail: { name: "confirm-email", lifetimeMs: 24 * HOUR },
   resetPassword: { name: "reset-password", lifetimeMs: 1 * HOUR },
-  changeEmail: { name: "change-email", lifetimeMs: 24 * HOUR },
 };
 
 const authTokenSchema = new mongoose.Schema(
@@ -72,16 +71,6 @@ export async function consumeToken(purpose, raw, now = Date.now()) {
   // in the collection; it is refused here all the same.
   if (!token || token.expiresAt.getTime() <= now) return null;
   return token.user;
-}
-
-/** Whether the user holds an unused, unexpired token of `purpose`. */
-export async function hasLiveToken(purpose, userId, now = Date.now()) {
-  const live = await AuthToken.exists({
-    user: userId,
-    purpose: purpose.name,
-    expiresAt: { $gt: new Date(now) },
-  });
-  return Boolean(live);
 }
 
 /** Drop every outstanding token of `purpose` for a user. */

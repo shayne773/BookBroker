@@ -17,5 +17,8 @@ export const formatRating = (user) => {
 };
 
 // A reader's meta line: their location and rating, leaving out whichever is empty.
+// A reader with no name has deleted their account, and has none.
 export const readerMeta = (user, { noLocation = '' } = {}) =>
-  [user?.location || noLocation, formatRating(user)].filter(Boolean).join(' · ');
+  user?.username
+    ? [user.location || noLocation, formatRating(user)].filter(Boolean).join(' · ')
+    : '';

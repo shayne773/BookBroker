@@ -222,7 +222,7 @@ function ReportRow({ report, onReview, onSuspend, onUnsuspend }) {
 
       <div className="list-row__body">
         <h2 className="list-row__title">
-          <UserLink user={reported} fallback="Deleted reader" />
+          <UserLink user={reported} />
         </h2>
         <p className="list-row__meta">
           {reasonLabel(report.reason)} · reported by{' '}

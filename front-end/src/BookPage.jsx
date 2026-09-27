@@ -164,7 +164,7 @@ const BookPage = () => {
             <section className="book__section">
               <h2 className="fact__term">Offered by</h2>
               <p className="fact__value">
-                <UserLink user={book.owner} fallback="[NO USER]" className="textlink" />
+                <UserLink user={book.owner} className="textlink" />
               </p>
               {/* The owner's town, never their ZIP, and how far it is from you. */}
               {(book.owner?.location || formatDistance(book.distanceMiles, book.distanceLabel)) && (
