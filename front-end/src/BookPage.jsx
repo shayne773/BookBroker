@@ -51,7 +51,7 @@ const BookPage = () => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setIsInWishlist(true);
     } catch (err) {
-      // RequireAuth is already redirecting to the login page.
+      // RedirectOnSessionEnd is already redirecting to the login page.
       if (isSessionExpiredError(err)) return;
 
       console.error('Error:', err);
@@ -97,7 +97,7 @@ const BookPage = () => {
       }
       navigate(`/messages/${book.owner?.id}`);
     } catch (err) {
-      // RequireAuth is already redirecting to the login page.
+      // RedirectOnSessionEnd is already redirecting to the login page.
       if (isSessionExpiredError(err)) return;
 
       console.log("Failed to open conversation:", err);

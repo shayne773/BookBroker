@@ -16,7 +16,7 @@ const UserPageWishlist = () => {
       .then(res => res.json())
       .then(data => setWishlistBooks(data))
       .catch(err => {
-        // RequireAuth is already redirecting to the login page.
+        // RedirectOnSessionEnd is already redirecting to the login page.
         if (isSessionExpiredError(err)) return;
 
         console.error('Failed to fetch user wishlist:', err);
