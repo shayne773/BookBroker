@@ -6,6 +6,7 @@ import useReader from './useReader';
 import UserLink from './UserLink';
 import MessageAction from './UserPage/MessageAction';
 import DistanceLabel from './DistanceLabel';
+import PhotoCount from './PhotoCount';
 
 const UserPageOffered = () => {
   const { id } = useParams(); // user id
@@ -32,8 +33,12 @@ const UserPageOffered = () => {
       aside={<MessageAction user={reader} />}
       books={offeredBooks}
       emptyLabel="No offerings"
+      linkTo={(book) => `/books/${book._id}`}
       renderExtra={(book) => (
-        <DistanceLabel miles={book.distanceMiles} label={book.distanceLabel} block />
+        <>
+          <DistanceLabel miles={book.distanceMiles} label={book.distanceLabel} block />
+          <PhotoCount count={book.photoCount} block />
+        </>
       )}
     />
   );

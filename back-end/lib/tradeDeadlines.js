@@ -22,6 +22,8 @@ import mongoose from "mongoose";
 import Exchange from "../Exchange.js";
 import { OfferedBook } from "../Data.js";
 import { notifyTrade } from "./notifications.js";
+import { removeOfferedBooks } from "./offeredBooks.js";
+import { discardBookBlobs } from "./photos.js";
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;
@@ -58,11 +60,17 @@ const dueCompletion = (now) => ({
 
 /**
  * Takes a finished trade's books off the market, inside `session`: the traded
- * books are deleted and any other book it still locks is released.
+ * books are deleted, with their photos, and any other book it still locks is
+ * released. Returns the traded books' ids to pass to discardBookBlobs once
+ * committed.
  */
 export async function removeTradedBooks(exchange, session) {
-  await OfferedBook.deleteMany({ _id: { $in: [...exchange.requesterBooks, ...exchange.responderBooks] } }, { session });
+  const { bookIds } = await removeOfferedBooks(
+    { _id: { $in: [...exchange.requesterBooks, ...exchange.responderBooks] } },
+    { session }
+  );
   await releaseBooks(exchange._id, session);
+  return bookIds;
 }
 
 export function releaseBooks(exchangeId, session) {
@@ -87,6 +95,7 @@ async function expire(id, now) {
 async function autoComplete(id, now) {
   const session = await mongoose.startSession();
   let completed = null;
+  let removedBooks = [];
   try {
     await session.withTransaction(async () => {
       completed = await Exchange.findOneAndUpdate(
@@ -94,12 +103,13 @@ async function autoComplete(id, now) {
         { $set: { status: "COMPLETED", autoCompleted: true, deadlineDays: COMPLETION_TIMEOUT_DAYS }, $inc: { __v: 1 } },
         { new: true, session }
       );
-      if (completed) await removeTradedBooks(completed, session);
+      removedBooks = completed ? await removeTradedBooks(completed, session) : [];
     });
   } finally {
     await session.endSession();
   }
   if (!completed) return false;
+  discardBookBlobs(removedBooks);
 
   // The side that confirmed "did" the completion; the silent side hears of it.
   const confirmer = completed.requesterConfirmedComplete ? completed.requester : completed.responder;

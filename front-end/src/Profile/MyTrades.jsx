@@ -1,6 +1,7 @@
 import ShelfPage from '../ShelfPage';
 import { useEffect, useState } from 'react';
 import { authFetch, isSessionExpiredError } from '../auth';
+import PhotoCount from '../PhotoCount';
 
 const MyTrades = () => {
   const [offeringsBooks, setOfferingsBooks] = useState([]);
@@ -42,6 +43,9 @@ const MyTrades = () => {
       books={offeringsBooks}
       emptyLabel="Loading Offerings..."
       onRemove={handleDelete}
+      // A book's page is where its owner adds and arranges photos of it.
+      linkTo={(book) => `/books/${book._id}`}
+      renderExtra={(book) => <PhotoCount count={book.photos?.length} block />}
     />
   );
 };

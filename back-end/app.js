@@ -10,6 +10,7 @@ import messagesRouter from "./routes/messages.js";
 import adminRouter from "./routes/admin.js";
 import mapRouter from "./routes/map.js";
 import cronRouter from "./routes/cron.js";
+import photosRouter from "./routes/photos.js";
 import { isAdmin, requireAdmin } from "./lib/admin.js";
 import { isSuspended, SUSPENDED_LOGIN_MESSAGE } from "./lib/suspensions.js";
 import { buildCorsOptions } from "./lib/cors.js";
@@ -20,6 +21,8 @@ import { consumeToken, issueToken, revokeTokens, TOKEN_PURPOSES } from "./lib/au
 import { mail, resolveFrontEndBaseUrl } from "./lib/mail.js";
 import { createSession, endSession, endUserSessions, useSession } from "./lib/sessions.js";
 import { captureCover } from "./lib/covers.js";
+import { removeOfferedBooks } from "./lib/offeredBooks.js";
+import { photosEnabled } from "./lib/photos.js";
 import { runInBackground } from "./lib/background.js";
 import { wishlistMatches } from "./lib/matches.js";
 import { listBooks, mostWanted, NEWEST_FIRST, readerTaste, recommendations } from "./lib/listings.js";
@@ -238,6 +241,9 @@ app.use("/map", authMiddleware, mapRouter);
 
 // Reports and suspensions, for the accounts named by ADMIN_EMAILS only.
 app.use("/admin", authMiddleware, requireAdmin, adminRouter);
+
+// An owner's photos of their offered book.
+app.use("/user/offered/:id/photos", authMiddleware, photosRouter);
 
 // Scheduled jobs, for Vercel Cron only (CRON_SECRET).
 app.use("/cron", cronRouter);
@@ -477,7 +483,9 @@ app.post("/logout", async (req, res, next) => {
 });
 
 // A direct link opens a book wherever it is, beyond the caller's distance too,
-// and says how far away it is (beyond it, only that it is farther).
+// and says how far away it is (beyond it, only that it is farther). The book's
+// photos come with it; `isOwner` tells its owner they can manage them, and
+// `photoUploads` that they can add some.
 app.get("/books/:id", optionalAuth, async (req, res, next) => {
   try {
     const book = await OfferedBook.findById(req.params.id).select("+ownerGeo");
@@ -493,8 +501,14 @@ app.get("/books/:id", optionalAuth, async (req, res, next) => {
 
     const owner = await User.findById(book.owner).select("username location");
     const { ownerGeo, ...result } = book.toObject();
+    const isOwner = req.user?.userId === String(book.owner);
     result.owner = owner ? { id: owner._id, username: owner.username, location: owner.location } : null;
-    res.json({ ...result, ...distanceFields(await readerArea(req.user?.userId), ownerGeo) });
+    res.json({
+      ...result,
+      ...distanceFields(await readerArea(req.user?.userId), ownerGeo),
+      isOwner,
+      photoUploads: photosEnabled() && isOwner,
+    });
   } catch (err) {
     // A malformed id is simply "no such book" as far as the caller is
     // concerned; anything else is a real failure for the error handler.
@@ -689,6 +703,8 @@ app.get("/user", authMiddleware, async (req, res, next) => {
       ...fields,
       notifications: notificationSettings(me),
       isAdmin: isAdmin({ email: me.email, emailVerified }),
+      // Whether the Blob store is set up, so the front end offers photos.
+      photoUploads: photosEnabled(),
     });
   } catch (err) {
     return next(err);
@@ -792,7 +808,10 @@ app.get("/users/:id/offered", authMiddleware, async (req, res) => {
     // Their shelf opens wherever they are, each book saying how far away it is.
     const owner = await User.findById(req.params.id).select("geo").lean();
     const distance = distanceFields(await readerArea(req.user.userId), owner?.geo);
-    res.json(books.map((book) => ({ ...book, ...distance })));
+    // Like every list, only how many photos each book has; the book page shows them.
+    res.json(
+      books.map(({ photos, ...book }) => ({ ...book, photoCount: photos?.length ?? 0, ...distance }))
+    );
   } catch (err) {
     console.error("Error fetching offered books for user:", err);
     res.status(500).json({ error: "Failed to fetch offered books" });
@@ -911,7 +930,8 @@ app.post(
 
       await book.save();
       notifyWishlistMatch(book);
-      return res.status(201).json({ message: "successfully added offered book" });
+      // The id lets the front end go on to upload the owner's photos of it.
+      return res.status(201).json({ message: "successfully added offered book", id: book._id });
     } catch (err) {
       console.error("ADD OFFERED ERROR:", err);
       return res.status(500).json({
@@ -1048,12 +1068,11 @@ app.delete("/user/wishlist/:id", authMiddleware, async (req, res) => {
 
 app.delete("/user/offered/:id", authMiddleware, async (req, res) => {
   try {
-    const book = await OfferedBook.findOneAndDelete({
-      _id: req.params.id,
-      owner: mongoose.Types.ObjectId.createFromHexString(req.user.userId),
-    });
+    const { removed } = mongoose.isValidObjectId(req.params.id)
+      ? await removeOfferedBooks({ _id: req.params.id, owner: req.user.userId })
+      : { removed: 0 };
 
-    if (!book) return res.status(404).json({ message: "Book not found or not authorized" });
+    if (!removed) return res.status(404).json({ message: "Book not found or not authorized" });
     res.json({ message: "Book successfully deleted" });
   } catch (err) {
     console.error("Error deleting offered book:", err);

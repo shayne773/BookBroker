@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import BookCover from '../BookCover';
 import DistanceLabel from '../DistanceLabel';
+import PhotoCount from '../PhotoCount';
 
 // The shared record list behind Newly Added, Most Wanted and a genre: one row
 // per book, hairline-separated, with the cover small and the title leading.
@@ -29,6 +30,7 @@ const BookList = ({ books, emptyLabel }) => {
                 {book.author || '[NO AUTHOR]'} &middot; {book.year || '[NO DATE]'}
               </p>
               <DistanceLabel miles={book.distanceMiles} block />
+              <PhotoCount count={book.photoCount} block />
             </div>
 
             <Link to={`/books/${id}`} className="button button--secondary button--small">

@@ -17,6 +17,8 @@ import { DB_NAME } from "./lib/db.js";
 import { normalizeEmail } from "./lib/validation.js";
 import { lookupZip } from "./lib/zipCodes.js";
 import { bookPosition } from "./lib/nearby.js";
+import { removeOfferedBooks } from "./lib/offeredBooks.js";
+import { photoCleanupSettled } from "./lib/photos.js";
 
 const SEED_PREFIX = "seed_user_";
 const USER_COUNT = 10;
@@ -120,7 +122,8 @@ export async function seed({ pauseMs = 250, log = console.log } = {}) {
   const oldUsers = await User.find({ email: { $regex: `^${SEED_PREFIX}` } }, { _id: 1 });
   const oldIds = oldUsers.map((u) => u._id);
   if (oldIds.length) {
-    await OfferedBook.deleteMany({ owner: { $in: oldIds } });
+    // Through the shared helper, so photos a reader added to a demo book go too.
+    await removeOfferedBooks({ owner: { $in: oldIds } });
     await User.deleteMany({ _id: { $in: oldIds } });
     log(`🧹 Removed old seeded data (${oldIds.length} users)`);
   }
@@ -160,6 +163,7 @@ async function main() {
   console.log(`✅ Connected to MongoDB (dbName=${DB_NAME})`);
   try {
     await seed();
+    await photoCleanupSettled();
   } finally {
     await mongoose.disconnect();
   }

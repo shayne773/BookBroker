@@ -4,6 +4,7 @@
 import { timingSafeEqual } from "node:crypto";
 import express from "express";
 import { resolveTradeDeadlines } from "../lib/tradeDeadlines.js";
+import { deleteUnattachedBlobs } from "../lib/photos.js";
 
 const router = express.Router();
 
@@ -24,6 +25,16 @@ router.use(requireCronSecret);
 router.get("/trade-deadlines", async (req, res, next) => {
   try {
     res.json(await resolveTradeDeadlines());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Daily: deletes this namespace's blobs over a day old that no book shows:
+// uploads never attached, and removed photos whose deletion failed (lib/photos.js).
+router.get("/photo-cleanup", async (req, res, next) => {
+  try {
+    res.json({ unattached: await deleteUnattachedBlobs() });
   } catch (err) {
     next(err);
   }

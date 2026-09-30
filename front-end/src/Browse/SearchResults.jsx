@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import BookCover from '../BookCover';
 import DistanceLabel from '../DistanceLabel';
+import PhotoCount from '../PhotoCount';
 import Feedback, { DoneButton } from '../Feedback';
 
 // The live suggestion list under the Google Books field.
@@ -119,6 +120,7 @@ export const MarketResults = ({ books }) => {
               {book.year ? ` · ${book.year}` : ''}
             </p>
             <DistanceLabel miles={book.distanceMiles} block />
+            <PhotoCount count={book.photoCount} block />
           </div>
 
           {book._id ? (

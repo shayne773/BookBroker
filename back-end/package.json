@@ -19,6 +19,7 @@
     "place-books": "node scripts/place-books.js"
   },
   "dependencies": {
+    "@vercel/blob": "^2.8.0",
     "@vercel/functions": "^3.9.9",
     "axios": "^1.8.4",
     "bcryptjs": "^3.0.2",

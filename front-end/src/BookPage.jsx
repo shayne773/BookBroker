@@ -6,6 +6,9 @@ import { formatDistance } from './distance';
 import Feedback, { DoneButton } from './Feedback';
 import useFeedback from './useFeedback';
 import UserLink from './UserLink';
+import PhotoGallery from './PhotoGallery';
+import PhotoManager from './PhotoManager';
+import ReportDialog from './UserPage/ReportDialog';
 
 const BookPage = () => {
   const { id } = useParams();
@@ -14,8 +17,11 @@ const BookPage = () => {
 
   const [isInWishlist, setIsInWishlist] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [reporting, setReporting] = useState(false);
   // How the last action here went, under the buttons.
-  const { feedback, fail, clear } = useFeedback();
+  const { feedback, done, fail, clear } = useFeedback();
+  const photos = book.photos || [];
+  const setPhotos = (next) => setBook((current) => ({ ...current, photos: next }));
   const navigate = useNavigate();
 
   const addToWishlist = async () => {
@@ -176,6 +182,32 @@ const BookPage = () => {
               )}
             </section>
 
+            {/* The owner's own photos of their copy; the catalogue cover stays the main image. */}
+            {(photos.length > 0 || book.photoUploads) && (
+              <section className="book__section">
+                <h2 className="fact__term">{book.isOwner ? 'Your photos of this copy' : 'Photos of this copy'}</h2>
+                <PhotoGallery photos={photos} title={book.title} />
+                {book.isOwner ? (
+                  book.locked ? (
+                    <p className="hint mt-3">
+                      This book is in an accepted trade, so its photos can't change until the trade is over.
+                    </p>
+                  ) : (
+                    <PhotoManager bookId={id} photos={photos} canUpload={book.photoUploads} onChange={setPhotos} />
+                  )
+                ) : (
+                  // Photos are the owner's; reporting them is reporting the owner.
+                  book.owner?.id && (
+                    <p className="hint mt-3">
+                      <button type="button" className="textlink-quiet" onClick={() => setReporting(true)}>
+                        Report these photos
+                      </button>
+                    </p>
+                  )
+                )}
+              </section>
+            )}
+
             <section className="book__section">
               <h2 className="fact__term">About this book</h2>
               <p className="prose">{book.desc || "[NO DESC]"}</p>
@@ -197,6 +229,19 @@ const BookPage = () => {
           </div>
         </div>
       </article>
+      )}
+
+      {reporting && (
+        <ReportDialog
+          user={{ _id: book.owner.id, username: book.owner.username }}
+          initialReason="INAPPROPRIATE"
+          initialDetails={`About the photos of "${book.title}": ${window.location.origin}/books/${id}\n`}
+          onClose={() => setReporting(false)}
+          onReported={(message) => {
+            setReporting(false);
+            done(message);
+          }}
+        />
       )}
     </main>
   );

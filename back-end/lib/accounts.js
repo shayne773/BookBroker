@@ -2,7 +2,8 @@
 // no grace period, and the address is free to sign up again as a new account.
 //
 // What goes: the user, their offered books (so they leave every listing, the
-// map and other readers' matches), their wishlist, the blocks they placed, their
+// map and other readers' matches) with their photos, deleted from Blob once the
+// transaction has committed, their wishlist, the blocks they placed, their
 // sessions and emailed-link tokens and their notification state. An accepted
 // trade the other reader has already confirmed completes, as it would at its
 // deadline (lib/tradeDeadlines.js): its books leave the market and the other
@@ -19,6 +20,8 @@ import mongoose from "mongoose";
 import Exchange from "../Exchange.js";
 import { Block, Conversation, OfferedBook, User, WishlistBook, WishlistNotice } from "../Data.js";
 import { AuthToken } from "./authTokens.js";
+import { removeOfferedBooks } from "./offeredBooks.js";
+import { discardBookBlobs } from "./photos.js";
 import { notifyTrade } from "./notifications.js";
 import { Session } from "./sessions.js";
 import { removeTradedBooks, resolveTradeDeadlines } from "./tradeDeadlines.js";
@@ -41,11 +44,14 @@ export async function deleteAccount(userId) {
 
   let cancelled = [];
   let completed = [];
+  // Every book deleted here, whose photos go once the deletion has committed.
+  let removedBooks = [];
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
       cancelled = [];
       completed = [];
+      removedBooks = [];
       const user = await User.exists({ _id: uid }).session(session);
       if (!user) return;
 
@@ -63,7 +69,7 @@ export async function deleteAccount(userId) {
         { $set: { status: "COMPLETED" }, $inc: { __v: 1 } },
         { session }
       );
-      for (const exchange of completed) await removeTradedBooks(exchange, session);
+      for (const exchange of completed) removedBooks.push(...(await removeTradedBooks(exchange, session)));
 
       const ids = cancelled.map((ex) => ex._id);
       await Exchange.updateMany(
@@ -77,7 +83,8 @@ export async function deleteAccount(userId) {
         { session }
       );
 
-      await OfferedBook.deleteMany({ owner: uid }, { session });
+      const { bookIds } = await removeOfferedBooks({ owner: uid }, { session });
+      removedBooks.push(...bookIds);
       await WishlistBook.deleteMany({ userId: uid }, { session });
       await Block.deleteMany({ blocker: uid }, { session });
       await Session.deleteMany({ user: uid }, { session });
@@ -95,6 +102,7 @@ export async function deleteAccount(userId) {
     await session.endSession();
   }
 
+  discardBookBlobs(removedBooks);
   for (const exchange of completed) notifyTrade(exchange, "completedByDeletion", uid);
   for (const exchange of cancelled) notifyTrade(exchange, "cancelled", uid);
 }

@@ -1,10 +1,14 @@
 import { useId } from 'react';
 import { GoogleSuggestions } from '../Browse/SearchResults';
+import UploadProgress from '../UploadProgress';
+import PhotoPicker from './PhotoPicker';
 
 // Search Google Books and add the chosen volume to a shelf. The search state
 // lives in the caller (see useBookSearch) so it outlasts the dialog. `error`
-// says why the last add failed.
-const AddBookDialog = ({ title, search, error, onSubmit, onClose }) => {
+// says why the last add failed. An offer can also take photos of the reader's
+// copy: `photos` (files, when photos are on) with `onPhotos` to change them,
+// and `progress` as they upload while `busy`.
+const AddBookDialog = ({ title, search, error, busy = false, photos, onPhotos, progress, onSubmit, onClose }) => {
   const titleId = useId();
   const inputId = useId();
 
@@ -45,14 +49,17 @@ const AddBookDialog = ({ title, search, error, onSubmit, onClose }) => {
 
           {search.searching && <p className="hint" role="status">Searching…</p>}
           {search.error && <p className="notice notice--error" role="alert">{search.error}</p>}
+          {photos && <PhotoPicker files={photos} onChange={onPhotos} disabled={busy} />}
+
+          <UploadProgress progress={progress} />
           {error && <p className="notice notice--error" role="alert">{error}</p>}
 
           <div className="dialog__foot">
             <button type="button" className="button button--quiet" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="button button--primary" disabled={!search.selected}>
-              Add
+            <button type="submit" className="button button--primary" disabled={!search.selected || busy}>
+              {busy ? 'Adding…' : 'Add'}
             </button>
           </div>
         </form>

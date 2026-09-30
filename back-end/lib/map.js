@@ -63,15 +63,16 @@ export function areasWithin(boxes, match) {
  */
 export async function booksInPlace({ place, match, area, offset = 0 }) {
   const found = await OfferedBook.find({ ...match, ownerPlace: place })
-    .select("title author year cover +ownerGeo")
+    .select("title author year cover photos +ownerGeo")
     .sort({ createdAt: -1, _id: -1 })
     .skip(offset)
     .limit(AREA_PAGE_SIZE + 1)
     .lean();
 
   const more = found.length > AREA_PAGE_SIZE && offset + AREA_PAGE_SIZE <= MAX_OFFSET;
-  const books = found.slice(0, AREA_PAGE_SIZE).map(({ ownerGeo, ...book }) => ({
+  const books = found.slice(0, AREA_PAGE_SIZE).map(({ ownerGeo, photos, ...book }) => ({
     ...book,
+    photoCount: photos?.length ?? 0,
     ...distanceFields(area, ownerGeo),
   }));
   return { books, nextOffset: more ? offset + AREA_PAGE_SIZE : null };

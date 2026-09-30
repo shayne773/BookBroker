@@ -10,6 +10,8 @@ import { createSession } from "../lib/sessions.js";
 import { normalizeEmail } from "../lib/validation.js";
 import { lookupZip } from "../lib/zipCodes.js";
 import { bookPosition } from "../lib/nearby.js";
+import { blobStore, photoPrefix } from "../lib/photos.js";
+import { BlobNotFoundError } from "@vercel/blob";
 
 use(chaiHttp);
 
@@ -21,6 +23,7 @@ export function api(token) {
   return {
     get: withAuth("get"),
     post: withAuth("post"),
+    put: withAuth("put"),
     delete: withAuth("delete"),
   };
 }
@@ -183,3 +186,54 @@ export function googleVolume(id, { isbn, title = `Book ${id}`, thumbnail = `http
     },
   };
 }
+
+// Turns photos on against a fake Vercel Blob store for one test (test/setup.js
+// turns them off again). `upload(bookId)` puts a blob in it the way the browser
+// would (under `prefix`, by default the book's in this namespace) and returns its URL; `blobs` maps URL to { pathname, contentType, size, uploadedAt };
+// `tokens` has the options of each client token issued, `deleted` every URL
+// deleted. Set `failDeletes` to make deletion fail.
+export function mockBlobStore() {
+  process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_teststore_secret";
+  const store = { blobs: new Map(), tokens: [], deleted: [], failDeletes: false };
+
+  store.upload = (
+    bookId,
+    { contentType = "image/jpeg", size = 250_000, uploadedAt = new Date(), prefix = photoPrefix(bookId) } = {}
+  ) => {
+    const pathname = `${prefix}${new mongoose.Types.ObjectId()}.jpg`;
+    const url = `https://teststore.public.blob.vercel-storage.com/${pathname}`;
+    store.blobs.set(url, { pathname, contentType, size, uploadedAt });
+    return url;
+  };
+
+  blobStore.clientToken = async (options) => {
+    store.tokens.push(options);
+    return `vercel_blob_client_teststore_${store.tokens.length}`;
+  };
+  blobStore.head = async (url) => {
+    const blob = store.blobs.get(url);
+    if (!blob) throw new BlobNotFoundError();
+    return { url, ...blob };
+  };
+  blobStore.del = async (urls) => {
+    if (store.failDeletes) throw new Error("Vercel Blob is unavailable");
+    for (const url of [urls].flat()) {
+      store.deleted.push(url);
+      store.blobs.delete(url);
+    }
+  };
+  // In pathname order; like the store's, a cursor is where the last page ended.
+  blobStore.list = async ({ prefix = "", cursor = "", limit = 1000 } = {}) => {
+    const matching = [...store.blobs]
+      .map(([url, blob]) => ({ url, ...blob }))
+      .filter((blob) => blob.pathname.startsWith(prefix) && blob.pathname > cursor)
+      .sort((a, b) => a.pathname.localeCompare(b.pathname));
+    const blobs = matching.slice(0, limit);
+    const hasMore = matching.length > limit;
+    return { blobs, hasMore, cursor: hasMore ? blobs.at(-1).pathname : undefined };
+  };
+  return store;
+}
+
+// A stored photo at `url`, as an entry of a book's `photos`.
+export const photo = (url, { width = 1200, height = 1600 } = {}) => ({ url, width, height });

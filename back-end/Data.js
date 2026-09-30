@@ -116,6 +116,15 @@ wishlistBookSchema.index({ userId: 1 });
 // A new offer looks up the readers who wishlisted its ISBN.
 wishlistBookSchema.index({ isbn: 1 });
 
+// A photo of an offered book, taken by its owner: a public Vercel Blob URL
+// under the book's own path, and the image's size in pixels (lib/photos.js).
+const MAX_PHOTOS = 4;
+const photoSchema = new Schema({
+  url: { type: String, required: true },
+  width: { type: Number, required: true },
+  height: { type: Number, required: true },
+});
+
 // Offered book schema
 const offeredBookSchema = new Schema({
   owner: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -127,6 +136,9 @@ const offeredBookSchema = new Schema({
   isbn: String,
   genre: String,
   desc: String,
+  // The owner's photos of their copy, the first one the main one; at most
+  // MAX_PHOTOS. Lists send only their number, `photoCount` (lib/nearby.js).
+  photos: { type: [photoSchema], default: [] },
   locked: { type: Boolean, default: false },
   lockedByExchange: { type: mongoose.Schema.Types.ObjectId, ref: "Exchange", default: null },
   createdAt: { type: Date, default: Date.now },
@@ -278,6 +290,7 @@ export {
   Message,
   WishlistNotice,
   WISHLIST_NOTICE_INTERVAL_SECONDS,
+  MAX_PHOTOS,
   Block,
   Report,
   REPORT_REASONS,
