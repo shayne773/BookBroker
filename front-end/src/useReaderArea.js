@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { authFetch, isSessionExpiredError } from './auth';
+import { authFetch, isSessionExpiredError, useSignedIn } from './auth';
 
 // The signed-in reader's own area, for LocationPrompt: `{ place, miles }`, null
 // when they have no ZIP code, undefined while it loads or when it could not be.
@@ -8,8 +8,11 @@ export const areaOf = (user) =>
 
 const useReaderArea = () => {
   const [area, setArea] = useState(undefined);
+  const signedIn = useSignedIn();
 
   useEffect(() => {
+    // A visitor has no area; LocationPrompt says so without asking.
+    if (!signedIn) return undefined;
     let live = true;
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user`)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
@@ -21,7 +24,7 @@ const useReaderArea = () => {
     return () => {
       live = false;
     };
-  }, []);
+  }, [signedIn]);
 
   return area;
 };

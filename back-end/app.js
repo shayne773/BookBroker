@@ -207,9 +207,13 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
-// For the public book routes: a signed-in caller is identified so their blocks
-// apply; anyone else, including a token that no longer names a session, reads
-// as signed out rather than being refused.
+// For the routes a visitor can browse without an account (the book lists,
+// book pages, readers' public profiles and the map): a signed-in caller is
+// identified so their blocks and distance apply; anyone else, including a token
+// that no longer names a session, reads as signed out rather than being refused.
+// A signed-out caller has no ZIP, so they see every book on the market with no
+// distances. Every write, and every read of a reader's own data, stays behind
+// authMiddleware.
 const optionalAuth = async (req, res, next) => {
   const token = bearerToken(req);
   if (!token) return next();
@@ -233,8 +237,8 @@ const OWN_USER_FIELDS = `${PUBLIC_USER_FIELDS} email zip maxDistanceMiles`;
 //exchange routes
 app.use("/exchanges", authMiddleware, exchangesRouter);
 
-// Books by place, for the map page.
-app.use("/map", authMiddleware, mapRouter);
+// Books by place, for the map page, which visitors can browse too.
+app.use("/map", optionalAuth, mapRouter);
 
 // Reports and suspensions, for the accounts named by ADMIN_EMAILS only.
 app.use("/admin", authMiddleware, requireAdmin, adminRouter);
@@ -561,13 +565,9 @@ app.get("/popular", optionalAuth, async (req, res, next) => {
   }
 });
 
-// --------------------
-// PROTECTED ROUTES
-// --------------------
-
-app.get("/feed", authMiddleware, async (req, res, next) => {
+app.get("/feed", optionalAuth, async (req, res, next) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user?.userId;
 
     const books = await listBooks({
       area: await readerArea(userId),
@@ -581,9 +581,9 @@ app.get("/feed", authMiddleware, async (req, res, next) => {
   }
 });
 
-app.get("/books", authMiddleware, async (req, res, next) => {
+app.get("/books", optionalAuth, async (req, res, next) => {
   const query = String(req.query.query ?? "").trim();
-  const userId = req.user.userId;
+  const userId = req.user?.userId;
 
   try {
     // Escaped before it reaches the regex engine, as in /browse.
@@ -603,9 +603,9 @@ app.get("/books", authMiddleware, async (req, res, next) => {
 });
 
 // GET /browse?q=optionalSearch
-app.get("/browse", authMiddleware, async (req, res, next) => {
+app.get("/browse", optionalAuth, async (req, res, next) => {
   const q = String(req.query.q ?? "").trim();
-  const userId = req.user.userId;
+  const userId = req.user?.userId;
 
   const LIMIT_SECTION = 20;
   const LIMIT_ROW = 16;
@@ -658,7 +658,8 @@ app.get("/browse", authMiddleware, async (req, res, next) => {
     }
 
     /* ---------------- RESPONSE ---------------- */
-    // `area` is the caller's own place and distance; null until they add a ZIP.
+    // `area` is the caller's own place and distance; null until they add a ZIP,
+    // and for a visitor.
     res.json({
       q,
       area: area && { place: area.place, miles: area.miles },
@@ -674,6 +675,11 @@ app.get("/browse", authMiddleware, async (req, res, next) => {
   }
 });
 
+// --------------------
+// PROTECTED ROUTES
+// --------------------
+// Except the public profile reads (GET /users/:id, /users/:id/wishlist and
+// /users/:id/offered), which take optionalAuth like the lists above.
 
 app.get("/user", authMiddleware, async (req, res, next) => {
   try {
@@ -717,11 +723,11 @@ app.post("/user/notifications", authMiddleware, async (req, res, next) => {
   }
 });
 
-// Public profile of another user. Requires a token, and returns only the
-// fields the app renders - never the password hash or the email address.
+// Public profile of another user, for visitors too. Returns only the fields
+// the app renders - never the password hash, the email address or the ZIP.
 // `blockedByMe` says whether the caller has blocked them; whether they have
 // blocked the caller is never revealed.
-app.get("/users/:id", authMiddleware, async (req, res, next) => {
+app.get("/users/:id", optionalAuth, async (req, res, next) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ message: "Invalid user id" });
@@ -731,7 +737,7 @@ app.get("/users/:id", authMiddleware, async (req, res, next) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const blockedByMe = Boolean(
-      await Block.exists({ blocker: req.user.userId, blocked: user._id })
+      req.user && (await Block.exists({ blocker: req.user.userId, blocked: user._id }))
     );
 
     res.json({ ...user, blockedByMe });
@@ -758,7 +764,7 @@ app.get("/user/offered", authMiddleware, async (req, res, next) => {
   }
 });
 
-app.get("/users/:id/wishlist", authMiddleware, async (req, res) => {
+app.get("/users/:id/wishlist", optionalAuth, async (req, res) => {
   try {
     const books = await WishlistBook.find({ userId: req.params.id });
     res.json(books);
@@ -768,7 +774,7 @@ app.get("/users/:id/wishlist", authMiddleware, async (req, res) => {
   }
 });
 
-app.get("/users/:id/offered", authMiddleware, async (req, res) => {
+app.get("/users/:id/offered", optionalAuth, async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ message: "Invalid user id" });
@@ -777,7 +783,7 @@ app.get("/users/:id/offered", authMiddleware, async (req, res) => {
     // Blocked either way, or suspended, their shelf reads as empty.
     if (
       (await isSuspended(req.params.id)) ||
-      (await isBlockedBetween(req.user.userId, req.params.id))
+      (req.user && (await isBlockedBetween(req.user.userId, req.params.id)))
     ) {
       return res.json([]);
     }
@@ -791,7 +797,7 @@ app.get("/users/:id/offered", authMiddleware, async (req, res) => {
 
     // Their shelf opens wherever they are, each book saying how far away it is.
     const owner = await User.findById(req.params.id).select("geo").lean();
-    const distance = distanceFields(await readerArea(req.user.userId), owner?.geo);
+    const distance = distanceFields(await readerArea(req.user?.userId), owner?.geo);
     res.json(books.map((book) => ({ ...book, ...distance })));
   } catch (err) {
     console.error("Error fetching offered books for user:", err);

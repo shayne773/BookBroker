@@ -1,6 +1,7 @@
 // auth.js
 // Shared session helpers so every page treats a missing or expired token the same way.
 // Route protection lives in RequireAuth.jsx, which listens for SESSION_EXPIRED_EVENT.
+import { useEffect, useState } from 'react';
 
 const TOKEN_KEY = 'token';
 const USER_ID_KEY = 'userId';
@@ -22,6 +23,25 @@ export const clearSession = () => {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_ID_KEY);
   localStorage.removeItem(USERNAME_KEY);
+};
+
+// Whether this browser is signed in, for pages a visitor can browse too. It
+// turns false when the server ends the session (or another tab signs out), so
+// the page falls back to what a visitor sees rather than leaving them stranded.
+export const useSignedIn = () => {
+  const [signedIn, setSignedIn] = useState(() => Boolean(getToken()));
+
+  useEffect(() => {
+    const update = () => setSignedIn(Boolean(getToken()));
+    window.addEventListener(SESSION_EXPIRED_EVENT, update);
+    window.addEventListener('storage', update);
+    return () => {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, update);
+      window.removeEventListener('storage', update);
+    };
+  }, []);
+
+  return signedIn;
 };
 
 // Thrown by authFetch when the server rejects the token. Pages should ignore it:

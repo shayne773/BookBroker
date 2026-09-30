@@ -40,13 +40,13 @@ describe("auth", () => {
   });
 
   it("a protected route answers 401 without a token", async () => {
-    const res = await api().get("/books");
+    const res = await api().get("/user");
 
     expect(res).to.have.status(401);
   });
 
   it("a protected route answers 401 for a token it did not sign", async () => {
-    const res = await api("not-a-real-token").get("/books");
+    const res = await api("not-a-real-token").get("/user");
 
     expect(res).to.have.status(401);
   });

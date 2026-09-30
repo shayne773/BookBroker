@@ -6,6 +6,7 @@ import { formatDistance } from './distance';
 import Feedback, { DoneButton } from './Feedback';
 import useFeedback from './useFeedback';
 import UserLink from './UserLink';
+import useAccountPrompt from './useAccountPrompt';
 
 const BookPage = () => {
   const { id } = useParams();
@@ -17,6 +18,7 @@ const BookPage = () => {
   // How the last action here went, under the buttons.
   const { feedback, fail, clear } = useFeedback();
   const navigate = useNavigate();
+  const { signedIn, gate } = useAccountPrompt();
 
   const addToWishlist = async () => {
     const bookData = {
@@ -54,7 +56,7 @@ const BookPage = () => {
   };
 
   useEffect(() => {
-    // Signed in, so a book whose owner is blocked either way reads as not found.
+    // For a signed-in reader, a book whose owner is blocked either way reads as not found.
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/books/${id}`)
       .then(res => {
         setNotFound(res.status === 404);
@@ -97,7 +99,8 @@ const BookPage = () => {
     }
   }
   useEffect(() => {
-    if (book.isbn) {
+    // A visitor has no wishlist to look the book up in.
+    if (book.isbn && signedIn) {
       authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/wishlist/${book.isbn}`)
         .then(res => res.json())
         .then(data => setIsInWishlist(data.exists))
@@ -105,7 +108,7 @@ const BookPage = () => {
           console.error('Error checking wishlist status:', err);
         });
     }
-  }, [book.isbn]);
+  }, [book.isbn, signedIn]);
 
   return (
     <main className="page page--reading">
@@ -144,14 +147,14 @@ const BookPage = () => {
                 doneLabel="On your wishlist"
                 busy={adding}
                 busyLabel="Adding…"
-                onClick={addToWishlist}
+                onClick={gate('add books to your wishlist', addToWishlist)}
               >
                 Add to Wishlist
               </DoneButton>
 
               <button
                 className="button button--secondary button--block"
-                onClick={openConversationWithOwner}
+                onClick={gate('contact the owner', openConversationWithOwner)}
               >
                 Contact Owner
               </button>

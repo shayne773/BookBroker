@@ -39,12 +39,23 @@ async function resetState() {
 describe("GET /users/:id", () => {
   beforeEach(resetState);
 
-  it("rejects an unauthenticated request", async () => {
-    const user = await createUser();
+  it("shows a visitor the public fields only", async () => {
+    const user = await createUser({ zip: "11375" });
 
     const res = await request.execute(app).get(`/users/${user._id}`);
 
-    expect(res).to.have.status(401);
+    expect(res).to.have.status(200);
+    expect(Object.keys(res.body)).to.have.members([
+      "_id",
+      "username",
+      "location",
+      "ratingsAvg",
+      "ratingsCount",
+      "blockedByMe",
+    ]);
+    expect(res.body.blockedByMe).to.equal(false);
+    expect(JSON.stringify(res.body)).to.not.include(user.email);
+    expect(JSON.stringify(res.body)).to.not.include("11375");
   });
 
   it("never returns the password hash or the email address", async () => {

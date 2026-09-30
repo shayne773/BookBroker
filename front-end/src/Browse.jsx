@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { authFetch, isSessionExpiredError } from "./auth";
+import { authFetch, isSessionExpiredError, useSignedIn } from "./auth";
 import BookCover from "./BookCover";
 import DistanceLabel from "./DistanceLabel";
 import LocationPrompt from "./LocationPrompt";
@@ -13,8 +13,12 @@ const Browse = () => {
   const [recommended, setRecommended] = useState(null);
 
   const server = import.meta.env.VITE_SERVER_ADDRESS;
+  // Recommendations come from a reader's own wishlist and shelf, so a visitor
+  // has none.
+  const signedIn = useSignedIn();
 
   useEffect(() => {
+    if (!signedIn) return;
     authFetch(`${server}/recommendations`)
       .then((r) => r.json())
       .then((books) => setRecommended(Array.isArray(books) ? books : []))
@@ -22,7 +26,7 @@ const Browse = () => {
         if (isSessionExpiredError(err)) return;
         setRecommended([]);
       });
-  }, [server]);
+  }, [server, signedIn]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -93,9 +97,11 @@ const Browse = () => {
 
           {!showSearch && (
             <>
-              <Section title="Recommended for you">
-                <BookRow books={recommended} />
-              </Section>
+              {signedIn && (
+                <Section title="Recommended for you">
+                  <BookRow books={recommended} />
+                </Section>
+              )}
 
               <Section title="Most wanted">
                 <BookRow books={data.popular} />
