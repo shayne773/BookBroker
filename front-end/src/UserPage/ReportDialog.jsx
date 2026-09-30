@@ -34,7 +34,7 @@ const ReportDialog = ({ user, initialReason = '', initialDetails = '', onClose, 
       if (!res.ok) throw new Error(data.message || 'Your report could not be sent.');
       onReported(data.message || 'Thanks. Your report has been recorded.');
     } catch (err) {
-      // RequireAuth is already redirecting to the login page.
+      // RedirectOnSessionEnd is already redirecting to the login page.
       if (isSessionExpiredError(err)) return;
       setError(err.message);
       setBusy(false);

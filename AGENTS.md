@@ -12,8 +12,16 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Pages that need a signed-in user live under the `RequireAuth` layout route in
   `front-end/src/AppContent.jsx`; `front-end/src/RequireAuth.jsx` redirects to `/login` and
   passes the intended destination in the navigation state, which `Login.jsx` reads.
-- In a `catch`, ignore the error when `isSessionExpiredError(err)` is true: the redirect is
-  already in flight, so showing a page-level error would flash.
+- Browsing needs no account: the pages above `RequireAuth` in `AppContent.jsx` render for a
+  visitor. On them, an action that needs an account goes through `gate(action, run)` from
+  `useAccountPrompt` (`src/useAccountPrompt.js`), which opens the sign-up prompt
+  (`src/AccountPrompt.jsx`) for a visitor; it carries the page as `from` through `Signup` to
+  `Login`. Those pages skip reader-only fetches when `useSignedIn()` is false, and sit under
+  the `RedirectOnSessionEnd` layout route (`RequireAuth.jsx`), which sends a reader whose
+  session ends there to `/login` with the same "session ended" notice as `RequireAuth`.
+- In a `catch`, ignore the error when `isSessionExpiredError(err)` is true: on every page
+  (behind `RequireAuth` or `RedirectOnSessionEnd`) the redirect is already in flight, so
+  showing a page-level error would flash. A route added outside both loses that redirect.
 
 ## Front-end design system
 
@@ -61,6 +69,10 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   counters, as the resend-confirmation and forgot-password limits do), and the input
   validation / regex-escaping helpers. Any user input that reaches a Mongo `$regex` must go through
   `safeRegex` from `lib/validation.js`.
+- The browsing reads (the book lists, `/browse`, `/books`, `/feed`, `/users/:id` and its
+  shelves, `/map/*`) take `optionalAuth` in `app.js`: a visitor reads as a reader with no ZIP
+  and no blocks. Everything else, including every write, stays behind `authMiddleware`;
+  `test/guestBrowsing.test.js` pins both halves.
 - Client responses never carry `err.message` or a stack trace for an unexpected failure.
   Route handlers log in full with `console.error` and hand unexpected failures to the
   generic error handler at the bottom of `app.js` via `next(err)`. Express 4 does not

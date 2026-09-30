@@ -61,8 +61,8 @@ const PhotoManager = ({ bookId, photos, canUpload, onChange }) => {
       const outcome = uploadOutcome(added, failed, files.length - chosen.length);
       (outcome.tone === 'done' ? done : fail)(outcome.message);
     } catch (err) {
-      // uploadPhotos throws only once the session has expired, and RequireAuth is
-      // already redirecting to the login page.
+      // uploadPhotos throws only once the session has expired, and
+      // RedirectOnSessionEnd is already redirecting to the login page.
       if (!isSessionExpiredError(err)) console.error(err);
     } finally {
       setProgress(null);

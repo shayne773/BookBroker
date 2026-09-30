@@ -13,7 +13,7 @@ export default function useReader(id) {
       .then(res => (res.ok ? res.json() : res.status === 404 ? { deleted: true } : {}))
       .then(data => alive && setReader((Array.isArray(data) ? data[0] : data) || {}))
       .catch(err => {
-        // RequireAuth is already redirecting to the login page.
+        // RedirectOnSessionEnd is already redirecting to the login page.
         if (isSessionExpiredError(err) || !alive) return;
         setReader({});
       });

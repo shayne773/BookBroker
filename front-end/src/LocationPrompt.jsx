@@ -1,10 +1,14 @@
 import { Link } from 'react-router-dom';
+import { useSignedIn } from './auth';
 
 // Where the lists on a page are drawn from. `area` is the reader's own
 // `{ place, miles }`, null when they have not set a ZIP code (they then see
-// every book, with no distances), or undefined while it loads.
+// every book, with no distances), or undefined while it loads. A visitor sees
+// nothing here.
 const LocationPrompt = ({ area }) => {
-  if (area === undefined) return null;
+  const signedIn = useSignedIn();
+
+  if (!signedIn || area === undefined) return null;
 
   if (!area) {
     return (

@@ -72,10 +72,23 @@ describe("the map", () => {
     await createOfferedBook(chicago, { title: "Chicago", cover: "https://example.com/c.jpg" });
   });
 
-  it("needs a signed-in reader", async () => {
-    expect(await api().get(`/map/areas?bbox=${US_VIEW}`)).to.have.status(401);
-    expect(await api().get("/map/area?place=Brooklyn%2C%20NY")).to.have.status(401);
-    expect(await api().get("/map")).to.have.status(401);
+  it("opens to a visitor as to a reader without a ZIP: every place, no distances", async () => {
+    expect((await api().get("/map")).body).to.deep.equal({ home: null });
+
+    const areas = await api().get(`/map/areas?bbox=${US_VIEW}`);
+    expect(areas).to.have.status(200);
+    expect(areas.body.areas.map((a) => [a.place, a.count])).to.deep.equal([
+      ["Brooklyn, NY", 3],
+      ["Chicago, IL", 1],
+      ["New York, NY", 1],
+    ]);
+
+    const place = await api().get("/map/area?place=Brooklyn%2C%20NY");
+    expect(place).to.have.status(200);
+    expect(place.body.books.map((b) => b.title)).to.have.members(["Park Slope", "Brooklyn 2", "Brooklyn 1"]);
+    for (const book of place.body.books) {
+      expect(book).to.not.have.any.keys("distanceMiles", "distanceLabel", "ownerGeo", "ownerPlace", "owner");
+    }
   });
 
   it("counts the books in view by place, each at its place's point", async () => {

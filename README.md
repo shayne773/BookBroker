@@ -24,6 +24,9 @@ propose and accept trades, message other users, rate a trading partner and see e
 reader's average rating, block or report another reader, and get email about new
 messages, trades and newly offered wishlist books (each category can be turned off),
 and delete your account (see [Your account](#your-account)).
+Visitors can browse without an account - home, browse and search, book pages, readers'
+public profiles and the map, with every book on the market and no distances - and are
+asked to sign up when they try anything that needs one.
 Admins read the reports on a private page and can suspend a reader's account.
 
 [Contributing Guidelines](./CONTRIBUTING.md) · [Agent and architecture notes](./AGENTS.md)

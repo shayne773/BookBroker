@@ -5,11 +5,15 @@ import { GoogleSuggestions, GoogleSelection, MarketResults } from "./SearchResul
 import { authFetch, isSessionExpiredError } from "../auth";
 import { searchGoogleBooks } from "../googleBooks";
 import useFeedback from "../useFeedback";
+import useAccountPrompt from "../useAccountPrompt";
 
 export default function Search() {
   const navigate = useNavigate();
 
   const userId = localStorage.getItem("userId");
+  // Google Books is where a reader finds a book to add to their shelves, so a
+  // visitor is asked to sign up instead of switching to it.
+  const { gate } = useAccountPrompt();
 
   const [mode, setMode] = useState("market"); // "market" | "google"
   const [inputValue, setInputValue] = useState("");
@@ -246,13 +250,13 @@ export default function Search() {
               type="button"
               className={`segmented__option ${mode === "google" ? "is-active" : ""}`}
               aria-pressed={mode === "google"}
-              onClick={() => {
+              onClick={gate("add books from Google Books", () => {
                 setMode("google");
                 setError("");
                 setBooksData([]);
                 setHasSearched(false);
                 // keep input
-              }}
+              })}
             >
               Google Books
             </button>

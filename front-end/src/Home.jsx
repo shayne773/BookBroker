@@ -7,6 +7,7 @@ import LocationPrompt from './LocationPrompt';
 import useReaderArea from './useReaderArea';
 import Feedback, { DoneButton } from './Feedback';
 import useFeedback from './useFeedback';
+import useAccountPrompt from './useAccountPrompt';
 
 const Home = () => {
     const [books, setBooks] = useState([]);
@@ -20,22 +21,25 @@ const Home = () => {
     // rather than offered to them again.
     const [wishlistIsbns, setWishlistIsbns] = useState(() => new Set());
     const area = useReaderArea();
+    const { signedIn, gate } = useAccountPrompt();
 
     useEffect(() => {
-        // Fetch real offered books from backend
+        // Nearby books for a reader; every book on the market for a visitor.
         authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/feed`)
             .then(res => res.json())
             .then(data => {
                 setBooks(data);
             })
             .catch(err => {
-                // RequireAuth is already redirecting to the login page.
+                // RedirectOnSessionEnd is already redirecting to the login page.
                 if (isSessionExpiredError(err)) return;
 
                 console.error("Failed to fetch books:", err);
                 setBooks([]);
             });
 
+        // A visitor has no wishlist.
+        if (!signedIn) return;
         authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/wishlist`)
             .then(res => res.json())
             .then(data => {
@@ -45,7 +49,7 @@ const Home = () => {
                 if (isSessionExpiredError(err)) return;
                 console.error("Failed to fetch wishlist:", err);
             });
-    }, []);
+    }, [signedIn]);
 
     const onWishlist = (book) => Boolean(book?.isbn) && wishlistIsbns.has(book.isbn);
    
@@ -111,7 +115,7 @@ const Home = () => {
             doneLabel="On your wishlist"
             busy={addingIds.has(book._id)}
             busyLabel="Adding…"
-            onClick={() => handleAddBook(book)}
+            onClick={gate('add books to your wishlist', () => handleAddBook(book))}
         >
             Add to Wishlist
         </DoneButton>

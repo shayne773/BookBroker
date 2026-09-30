@@ -25,7 +25,8 @@ import ForgotPassword from './ForgotPassword';
 import ResetPassword from './ResetPassword';
 import Unsubscribe from './Unsubscribe';
 import Navbar from './Navbar';
-import RequireAuth from './RequireAuth';
+import RequireAuth, { RedirectOnSessionEnd } from './RequireAuth';
+import { AccountPromptProvider } from './AccountPrompt';
 import ExchangesList from "./ExchangesList";
 import ExchangeDetail from "./ExchangeDetail";
 import AdminReports from "./AdminReports";
@@ -41,62 +42,71 @@ const AppContent = () => {
   const shouldHideNavbar = hideNavbarRoutes.includes(location.pathname);
 
   return (
-    <div className="app-shell">
-      {!shouldHideNavbar && <Navbar />}
+    <AccountPromptProvider>
+      <div className="app-shell">
+        {!shouldHideNavbar && <Navbar />}
 
-      <div className="app-main">
-        <Routes>
-          <Route index element={<Navigate to="login" replace />} />
-          <Route path="login" element={<Login />} />
-          <Route path="signup" element={<Signup />} />
-          <Route path="confirm-email" element={<ConfirmEmail />} />
-          <Route path="forgot-password" element={<ForgotPassword />} />
-          <Route path="reset-password" element={<ResetPassword />} />
-          <Route path="unsubscribe" element={<Unsubscribe />} />
+        <div className="app-main">
+          <Routes>
+            <Route index element={<Navigate to="home" replace />} />
+            <Route path="login" element={<Login />} />
+            <Route path="signup" element={<Signup />} />
+            <Route path="confirm-email" element={<ConfirmEmail />} />
+            <Route path="forgot-password" element={<ForgotPassword />} />
+            <Route path="reset-password" element={<ResetPassword />} />
+            <Route path="unsubscribe" element={<Unsubscribe />} />
 
-          {/* Everything below needs a signed-in user. */}
-          <Route element={<RequireAuth />}>
-            <Route path="home" element={<Home />} />
-            <Route path="feed" element={<Feed />} />
-            <Route path="browse">
-              <Route index element={<Browse />} />
-              <Route path="newly-added" element={<NewlyAdded />} />
-              <Route path="popular" element={<MostWanted />} />
-              <Route path="search" element={<Search />} />
-              <Route path="by-category">
-                <Route index element={<ByCategory />} />
-                <Route path=":genre" element={<Genre />} />
+            {/* Open to visitors too: browsing the market needs no account. On
+                these pages, an action that does need one asks a visitor to sign
+                up instead (AccountPrompt.jsx), and a reader whose session ends
+                is sent to sign in again. */}
+            <Route element={<RedirectOnSessionEnd />}>
+              <Route path="home" element={<Home />} />
+              <Route path="browse">
+                <Route index element={<Browse />} />
+                <Route path="newly-added" element={<NewlyAdded />} />
+                <Route path="popular" element={<MostWanted />} />
+                <Route path="search" element={<Search />} />
+                <Route path="by-category">
+                  <Route index element={<ByCategory />} />
+                  <Route path=":genre" element={<Genre />} />
+                </Route>
               </Route>
+              <Route
+                path="map"
+                element={
+                  <Suspense fallback={<main className="map-page" aria-busy="true" />}>
+                    <BookMap />
+                  </Suspense>
+                }
+              />
+              <Route path="books/:id" element={<BookPage />} />
+              <Route path="users/:id" element={<UserPage />} />
+              <Route path="users/:id/wishlist" element={<UserPageWishlist />} />
+              <Route path="users/:id/offered" element={<UserPageOffered />} />
             </Route>
-            <Route
-              path="map"
-              element={
-                <Suspense fallback={<main className="map-page" aria-busy="true" />}>
-                  <BookMap />
-                </Suspense>
-              }
-            />
-            <Route path="/exchanges" element={<ExchangesList />} />
-            <Route path="/exchanges/:exchangeId" element={<ExchangeDetail />} />
-            <Route path="profile">
-              <Route index element={<Profile />} />
-              <Route path="edit" element={<Navigate to="/profile" replace />} />
-              <Route path="my-books" element={<MyBooks />} />
-              <Route path="my-trades" element={<MyTrades />} />
-              <Route path="matches" element={<WishlistMatches />} />
+
+            {/* Everything below needs a signed-in user. */}
+            <Route element={<RequireAuth />}>
+              <Route path="feed" element={<Feed />} />
+              <Route path="/exchanges" element={<ExchangesList />} />
+              <Route path="/exchanges/:exchangeId" element={<ExchangeDetail />} />
+              <Route path="profile">
+                <Route index element={<Profile />} />
+                <Route path="edit" element={<Navigate to="/profile" replace />} />
+                <Route path="my-books" element={<MyBooks />} />
+                <Route path="my-trades" element={<MyTrades />} />
+                <Route path="matches" element={<WishlistMatches />} />
+              </Route>
+              <Route path="messages" element={<Messages />} />
+              <Route path="messages/:user" element={<MessagesDetail />} />
+              {/* Admins only: linked from an admin's profile, never from the navigation. */}
+              <Route path="admin/reports" element={<AdminReports />} />
             </Route>
-            <Route path="messages" element={<Messages />} />
-            <Route path="messages/:user" element={<MessagesDetail />} />
-            <Route path="books/:id" element={<BookPage />} />
-            <Route path="users/:id" element={<UserPage />} />
-            <Route path="users/:id/wishlist" element={<UserPageWishlist />} />
-            <Route path="users/:id/offered" element={<UserPageOffered />} />
-            {/* Admins only: linked from an admin's profile, never from the navigation. */}
-            <Route path="admin/reports" element={<AdminReports />} />
-          </Route>
-        </Routes>
+          </Routes>
+        </div>
       </div>
-    </div>
+    </AccountPromptProvider>
   );
 };
 

@@ -10,6 +10,7 @@ import useReader from './useReader';
 import BlockDialog from './UserPage/BlockDialog';
 import MessageAction from './UserPage/MessageAction';
 import ReportDialog from './UserPage/ReportDialog';
+import useAccountPrompt from './useAccountPrompt';
 
 const UserPage = () => {
   const { id } = useParams();
@@ -24,6 +25,7 @@ const UserPage = () => {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
   const { feedback, done, fail, clear } = useFeedback();
+  const { gate } = useAccountPrompt();
 
   // A reader blocked either way has an empty offered shelf, so it is reloaded
   // whenever a block is placed or lifted.
@@ -111,7 +113,11 @@ const UserPage = () => {
         {canAct && (
           <>
             <MessageAction user={user} />
-            <button type="button" className="button button--quiet" onClick={() => setDialog('report')}>
+            <button
+              type="button"
+              className="button button--quiet"
+              onClick={gate('report readers', () => setDialog('report'))}
+            >
               Report
             </button>
             {user.blockedByMe ? (
@@ -124,7 +130,11 @@ const UserPage = () => {
                 Unblock
               </button>
             ) : (
-              <button type="button" className="button button--secondary" onClick={() => setDialog('block')}>
+              <button
+                type="button"
+                className="button button--secondary"
+                onClick={gate('block readers', () => setDialog('block'))}
+              >
                 Block
               </button>
             )}
