@@ -8,7 +8,7 @@ import {
   photoCountLabel,
   preparePhoto,
   TARGET_BYTES,
-  UPLOAD_STALL_MS,
+  MIN_UPLOAD_STALL_MS,
   uploadOutcome,
   uploadPhoto,
 } from './photos';
@@ -279,11 +279,12 @@ describe('uploadPhoto', () => {
       expect(requests.map((r) => r.key)).toEqual(['POST /user/offered/b1/photos/upload-token']);
     });
 
-    test('gives up on a photo too small to report progress once it has gone quiet', async () => {
+    test('gives up on a photo too small to report progress once it has gone quiet for a minute', async () => {
+      fakeCodec({ width: 3000, height: 2000, sizes: [60_000] });
       const seen = refusedBehindCors(1);
 
       const upload = outcomeOf(uploadPhoto('b1', cameraFile()));
-      await vi.advanceTimersByTimeAsync(UPLOAD_STALL_MS - 1);
+      await vi.advanceTimersByTimeAsync(MIN_UPLOAD_STALL_MS - 1);
       expect(upload.settled).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
 
@@ -291,17 +292,44 @@ describe('uploadPhoto', () => {
       expect(seen.signal.aborted).toBe(true);
     });
 
+    // Chrome reads a photo ahead of sending it, so the SDK reports its last
+    // piece long before the photo has gone, and then nothing until Blob answers.
+    test('lets a full-size photo finish on a 10 KB/s connection that goes quiet after reading ahead', async () => {
+      fakeCodec({ width: 3000, height: 2000, sizes: [TARGET_BYTES] });
+      const chunks = Math.ceil(TARGET_BYTES / (64 * 1024));
+      const sendMs = (TARGET_BYTES / (10 * 1024)) * 1000;
+      vi.spyOn(blobUpload, 'put').mockImplementation(async (pathname, blob, options) => {
+        options.onUploadProgress({ loaded: 0, total: chunks, percentage: 0 });
+        for (let loaded = 1; loaded < chunks; loaded++) {
+          options.onUploadProgress({ loaded, total: chunks, percentage: (loaded / chunks) * 100 });
+        }
+        await new Promise((resolve, reject) => {
+          const sent = setTimeout(resolve, sendMs);
+          options.abortSignal.addEventListener('abort', () => {
+            clearTimeout(sent);
+            reject(new Error('The request was aborted.'));
+          });
+        });
+        return { url: `https://blob.example/${pathname}` };
+      });
+
+      const upload = outcomeOf(uploadPhoto('b1', cameraFile()));
+      await vi.advanceTimersByTimeAsync(sendMs);
+
+      expect(upload).toEqual({ settled: true, value: [] });
+    });
+
     test('lets a slow upload finish while it keeps getting further', async () => {
       vi.spyOn(blobUpload, 'put').mockImplementation(async (pathname, blob, options) => {
         for (let percentage = 0; percentage < 100; percentage += 10) {
           options.onUploadProgress({ loaded: percentage, total: 100, percentage });
-          await new Promise((resolve) => setTimeout(resolve, UPLOAD_STALL_MS - 1));
+          await new Promise((resolve) => setTimeout(resolve, MIN_UPLOAD_STALL_MS - 1));
         }
         return { url: `https://blob.example/${pathname}` };
       });
 
       const upload = outcomeOf(uploadPhoto('b1', cameraFile()));
-      await vi.advanceTimersByTimeAsync(10 * UPLOAD_STALL_MS);
+      await vi.advanceTimersByTimeAsync(10 * MIN_UPLOAD_STALL_MS);
 
       expect(upload).toEqual({ settled: true, value: [] });
     });
