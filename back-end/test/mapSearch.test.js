@@ -329,9 +329,18 @@ describe("searching the map", () => {
     }
   });
 
-  it("needs a signed-in reader", async () => {
-    expect(await api().get("/map/nearest")).to.have.status(401);
-    expect(await api().get("/map/genres")).to.have.status(401);
+  it("opens to a visitor, whose wishlist search finds nothing", async () => {
+    // Someone else's wishlist names every book on the map.
+    await WishlistBook.create({ userId: viewer._id, title: "The Hobbit", isbn: "9780261103344" });
+
+    const all = await api().get("/map/nearest");
+    expect(all).to.have.status(200);
+    expect(all.body.bookCount).to.equal(7);
+    expect((await api().get("/map/genres")).body).to.deep.equal({ genres: ["Mystery", "Poetry"] });
+
+    const onWishlist = await api().get("/map/nearest?wishlist=1");
+    expect(onWishlist).to.have.status(200);
+    expect(onWishlist.body).to.include({ placeCount: 0, bookCount: 0 });
   });
 
   it("never sends a reader's ZIP code or position in the nearest places", async () => {

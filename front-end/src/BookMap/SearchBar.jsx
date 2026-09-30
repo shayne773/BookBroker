@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { LISTED_CHOICES } from '../mapSearch';
+import useAccountPrompt from '../useAccountPrompt';
 
 // The search over the map: a keyword and the filters. Typed terms apply when
 // the form is sent; a choice (genre, when listed, wishlist) applies at once,
 // with whatever has been typed. Keyed by the search in force, so a new one
-// (or one read from the URL) starts the form afresh.
+// (or one read from the URL) starts the form afresh. A visitor has no wishlist,
+// so ticking "Only my wishlist matches" asks them to sign up instead.
 const SearchBar = ({ search, active, genres, onSearch, onClear }) => {
   const [draft, setDraft] = useState(search);
+  const { signedIn, prompt } = useAccountPrompt();
 
   const type = (key) => (event) => setDraft({ ...draft, [key]: event.target.value });
   const choose = (key, value) => onSearch({ ...draft, [key]: value });
@@ -106,7 +109,9 @@ const SearchBar = ({ search, active, genres, onSearch, onClear }) => {
           <input
             type="checkbox"
             checked={draft.wishlist}
-            onChange={(event) => choose('wishlist', event.target.checked)}
+            onChange={(event) =>
+              signedIn ? choose('wishlist', event.target.checked) : prompt('match books to your wishlist')
+            }
           />
           Only my wishlist matches
         </label>

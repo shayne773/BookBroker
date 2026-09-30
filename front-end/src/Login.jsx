@@ -12,7 +12,8 @@ export default function Login() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Where RequireAuth wanted to go before it sent us here.
+    // Where RequireAuth wanted to go before it sent us here, or the page a
+    // visitor was on when the sign-up prompt (AccountPrompt.jsx) sent them.
     const from = location.state?.from;
     const redirectTo = from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : '/home';
     const sessionEnded = Boolean(location.state?.sessionEnded);
@@ -90,7 +91,7 @@ export default function Login() {
 
             <p className="auth__switch">
                 <span>New here?</span>
-                <a className="textlink" href="/signup">Create an account</a>
+                <Link className="textlink" to="/signup" state={from ? { from } : undefined}>Create an account</Link>
             </p>
         </AuthShell>
     )

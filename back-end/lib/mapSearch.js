@@ -99,7 +99,8 @@ export async function searchFilter(userId, search = {}, { now = new Date() } = {
   if (search.listed) {
     terms.push({ createdAt: { $gte: new Date(now.getTime() - LISTED_WITHIN_DAYS[search.listed] * DAY_MS) } });
   }
-  if (search.wishlist) terms.push({ isbn: { $in: await wishlistIsbns(userId) } });
+  // A visitor has no wishlist, so "on my wishlist" matches nothing for them.
+  if (search.wishlist) terms.push({ isbn: { $in: userId ? await wishlistIsbns(userId) : [] } });
 
   const market = await marketFilter(userId);
   return terms.length ? { ...market, $and: terms } : market;

@@ -9,6 +9,7 @@ import UserLink from './UserLink';
 import PhotoGallery from './PhotoGallery';
 import PhotoManager from './PhotoManager';
 import ReportDialog from './UserPage/ReportDialog';
+import useAccountPrompt from './useAccountPrompt';
 
 const BookPage = () => {
   const { id } = useParams();
@@ -23,6 +24,7 @@ const BookPage = () => {
   const photos = book.photos || [];
   const setPhotos = (next) => setBook((current) => ({ ...current, photos: next }));
   const navigate = useNavigate();
+  const { signedIn, gate } = useAccountPrompt();
 
   const addToWishlist = async () => {
     const bookData = {
@@ -60,7 +62,7 @@ const BookPage = () => {
   };
 
   useEffect(() => {
-    // Signed in, so a book whose owner is blocked either way reads as not found.
+    // For a signed-in reader, a book whose owner is blocked either way reads as not found.
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/books/${id}`)
       .then(res => {
         setNotFound(res.status === 404);
@@ -103,7 +105,8 @@ const BookPage = () => {
     }
   }
   useEffect(() => {
-    if (book.isbn) {
+    // A visitor has no wishlist to look the book up in.
+    if (book.isbn && signedIn) {
       authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/wishlist/${book.isbn}`)
         .then(res => res.json())
         .then(data => setIsInWishlist(data.exists))
@@ -111,7 +114,7 @@ const BookPage = () => {
           console.error('Error checking wishlist status:', err);
         });
     }
-  }, [book.isbn]);
+  }, [book.isbn, signedIn]);
 
   return (
     <main className="page page--reading">
@@ -150,14 +153,14 @@ const BookPage = () => {
                 doneLabel="On your wishlist"
                 busy={adding}
                 busyLabel="Adding…"
-                onClick={addToWishlist}
+                onClick={gate('add books to your wishlist', addToWishlist)}
               >
                 Add to Wishlist
               </DoneButton>
 
               <button
                 className="button button--secondary button--block"
-                onClick={openConversationWithOwner}
+                onClick={gate('contact the owner', openConversationWithOwner)}
               >
                 Contact Owner
               </button>
@@ -199,7 +202,7 @@ const BookPage = () => {
                   // Photos are the owner's; reporting them is reporting the owner.
                   book.owner?.id && (
                     <p className="hint mt-3">
-                      <button type="button" className="textlink-quiet" onClick={() => setReporting(true)}>
+                      <button type="button" className="textlink-quiet" onClick={gate('report readers', () => setReporting(true))}>
                         Report these photos
                       </button>
                     </p>

@@ -4,7 +4,8 @@ import { areasWithin, BBOX_MESSAGE, booksInPlace, parseBbox, parseOffset } from 
 import { genresOnMap, nearestPlaces, parseNear, parseSearch, searchFilter } from "../lib/mapSearch.js";
 import { readerArea } from "../lib/nearby.js";
 
-// The map page's API. Mounted in app.js behind authMiddleware. Books are shown
+// The map page's API. Mounted in app.js behind optionalAuth: a visitor without
+// an account browses it as a reader without a ZIP does. Books are shown
 // by their owner's place (lib/map.js), at any distance: the map is for
 // exploring, and each book still carries the distance label it has elsewhere.
 
@@ -20,7 +21,7 @@ const US_MIDDLE = [-98.6, 39.8];
 // out their own, locked, blocked and suspended readers' books (lib/blocks.js),
 // narrowed by the search in the query string (lib/mapSearch.js). Every route
 // below that counts or lists books goes through it, so they agree.
-const mapFilter = (req) => searchFilter(req.user.userId, req.search);
+const mapFilter = (req) => searchFilter(req.user?.userId, req.search);
 
 // Reads the search from the query string into `req.search`, or answers 400.
 const withSearch = (req, res, next) => {
@@ -32,10 +33,10 @@ const withSearch = (req, res, next) => {
 
 // GET /map  where the map opens: `home` is the caller's place, their own ZIP
 // point (the one their distances are measured from, sent only to them) and
-// their distance in miles, or null for a reader without a ZIP.
+// their distance in miles, or null for a reader without a ZIP or a visitor.
 router.get("/", async (req, res, next) => {
   try {
-    const area = await readerArea(req.user.userId);
+    const area = await readerArea(req.user?.userId);
     res.json({ home: area ? { place: area.place, point: area.point.coordinates, miles: area.miles } : null });
   } catch (err) {
     next(err);
@@ -66,7 +67,7 @@ router.get("/area", withSearch, async (req, res, next) => {
   if (offset === null) return res.status(400).json({ message: "offset must be a whole number." });
 
   try {
-    const [match, area] = await Promise.all([mapFilter(req), readerArea(req.user.userId)]);
+    const [match, area] = await Promise.all([mapFilter(req), readerArea(req.user?.userId)]);
     res.json({ place, ...(await booksInPlace({ place, match, area, offset })) });
   } catch (err) {
     next(err);
@@ -83,7 +84,7 @@ router.get("/nearest", withSearch, async (req, res, next) => {
   if (!near) return res.status(400).json({ message: "near must be longitude,latitude in degrees." });
 
   try {
-    const [match, area] = await Promise.all([mapFilter(req), readerArea(req.user.userId)]);
+    const [match, area] = await Promise.all([mapFilter(req), readerArea(req.user?.userId)]);
     res.json(await nearestPlaces({ match, area, origin: area ? area.point.coordinates : near }));
   } catch (err) {
     next(err);
@@ -94,7 +95,7 @@ router.get("/nearest", withSearch, async (req, res, next) => {
 // alphabetically: what a search can choose its `genre` from.
 router.get("/genres", async (req, res, next) => {
   try {
-    res.json({ genres: await genresOnMap(await marketFilter(req.user.userId)) });
+    res.json({ genres: await genresOnMap(await marketFilter(req.user?.userId)) });
   } catch (err) {
     next(err);
   }

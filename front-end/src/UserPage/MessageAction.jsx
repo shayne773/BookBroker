@@ -1,9 +1,12 @@
 import { Link } from 'react-router-dom';
+import useAccountPrompt from '../useAccountPrompt';
 
 // "Message" on another reader's page, which opens your conversation with them
 // (an empty one if you have never written). Nothing on your own page; while you
-// block them it stays in view, disabled, saying why.
+// block them it stays in view, disabled, saying why. A visitor is asked to sign up.
 const MessageAction = ({ user }) => {
+  const { gate } = useAccountPrompt();
+
   if (!user?._id || String(user._id) === localStorage.getItem('userId')) return null;
 
   if (user.blockedByMe) {
@@ -18,7 +21,11 @@ const MessageAction = ({ user }) => {
   }
 
   return (
-    <Link to={`/messages/${user._id}`} className="button button--primary">
+    <Link
+      to={`/messages/${user._id}`}
+      className="button button--primary"
+      onClick={gate('message readers', () => {})}
+    >
       Message
     </Link>
   );

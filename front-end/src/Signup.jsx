@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import AuthShell from "./AuthShell";
 import ResendConfirmation from "./ResendConfirmation";
 import { postPublic } from "./publicApi";
@@ -9,6 +9,10 @@ export default function Signup() {
   const [error, setError] = useState("");
   // The address the confirmation email went to, once the account exists.
   const [sentTo, setSentTo] = useState("");
+  // The page a visitor signed up from (AccountPrompt.jsx), handed on to Login
+  // so signing in takes them back there.
+  const from = useLocation().state?.from;
+  const loginState = from ? { from } : undefined;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -64,7 +68,7 @@ export default function Signup() {
 
         <p className="auth__switch">
           <span>Confirmed already?</span>
-          <Link className="textlink" to="/login">
+          <Link className="textlink" to="/login" state={loginState}>
             Log in
           </Link>
         </p>
@@ -126,9 +130,9 @@ export default function Signup() {
 
       <p className="auth__switch">
         <span>Already have an account?</span>
-        <a className="textlink" href="/login">
+        <Link className="textlink" to="/login" state={loginState}>
           Log in
-        </a>
+        </Link>
       </p>
     </AuthShell>
   );
