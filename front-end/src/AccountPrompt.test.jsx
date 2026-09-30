@@ -145,6 +145,24 @@ describe('a visitor on a book page', () => {
   });
 });
 
+test("a visitor sees a book's photos and is asked to sign up to report them", async () => {
+  const photos = [{ _id: 'p1', url: 'https://blob.example/books/b1/1.jpg', width: 1600, height: 1200 }];
+  const answer = global.fetch;
+  global.fetch = vi.fn(async (url, options) =>
+    String(url).endsWith('/books/b1')
+      ? { ok: true, status: 200, json: async () => ({ ...book, photos }) }
+      : answer(url, options)
+  );
+  renderAt('/books/b1', '/books/:id', <BookPage />);
+
+  expect(await screen.findByRole('heading', { name: 'Photos of this copy' })).toBeInTheDocument();
+  expect(screen.getAllByRole('button', { name: /Enlarge photo/ })).toHaveLength(1);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Report these photos' }));
+  expect(prompt('Sign up to report readers')).toBeInTheDocument();
+  expect(screen.queryByRole('dialog', { name: 'Report rob' })).not.toBeInTheDocument();
+});
+
 test('a visitor on the home page sees every book and is asked to sign up to wishlist one', async () => {
   renderAt('/home', '/home', <Home />);
   await screen.findByRole('link', { name: 'The Hobbit' });
