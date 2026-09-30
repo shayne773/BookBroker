@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import mongoose from "mongoose";
 import { api, authHeader, createOfferedBook, createUser } from "./helpers.js";
-import { WishlistBook } from "../Data.js";
+import { User, WishlistBook } from "../Data.js";
 
 // A visitor without an account browses the market: the book lists, book pages,
 // readers' public profiles and the map. They have no ZIP, so they see every
@@ -80,6 +80,20 @@ describe("browsing without an account", () => {
     expect(offered).to.have.status(200);
     expect(titles(offered.body)).to.deep.equal(["Far Book"]);
     expectNothingPrivate(offered.body);
+  });
+
+  it("cannot read a suspended reader's profile, wishlist or offerings", async () => {
+    await User.updateOne({ _id: chicago._id }, { suspended: true });
+
+    expect(await api().get(`/users/${chicago._id}`)).to.have.status(404);
+
+    const wishlist = await api().get(`/users/${chicago._id}/wishlist`);
+    expect(wishlist).to.have.status(200);
+    expect(wishlist.body).to.deep.equal([]);
+
+    const offered = await api().get(`/users/${chicago._id}/offered`);
+    expect(offered).to.have.status(200);
+    expect(offered.body).to.deep.equal([]);
   });
 
   it("reads a token that names no session as a visitor on these pages", async () => {
