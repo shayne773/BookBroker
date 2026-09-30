@@ -25,7 +25,7 @@ import ForgotPassword from './ForgotPassword';
 import ResetPassword from './ResetPassword';
 import Unsubscribe from './Unsubscribe';
 import Navbar from './Navbar';
-import RequireAuth from './RequireAuth';
+import RequireAuth, { RedirectOnSessionEnd } from './RequireAuth';
 import { AccountPromptProvider } from './AccountPrompt';
 import ExchangesList from "./ExchangesList";
 import ExchangeDetail from "./ExchangeDetail";
@@ -58,30 +58,33 @@ const AppContent = () => {
 
             {/* Open to visitors too: browsing the market needs no account. On
                 these pages, an action that does need one asks a visitor to sign
-                up instead (AccountPrompt.jsx). */}
-            <Route path="home" element={<Home />} />
-            <Route path="browse">
-              <Route index element={<Browse />} />
-              <Route path="newly-added" element={<NewlyAdded />} />
-              <Route path="popular" element={<MostWanted />} />
-              <Route path="search" element={<Search />} />
-              <Route path="by-category">
-                <Route index element={<ByCategory />} />
-                <Route path=":genre" element={<Genre />} />
+                up instead (AccountPrompt.jsx), and a reader whose session ends
+                is sent to sign in again. */}
+            <Route element={<RedirectOnSessionEnd />}>
+              <Route path="home" element={<Home />} />
+              <Route path="browse">
+                <Route index element={<Browse />} />
+                <Route path="newly-added" element={<NewlyAdded />} />
+                <Route path="popular" element={<MostWanted />} />
+                <Route path="search" element={<Search />} />
+                <Route path="by-category">
+                  <Route index element={<ByCategory />} />
+                  <Route path=":genre" element={<Genre />} />
+                </Route>
               </Route>
+              <Route
+                path="map"
+                element={
+                  <Suspense fallback={<main className="map-page" aria-busy="true" />}>
+                    <BookMap />
+                  </Suspense>
+                }
+              />
+              <Route path="books/:id" element={<BookPage />} />
+              <Route path="users/:id" element={<UserPage />} />
+              <Route path="users/:id/wishlist" element={<UserPageWishlist />} />
+              <Route path="users/:id/offered" element={<UserPageOffered />} />
             </Route>
-            <Route
-              path="map"
-              element={
-                <Suspense fallback={<main className="map-page" aria-busy="true" />}>
-                  <BookMap />
-                </Suspense>
-              }
-            />
-            <Route path="books/:id" element={<BookPage />} />
-            <Route path="users/:id" element={<UserPage />} />
-            <Route path="users/:id/wishlist" element={<UserPageWishlist />} />
-            <Route path="users/:id/offered" element={<UserPageOffered />} />
 
             {/* Everything below needs a signed-in user. */}
             <Route element={<RequireAuth />}>

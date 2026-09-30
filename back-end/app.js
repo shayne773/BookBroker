@@ -723,8 +723,9 @@ app.post("/user/notifications", authMiddleware, async (req, res, next) => {
   }
 });
 
-// Public profile of another user, for visitors too. Returns only the fields
-// the app renders - never the password hash, the email address or the ZIP.
+// Public profile of another user, for visitors too, except a suspended one.
+// Returns only the fields the app renders - never the password hash, the email
+// address or the ZIP.
 // `blockedByMe` says whether the caller has blocked them; whether they have
 // blocked the caller is never revealed.
 app.get("/users/:id", optionalAuth, async (req, res, next) => {
@@ -734,7 +735,9 @@ app.get("/users/:id", optionalAuth, async (req, res, next) => {
     }
 
     const user = await User.findById(req.params.id).select(PUBLIC_USER_FIELDS).lean();
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user || (!req.user && (await isSuspended(user._id)))) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
     const blockedByMe = Boolean(
       req.user && (await Block.exists({ blocker: req.user.userId, blocked: user._id }))
@@ -766,6 +769,11 @@ app.get("/user/offered", authMiddleware, async (req, res, next) => {
 
 app.get("/users/:id/wishlist", optionalAuth, async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
+    if (!req.user && (await isSuspended(req.params.id))) return res.json([]);
+
     const books = await WishlistBook.find({ userId: req.params.id });
     res.json(books);
   } catch (err) {

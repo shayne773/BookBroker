@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import RequireAuth from './RequireAuth';
+import RequireAuth, { RedirectOnSessionEnd } from './RequireAuth';
 import Login from './Login';
 import { authFetch, expireSession } from './auth';
 
@@ -115,4 +115,39 @@ test('a visitor who was never signed in sees no session-ended message', () => {
 
   expect(screen.getByRole('button', { name: 'Log in' })).toBeInTheDocument();
   expect(screen.queryByText(/session has ended/)).toBeNull();
+});
+
+const renderPublicAt = (path, Page) =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route element={<RedirectOnSessionEnd />}>
+          <Route path="/books/:id" element={<Page />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>
+  );
+
+test('a page visitors can browse renders without a token', () => {
+  renderPublicAt('/books/b1', () => <div>Book page</div>);
+
+  expect(screen.getByText('Book page')).toBeInTheDocument();
+});
+
+test('a reader whose session ends on a page visitors can browse is sent to sign in again', async () => {
+  localStorage.setItem('token', 'revoked');
+  global.fetch.mockResolvedValue({ status: 401, ok: false, json: async () => ({}) });
+
+  const Page = () => (
+    <button type="button" onClick={() => authFetch('/messages', { method: 'POST' }).catch(() => {})}>
+      Contact Owner
+    </button>
+  );
+
+  renderPublicAt('/books/b1', Page);
+  act(() => screen.getByRole('button', { name: 'Contact Owner' }).click());
+
+  expect(await screen.findByText('Your session has ended. Please sign in again.')).toBeInTheDocument();
+  expect(localStorage.getItem('token')).toBeNull();
 });

@@ -16,9 +16,12 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   visitor. On them, an action that needs an account goes through `gate(action, run)` from
   `useAccountPrompt` (`src/useAccountPrompt.js`), which opens the sign-up prompt
   (`src/AccountPrompt.jsx`) for a visitor; it carries the page as `from` through `Signup` to
-  `Login`. Those pages skip reader-only fetches when `useSignedIn()` is false.
-- In a `catch`, ignore the error when `isSessionExpiredError(err)` is true: the redirect is
-  already in flight, so showing a page-level error would flash.
+  `Login`. Those pages skip reader-only fetches when `useSignedIn()` is false, and sit under
+  the `RedirectOnSessionEnd` layout route (`RequireAuth.jsx`), which sends a reader whose
+  session ends there to `/login` with the same "session ended" notice as `RequireAuth`.
+- In a `catch`, ignore the error when `isSessionExpiredError(err)` is true: on every page
+  (behind `RequireAuth` or `RedirectOnSessionEnd`) the redirect is already in flight, so
+  showing a page-level error would flash. A route added outside both loses that redirect.
 
 ## Front-end design system
 
