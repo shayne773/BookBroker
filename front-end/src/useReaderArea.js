@@ -11,7 +11,7 @@ const useReaderArea = () => {
   const signedIn = useSignedIn();
 
   useEffect(() => {
-    // A visitor has no area; LocationPrompt says so without asking.
+    // A visitor has no area to ask for.
     if (!signedIn) return undefined;
     let live = true;
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user`)

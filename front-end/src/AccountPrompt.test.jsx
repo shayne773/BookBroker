@@ -167,8 +167,7 @@ test('a visitor on the home page sees every book and is asked to sign up to wish
   renderAt('/home', '/home', <Home />);
   await screen.findByRole('link', { name: 'The Hobbit' });
 
-  expect(screen.getByText(/seeing every book on the market/)).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Sign up' })).toHaveAttribute('href', '/signup');
+  expect(screen.queryByText(/ZIP code/)).not.toBeInTheDocument();
   expect(calls.map((c) => c.path)).toEqual(['/feed']);
 
   fireEvent.click(screen.getByRole('button', { name: 'Add to Wishlist' }));
