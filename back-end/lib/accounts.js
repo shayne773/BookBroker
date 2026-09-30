@@ -2,7 +2,8 @@
 // no grace period, and the address is free to sign up again as a new account.
 //
 // What goes: the user, their offered books (so they leave every listing, the
-// map and other readers' matches), their wishlist, the blocks they placed, their
+// map and other readers' matches) with their photos, deleted from Blob once the
+// transaction has committed, their wishlist, the blocks they placed, their
 // sessions and emailed-link tokens and their notification state. An accepted
 // trade the other reader has already confirmed completes, as it would at its
 // deadline (lib/tradeDeadlines.js): its books leave the market and the other

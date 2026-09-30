@@ -229,9 +229,9 @@ the store before it keeps its URL. The store holds only JPEG, PNG and WebP image
 of at most 2 MB, and only the book's owner can add or remove its photos.
 
 A book's photos are deleted from the store with the book, however it leaves (its
-owner removes it, or a trade completes), and a photo with its removal, after the
-response so it never holds up what the reader was doing. A daily cron job
-(`/api/cron/photo-cleanup`) deletes every blob more than a day old that no book
+owner removes it, a trade completes or the owner deletes their account), and a
+photo with its removal, after the response so it never holds up what the reader
+was doing. A daily cron job (`/api/cron/photo-cleanup`) deletes every blob more than a day old that no book
 shows, which covers a deletion that failed and uploads never added to their book.
 Blobs live under a namespace that is a short hash of the MongoDB cluster's host
 and the database name (`<namespace>/books/<id>/...`), so every deployment on one
