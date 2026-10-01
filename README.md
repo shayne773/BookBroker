@@ -242,7 +242,7 @@ and the database name (`<namespace>/books/<id>/...`), so every deployment on one
 database, Preview and production alike, shares it, and deletions and the daily
 job only ever touch their own. Moving the database to a new cluster host starts a
 new namespace and leaves the old blobs behind. An owner gets at most 12 upload
-tokens an hour, and while an accepted trade holds a book its photos cannot change.
+grants an hour, and while an accepted trade holds a book its photos cannot change.
 
 The API reaches the store with either of two credentials. On Vercel, a connected
 store sets `BLOB_STORE_ID` and the Blob SDK authenticates with the deployment's

@@ -34,7 +34,7 @@ export const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 // The types a photo may be, with the extension its pathname gets.
 export const PHOTO_TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 
-// A client token is for one upload, made right after it is issued.
+// A grant is for one upload, made right after it is issued.
 const UPLOAD_TOKEN_LIFETIME_MS = 10 * 60 * 1000;
 
 export const PHOTOS_UNAVAILABLE = "PHOTOS_UNAVAILABLE";
