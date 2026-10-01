@@ -1,9 +1,12 @@
 import { Link } from "react-router-dom";
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { authFetch, isSessionExpiredError } from '../auth';
+import useRemembered from '../remember';
+import Appear from '../Appear';
+import { LinesSkeleton } from '../Skeletons';
 
 const ByCategory = () => {
-  const [genres, setGenres] = useState([]);
+  const [genres, setGenres] = useRemembered('/genres');
 
   useEffect(() => {
     // Signed in, so the genres are those of the books within your distance.
@@ -17,7 +20,7 @@ const ByCategory = () => {
         console.error('Failed to fetch genres:', error);
         setGenres([]);
       });
-  }, []);
+  }, [setGenres]);
 
   return (
     <main className="page page--reading">
@@ -35,8 +38,9 @@ const ByCategory = () => {
         </div>
       </div>
 
-      <ul className="category-list">
-        {genres.map((genre, index) => (
+      <Appear ready={genres !== null} placeholder={<LinesSkeleton count={6} />}>
+      <ul className="category-list stagger">
+        {(genres ?? []).map((genre, index) => (
           <li key={index}>
             <Link
               to={`/browse/by-category/${encodeURIComponent(genre.toLowerCase())}`}
@@ -50,6 +54,7 @@ const ByCategory = () => {
           </li>
         ))}
       </ul>
+      </Appear>
     </main>
   );
 };

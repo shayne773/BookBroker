@@ -4,6 +4,11 @@ import { authFetch, isSessionExpiredError } from "./auth";
 import usePolling from "./usePolling";
 import { readerMeta } from "./rating";
 import UserLink from "./UserLink";
+import useRemembered from "./remember";
+import Appear from "./Appear";
+import { LinesSkeleton } from "./Skeletons";
+
+const NONE = [];
 
 // How often the open inbox checks for new messages (paused while the tab is hidden).
 const LIST_INTERVAL = 15000;
@@ -17,8 +22,10 @@ async function fetchConversations() {
 }
 
 const Messages = () => {
-  const [convos, setConvos] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // null until the conversations have loaded.
+  const [loaded, setConvos] = useRemembered("/messages");
+  const convos = loaded ?? NONE;
+  const loading = loaded === null;
   const [q, setQ] = useState("");
   const [error, setError] = useState("");
 
@@ -33,17 +40,15 @@ const Messages = () => {
         console.error("Failed to fetch conversations:", err);
         setError("Failed to load conversations.");
         setConvos([]);
-      } finally {
-        setLoading(false);
       }
     };
 
     run();
-  }, []);
+  }, [setConvos]);
 
   // New messages and unread markers arrive while the list is open. A failed
   // refresh keeps the list on screen and tries again on the next tick.
-  const refresh = useCallback(async () => setConvos(await fetchConversations()), []);
+  const refresh = useCallback(async () => setConvos(await fetchConversations()), [setConvos]);
   usePolling(refresh, { interval: LIST_INTERVAL, enabled: !loading && !error });
 
   const filtered = useMemo(() => {
@@ -75,14 +80,8 @@ const Messages = () => {
         </div>
       </div>
 
-      {loading && (
-        <div className="empty" role="status">
-          <p>Loading…</p>
-          <p>Fetching your conversations.</p>
-        </div>
-      )}
-
-      {!loading && error && (
+      <Appear ready={!loading} placeholder={<LinesSkeleton count={6} />}>
+      {error && (
         <div className="section stack">
           <p className="notice notice--error" role="alert">{error}</p>
           <div>
@@ -93,15 +92,15 @@ const Messages = () => {
         </div>
       )}
 
-      {!loading && !error && filtered.length === 0 && (
+      {!error && filtered.length === 0 && (
         <div className="empty">
           <p>No conversations found.</p>
           <p>Start a chat by messaging someone from a book page.</p>
         </div>
       )}
 
-      {!loading && !error && filtered.length > 0 && (
-        <ul className="list section">
+      {!error && filtered.length > 0 && (
+        <ul className="list section stagger">
           {filtered.map((c) => {
             const u = c.otherUser || {};
             const initials = (u.username || "?").slice(0, 1).toUpperCase();
@@ -148,6 +147,7 @@ const Messages = () => {
           })}
         </ul>
       )}
+      </Appear>
     </main>
   );
 };

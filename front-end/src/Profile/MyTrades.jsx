@@ -1,10 +1,11 @@
 import ShelfPage from '../ShelfPage';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { authFetch, isSessionExpiredError } from '../auth';
 import PhotoCount from '../PhotoCount';
+import useRemembered from '../remember';
 
 const MyTrades = () => {
-  const [offeringsBooks, setOfferingsBooks] = useState([]);
+  const [offeringsBooks, setOfferingsBooks] = useRemembered('/user/offered');
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/offered`)
@@ -17,7 +18,7 @@ const MyTrades = () => {
         console.log("Failed to fetch offerings:", err);
         setOfferingsBooks([]);
       });
-  }, []);
+  }, [setOfferingsBooks]);
 
   const handleDelete = (bookId) => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/offered/${bookId}`, {
@@ -41,7 +42,7 @@ const MyTrades = () => {
       kicker="Your profile"
       title="Offerings"
       books={offeringsBooks}
-      emptyLabel="Loading Offerings..."
+      emptyLabel="You aren't offering any books yet."
       onRemove={handleDelete}
       // A book's page is where its owner adds and arranges photos of it.
       linkTo={(book) => `/books/${book._id}`}

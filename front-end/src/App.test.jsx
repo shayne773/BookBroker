@@ -2,22 +2,6 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import App from './App';
 import { saveSession } from './auth';
 
-// Home reveals its sections on scroll; jsdom has no IntersectionObserver.
-beforeAll(() => {
-  vi.stubGlobal(
-    'IntersectionObserver',
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
-  );
-});
-
-afterAll(() => {
-  vi.unstubAllGlobals();
-});
-
 beforeEach(() => {
   localStorage.clear();
   window.history.pushState({}, '', '/');

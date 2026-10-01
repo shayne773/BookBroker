@@ -1,12 +1,15 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { authFetch, isSessionExpiredError } from './auth';
 import BookCover from './BookCover';
 import DistanceLabel from './DistanceLabel';
 import LocationPrompt from './LocationPrompt';
 import useReaderArea from './useReaderArea';
+import useRemembered from './remember';
+import Appear from './Appear';
+import { BookGridSkeleton } from './Skeletons';
 
 const Feed = () => {
-  const [booksData, setBooksData] = useState([]);
+  const [booksData, setBooksData] = useRemembered('/recommendations');
   const area = useReaderArea();
 
   useEffect(() => {
@@ -23,7 +26,7 @@ const Feed = () => {
         console.error('Failed to fetch recommended books:', err);
         setBooksData([]);
     })
-  }, []);
+  }, [setBooksData]);
 
   return (
     <main className="page">
@@ -38,8 +41,9 @@ const Feed = () => {
 
       {/* Books */}
       <div className="section">
+        <Appear ready={booksData !== null} placeholder={<BookGridSkeleton />}>
         <div className="book-grid">
-          {booksData.map((book, index) => (
+          {(booksData ?? []).map((book, index) => (
             <article key={index} className="book-tile">
               <span className="cover">
                 <BookCover src={book.cover} />
@@ -60,6 +64,7 @@ const Feed = () => {
             </article>
           ))}
         </div>
+        </Appear>
       </div>
     </main>
   );

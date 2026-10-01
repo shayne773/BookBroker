@@ -10,10 +10,15 @@ import PhotoGallery from './PhotoGallery';
 import PhotoManager from './PhotoManager';
 import ReportDialog from './UserPage/ReportDialog';
 import useAccountPrompt from './useAccountPrompt';
+import useRemembered from './remember';
+import Appear from './Appear';
+import { BookPageSkeleton } from './Skeletons';
+
+const NOT_LOADED = {};
 
 const BookPage = () => {
   const { id } = useParams();
-  const [book, setBook] = useState({});
+  const [book, setBook] = useRemembered(`/books/${id}`, NOT_LOADED);
   const [notFound, setNotFound] = useState(false);
 
   const [isInWishlist, setIsInWishlist] = useState(false);
@@ -76,7 +81,7 @@ const BookPage = () => {
         console.error('Failed to fetch book:', err);
         setBook({});
       });
-  }, [id]);
+  }, [id, setBook]);
 
   async function openConversationWithOwner() {
     clear();
@@ -123,13 +128,14 @@ const BookPage = () => {
         Back
       </button>
 
+      <Appear ready={notFound || book !== NOT_LOADED} placeholder={<BookPageSkeleton />}>
       {notFound ? (
         <div className="empty">
           <p>This book is no longer available.</p>
           <p>It may have been traded or taken off the market.</p>
         </div>
       ) : (
-      <article className="book">
+      <article className="book rise">
         <header className="book__head">
           <p className="kicker">{book.genre || "[NO GENRE]"}</p>
 
@@ -233,6 +239,7 @@ const BookPage = () => {
         </div>
       </article>
       )}
+      </Appear>
 
       {reporting && (
         <ReportDialog

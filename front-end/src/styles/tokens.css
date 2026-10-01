@@ -123,6 +123,13 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 
+  /* How loaded content arrives (the Appear section of components.css): each
+     item rises this far as it fades in, this long after the one before it, and
+     a placeholder waits this long so a quick answer never flashes one. */
+  --rise-distance: 10px;
+  --stagger-step: 35ms;
+  --placeholder-delay: 150ms;
+
   --transition-colors: color var(--duration-fast) var(--ease-standard),
     background-color var(--duration-fast) var(--ease-standard),
     border-color var(--duration-fast) var(--ease-standard);
@@ -142,5 +149,8 @@
     --duration-fast: 0.01ms;
     --duration-base: 0.01ms;
     --duration-slow: 0.01ms;
+    --rise-distance: 0px;
+    --stagger-step: 0ms;
+    --placeholder-delay: 0ms;
   }
 }

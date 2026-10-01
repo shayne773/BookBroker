@@ -1,20 +1,21 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import BookList from './BookList';
+import useRemembered from '../remember';
 import { authFetch } from '../auth';
 
 const NewlyAdded = () => {
-    const [books, setBooks] = useState([]);
+    const [books, setBooks] = useRemembered('/new');
 
     useEffect(() => {
         authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/new`)
             .then(res => res.json())
-            .then(data => setBooks(data))
+            .then(data => setBooks(Array.isArray(data) ? data : []))
             .catch(err => {
                 console.error("Failed to fetch new books:", err);
                 setBooks([]);
             });
-    }, []);
+    }, [setBooks]);
 
     return (
         <main className="page page--reading">

@@ -10,3 +10,7 @@ for (const name of ['alert', 'confirm', 'prompt']) {
     throw new Error(`window.${name}() called: use inline feedback instead`);
   };
 }
+
+// What one test's pages loaded must not be on hand for the next (remember.js).
+import { forgetAll } from './remember';
+afterEach(() => forgetAll());

@@ -6,6 +6,8 @@ import { formatDistance } from '../distance';
 import { readerMeta } from '../rating';
 import UserLink from '../UserLink';
 import useWishlistMatches from './useWishlistMatches';
+import Appear from '../Appear';
+import { BookListSkeleton } from '../Skeletons';
 
 // "Available from other readers": each book on your wishlist that someone else
 // is offering right now, with every reader offering it.
@@ -28,15 +30,14 @@ const WishlistMatches = () => {
         </div>
       </div>
 
-      {!loaded && <p className="empty" role="status">Loading…</p>}
-
-      {loaded && error && (
+      <Appear ready={loaded} placeholder={<BookListSkeleton />}>
+      {error && (
         <div className="section">
           <p className="notice notice--error" role="alert">Your matches could not be loaded.</p>
         </div>
       )}
 
-      {loaded && !error && matches.length === 0 && (
+      {!error && matches.length === 0 && (
         <div className="empty">
           <p>None of your wishlist is on offer right now.</p>
           <p>When another reader offers a book you want, it will appear here.</p>
@@ -95,6 +96,7 @@ const WishlistMatches = () => {
           ))}
         </ul>
       )}
+      </Appear>
     </main>
   );
 };

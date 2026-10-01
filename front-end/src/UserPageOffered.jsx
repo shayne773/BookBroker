@@ -1,8 +1,9 @@
 import ShelfPage from './ShelfPage';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from './auth';
 import useReader from './useReader';
+import useRemembered from './remember';
 import UserLink from './UserLink';
 import MessageAction from './UserPage/MessageAction';
 import DistanceLabel from './DistanceLabel';
@@ -11,7 +12,7 @@ import PhotoCount from './PhotoCount';
 const UserPageOffered = () => {
   const { id } = useParams(); // user id
   const [reader] = useReader(id);
-  const [offeredBooks, setOfferedBooks] = useState([]);
+  const [offeredBooks, setOfferedBooks] = useRemembered(`/users/${id}/offered`);
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}/offered`)
@@ -24,7 +25,7 @@ const UserPageOffered = () => {
         console.error('Failed to fetch user offerings:', err);
         setOfferedBooks([]);
       });
-  }, [id]);
+  }, [id, setOfferedBooks]);
 
   return (
     <ShelfPage

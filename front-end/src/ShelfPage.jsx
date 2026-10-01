@@ -1,7 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
 import BookCover from './BookCover';
+import Appear from './Appear';
+import { BookListSkeleton } from './Skeletons';
 
-// A whole wishlist or offerings shelf, one book per row. Your own shelves pass
+// A whole wishlist or offerings shelf, one book per row (`books`, null until
+// they have loaded). Your own shelves pass
 // `onRemove`; another reader's are read-only. `renderExtra(book)` adds a line
 // under a book's author, e.g. who is offering it. `aside` sits beside the title,
 // e.g. the owner's Message action. `linkTo(book)` makes each title open that book.
@@ -24,7 +27,8 @@ const ShelfPage = ({ kicker, title, aside, books, emptyLabel, onRemove, renderEx
         {aside && <div className="page-head__aside">{aside}</div>}
       </div>
 
-      {books.length > 0 ? (
+      <Appear ready={books !== null} placeholder={<BookListSkeleton />}>
+      {books?.length > 0 ? (
         <ul className="book-list">
           {books.map((book) => (
             <li key={book._id || book.isbn} className="book-row">
@@ -59,6 +63,7 @@ const ShelfPage = ({ kicker, title, aside, books, emptyLabel, onRemove, renderEx
       ) : (
         <p className="empty">{emptyLabel}</p>
       )}
+      </Appear>
     </main>
   );
 };

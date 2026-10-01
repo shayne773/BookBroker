@@ -9,6 +9,9 @@ import CounterOfferDialog from "./ExchangeDetail/CounterOfferDialog";
 import Feedback from "./Feedback";
 import useFeedback from "./useFeedback";
 import UserLink from "./UserLink";
+import useRemembered from "./remember";
+import Appear from "./Appear";
+import { BookGridSkeleton } from "./Skeletons";
 
 export default function ExchangeDetail() {
   const { exchangeId } = useParams();
@@ -16,9 +19,9 @@ export default function ExchangeDetail() {
   const userId = localStorage.getItem("userId");
   const server = import.meta.env.VITE_SERVER_ADDRESS;
 
-  const [ex, setEx] = useState(null);
+  const [ex, setEx] = useRemembered(`/exchanges/${exchangeId}`);
   const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(true);
+  const loading = !ex && !err;
 
   // counter modal state
   const [showCounter, setShowCounter] = useState(false);
@@ -48,7 +51,6 @@ export default function ExchangeDetail() {
   useEffect(() => {
     let alive = true;
     async function run() {
-      setLoading(true);
       setErr("");
       try {
         const res = await authFetch(`${server}/exchanges/${exchangeId}`);
@@ -60,14 +62,13 @@ export default function ExchangeDetail() {
         if (isSessionExpiredError(e)) return;
 
         console.error(e);
+        // A trade already on screen stays there.
         if (alive) setErr("Failed to load exchange.");
-      } finally {
-        if (alive) setLoading(false);
       }
     }
     run();
     return () => (alive = false);
-  }, [server, exchangeId]);
+  }, [server, exchangeId, setEx]);
 
   async function post(path, body) {
     const res = await authFetch(`${server}${path}`, {
@@ -200,7 +201,7 @@ export default function ExchangeDetail() {
     }
   }
 
-  if (loading || err || !ex) {
+  if (!ex) {
     return (
       <main className="page page--reading">
         <BackLink />
@@ -209,13 +210,20 @@ export default function ExchangeDetail() {
             <h1 className="page-title">Exchange</h1>
           </div>
         </div>
-        {loading ? (
-          <p className="empty" role="status">Loading…</p>
-        ) : (
+        {/* The same Appear, by its place in the page, as the one below, so the
+            trade it waited for comes in as loaded content does. */}
+        <Appear
+          ready={!loading}
+          placeholder={
+            <div className="section">
+              <BookGridSkeleton count={4} variant="book-grid--small" />
+            </div>
+          }
+        >
           <div className="section">
             <p className="notice notice--error" role="alert">{err || "Not found"}</p>
           </div>
-        )}
+        </Appear>
       </main>
     );
   }
@@ -254,6 +262,7 @@ export default function ExchangeDetail() {
         )}
       </div>
 
+      <Appear ready>
       <ExchangeProgress ex={ex} />
 
       <ExchangeBooks ex={ex} />
@@ -309,6 +318,8 @@ export default function ExchangeDetail() {
           onRate={onRate}
         />
       )}
+
+      </Appear>
 
       {showCounter && (
         <CounterOfferDialog

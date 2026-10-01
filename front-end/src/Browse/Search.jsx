@@ -6,6 +6,8 @@ import { authFetch, isSessionExpiredError } from "../auth";
 import { searchGoogleBooks } from "../googleBooks";
 import useFeedback from "../useFeedback";
 import useAccountPrompt from "../useAccountPrompt";
+import Appear from "../Appear";
+import { BookListSkeleton } from "../Skeletons";
 
 export default function Search() {
   const navigate = useNavigate();
@@ -335,7 +337,11 @@ export default function Search() {
             </p>
           )}
 
-          {hasSearched && !loading && <MarketResults books={booksData} />}
+          {(hasSearched || loading) && (
+            <Appear ready={!loading} placeholder={<BookListSkeleton />}>
+              <MarketResults books={booksData} />
+            </Appear>
+          )}
         </section>
       )}
 

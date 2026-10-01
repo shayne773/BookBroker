@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import FadeImg from './FadeImg';
 
 // The owner's photos of their copy, on the book's page: a row of thumbnails,
 // any of which opens large in place above them, not in a pop-up. The large
@@ -42,7 +43,7 @@ const PhotoGallery = ({ photos = [], title }) => {
           onKeyDown={onKeyDown}
           aria-label={label(shown)}
         >
-          <img
+          <FadeImg
             key={photos[shown].url}
             className="photo-viewer__img"
             src={photos[shown].url}
@@ -82,7 +83,7 @@ const PhotoGallery = ({ photos = [], title }) => {
               aria-label={`Enlarge photo ${i + 1} of ${photos.length}`}
               onClick={() => (shown === i ? close() : setOpen(i))}
             >
-              <img src={photo.url} alt="" loading="lazy" width={photo.width} height={photo.height} />
+              <FadeImg src={photo.url} loading="lazy" width={photo.width} height={photo.height} />
             </button>
           </li>
         ))}

@@ -5,6 +5,9 @@ import BookCover from '../BookCover';
 import DistanceLabel from '../DistanceLabel';
 import PhotoCount from '../PhotoCount';
 import { booksCount } from '../bookMap';
+import useRemembered from '../remember';
+import Appear from '../Appear';
+import { BookListSkeleton } from '../Skeletons';
 
 const areaUrl = (place, offset, searchKey) =>
   `${import.meta.env.VITE_SERVER_ADDRESS}/map/area?place=${encodeURIComponent(place)}` +
@@ -21,16 +24,37 @@ const fetchPage = async (place, offset, searchKey) => {
 // first, a page at a time, only those matching the search when one is on
 // (`searchKey`, its query string), and then Close goes back to the results.
 // Keyed by place and search, so either starts afresh.
+const NO_BOOKS = [];
+
 const AreaPanel = ({ place, count, searchKey = '', onClose }) => {
-  const [books, setBooks] = useState([]);
-  const [nextOffset, setNextOffset] = useState(null);
+  // The pages shown so far, null until the first is in.
+  const [shelf, setShelf] = useRemembered(areaUrl(place, 0, searchKey));
+  const books = shelf?.books ?? NO_BOOKS;
+  const nextOffset = shelf?.nextOffset ?? null;
   const [loading, setLoading] = useState(true);
+  // A further page is on its way.
+  const [more, setMore] = useState(false);
   const [error, setError] = useState(false);
 
-  const addPage = useCallback((page) => {
-    setBooks((shown) => [...shown, ...page.books]);
-    setNextOffset(page.nextOffset);
-  }, []);
+  const addPage = useCallback(
+    (page) =>
+      setShelf((shown) => ({
+        books: [...(shown?.books ?? []), ...page.books],
+        nextOffset: page.nextOffset,
+        pages: (shown?.pages ?? 0) + 1,
+      })),
+    [setShelf]
+  );
+
+  // The first page, fresh. A reader who had already paged further keeps what
+  // they had rather than losing their place.
+  const firstPage = useCallback(
+    (page) =>
+      setShelf((shown) =>
+        shown?.pages > 1 ? shown : { books: page.books, nextOffset: page.nextOffset, pages: 1 }
+      ),
+    [setShelf]
+  );
 
   const failed = useCallback(
     (err) => {
@@ -44,20 +68,20 @@ const AreaPanel = ({ place, count, searchKey = '', onClose }) => {
   useEffect(() => {
     let live = true;
     fetchPage(place, 0, searchKey)
-      .then((page) => live && addPage(page))
+      .then((page) => live && firstPage(page))
       .catch((err) => live && failed(err))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
     };
-  }, [place, searchKey, addPage, failed]);
+  }, [place, searchKey, firstPage, failed]);
 
   const showMore = () => {
-    setLoading(true);
+    setMore(true);
     fetchPage(place, nextOffset, searchKey)
       .then(addPage)
       .catch(failed)
-      .finally(() => setLoading(false));
+      .finally(() => setMore(false));
   };
 
   return (
@@ -79,12 +103,16 @@ const AreaPanel = ({ place, count, searchKey = '', onClose }) => {
         </p>
       )}
 
-      {!loading && !error && books.length === 0 && (
+      <Appear
+        ready={shelf !== null || !loading}
+        placeholder={<BookListSkeleton small count={5} className="" />}
+      >
+      {shelf !== null && !error && books.length === 0 && (
         <p className="empty">{searchKey ? 'No books here match this search right now.' : 'No books here right now.'}</p>
       )}
 
       {books.length > 0 && (
-        <ul className="map-panel__list" aria-label={`Books in ${place}`}>
+        <ul className="map-panel__list stagger" aria-label={`Books in ${place}`}>
           {books.map((book) => (
             <li key={book._id} className="map-book">
               <Link to={`/books/${book._id}`} className="cover" tabIndex={-1} aria-hidden="true">
@@ -102,10 +130,11 @@ const AreaPanel = ({ place, count, searchKey = '', onClose }) => {
           ))}
         </ul>
       )}
+      </Appear>
 
-      {loading && <p className="hint mt-4" role="status">Loading books&hellip;</p>}
+      {more && <p className="hint mt-4" role="status">Loading books&hellip;</p>}
 
-      {!loading && nextOffset !== null && (
+      {!more && nextOffset !== null && (
         <button type="button" className="button button--secondary button--block mt-4" onClick={showMore}>
           Show more
         </button>
