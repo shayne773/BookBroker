@@ -1677,8 +1677,8 @@ a.book-tile:focus-visible .book-tile__title {
 /*
  * The one way content a screen had to fetch comes in. Appear.jsx wraps it: the
  * whole region fades in, and when the reader watched it load (`--enter`) the
- * books in it also rise into place one after another. Content that was already
- * on hand - a page the reader just left - gets only the short fade.
+ * books in it also rise into place one after another. Content that was ready
+ * from the start, with nothing to wait for, gets only the short fade.
  *
  * Every .book-grid and .book-list staggers its children; `.stagger` opts another
  * list in, and `.rise` a single block (the book page, Home's lead).
