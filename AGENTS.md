@@ -44,9 +44,15 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   it collapses to nothing.
 - Dialogs use `.dialog-overlay` / `.dialog-content`, the names reactjs-popup generates
   from `<Popup className="dialog">`, so hand-built modals and Popup share one style.
-- `.page` runs its entry animation with fill-mode `backwards`, not `both`: a transform
-  left in effect makes the page the containing block for its `position: fixed` children
-  (dialog overlays).
+- Fetched content arrives one way: `<Appear ready placeholder>` (`src/Appear.jsx`, CSS under
+  "Appear" in `components.css`, timings in `tokens.css`) shows a `Skeletons.jsx` placeholder,
+  then fades the content in and staggers every `.book-grid` / `.book-list` (`.stagger` opts
+  another list in, `.rise` a single block). The page frame itself never animates. Fill-mode
+  is `backwards`, not `both`: a transform left in effect makes the element the containing
+  block for its `position: fixed` children (dialog overlays).
+- A page's fetched state is plain `useState(null)`, `null` until loaded: nothing is cached
+  between visits, so a revisit refetches behind the placeholder. A fetched image is a
+  `FadeImg` (`BookCover` uses it), not a bare `<img>`.
 - No pop-ups: no `alert()`/`confirm()`/`prompt()` (`src/setupTests.js` makes them throw in every test) and no toasts.
   An action's outcome is a `<Feedback>` line (`src/Feedback.jsx`, state from
   `useFeedback`) beside the control, or a `DoneButton` that turns into its checked state

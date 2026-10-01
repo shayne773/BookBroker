@@ -24,21 +24,6 @@ const reader = { _id: 'rob', username: 'rob', location: 'Queens, NY', ratingsAvg
 
 let calls;
 
-beforeAll(() => {
-  // Home reveals its sections on scroll; jsdom has no IntersectionObserver.
-  vi.stubGlobal(
-    'IntersectionObserver',
-    class {
-      observe() {}
-      disconnect() {}
-    }
-  );
-});
-
-afterAll(() => {
-  vi.unstubAllGlobals();
-});
-
 beforeEach(() => {
   localStorage.clear();
   calls = [];

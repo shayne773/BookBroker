@@ -3,6 +3,7 @@ import { isSessionExpiredError } from './auth';
 import Feedback from './Feedback';
 import useFeedback from './useFeedback';
 import UploadProgress from './UploadProgress';
+import FadeImg from './FadeImg';
 import {
   MAX_PHOTOS,
   PHOTO_TYPES,
@@ -90,7 +91,7 @@ const PhotoManager = ({ bookId, photos, canUpload, onChange }) => {
           {photos.map((photo, i) => (
             <li key={photo._id} className="photo-manager__item">
               <span className="photo-manager__frame">
-                <img src={photo.url} alt="" width={photo.width} height={photo.height} />
+                <FadeImg src={photo.url} width={photo.width} height={photo.height} />
               </span>
               <span className="photo-manager__label">{i === 0 ? 'Main photo' : `Photo ${i + 1}`}</span>
               <span className="photo-manager__actions">

@@ -4,11 +4,19 @@ import { authFetch, isSessionExpiredError, useSignedIn } from "./auth";
 import BookCover from "./BookCover";
 import DistanceLabel from "./DistanceLabel";
 import LocationPrompt from "./LocationPrompt";
+import Appear from "./Appear";
+import { BookGridSkeleton } from "./Skeletons";
 
 const Browse = () => {
   const [query, setQuery] = useState("");
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // The rows with no search on, and the latest search's answer. Each new
+  // answer replaces the last in place, so typing never swaps the rows for
+  // placeholders.
+  const [rows, setRows] = useState(null);
+  const [found, setFound] = useState(null);
+  const searching = query.trim().length > 0;
+  const showSearch = searching && found !== null;
+  const data = showSearch ? found : rows;
   // Fetched once, apart from the search-driven payload.
   const [recommended, setRecommended] = useState(null);
 
@@ -29,26 +37,26 @@ const Browse = () => {
   }, [server, signedIn]);
 
   useEffect(() => {
+    let live = true;
     const t = setTimeout(() => {
       authFetch(`${server}/browse?q=${encodeURIComponent(query)}`)
         .then((r) => r.json())
-        .then((payload) => {
-          setData(payload);
-          setLoading(false);
-        })
+        .then((payload) => live && (searching ? setFound(payload) : setRows(payload)))
         .catch((err) => {
           // RedirectOnSessionEnd is already redirecting to the login page.
-          if (isSessionExpiredError(err)) return;
+          if (isSessionExpiredError(err) || !live) return;
 
-          setData(null);
-          setLoading(false);
+          // false, not null: the load is over, with nothing to show.
+          if (searching) setFound(false);
+          else setRows(false);
         });
-    }, 250); // debounce
+    }, query ? 250 : 0); // debounce typing, not the first load
 
-    return () => clearTimeout(t);
-  }, [query, server]);
-
-  const showSearch = query.trim().length > 0;
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [query, searching, server]);
 
   return (
     <main className="page">
@@ -68,10 +76,7 @@ const Browse = () => {
             className="input"
             placeholder="Search title or author"
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setLoading(true);
-            }}
+            onChange={(e) => setQuery(e.target.value)}
           />
         </div>
       </div>
@@ -85,9 +90,8 @@ const Browse = () => {
         <Link to="/browse/search" className="textlink-quiet">Advanced search</Link>
       </nav>
 
-      {loading && <BookRowSkeleton />}
-
-      {!loading && data && (
+      <Appear ready={data !== null} placeholder={<BookRowSkeleton />}>
+      {data && (
         <>
           {showSearch && (
             <Section title="Search results" count={data.searchResults.length}>
@@ -111,7 +115,7 @@ const Browse = () => {
                 <BookRow books={data.newlyAdded} />
               </Section>
 
-              {Object.entries(data.genreRows).map(([genre, books]) => (
+              {Object.entries(data.genreRows ?? {}).map(([genre, books]) => (
                 <Section key={genre} title={genre}>
                   <BookRow books={books} />
                 </Section>
@@ -120,6 +124,7 @@ const Browse = () => {
           )}
         </>
       )}
+      </Appear>
     </main>
   );
 };
@@ -139,6 +144,7 @@ const Section = ({ title, count, children }) => (
 );
 
 const BookRow = ({ books }) => {
+  if (books === null) return <BookGridSkeleton count={7} variant="book-grid--compact" />;
   if (!books?.length) return <div className="empty">No books</div>;
 
   return (
@@ -161,20 +167,12 @@ const BookRow = ({ books }) => {
 // Placeholders in the shape of the row that is coming, so the page does not
 // jump when the first payload lands.
 const BookRowSkeleton = () => (
-  <section className="section" aria-hidden="true">
-    <div className="section-head">
+  <section className="section">
+    <div className="section-head" aria-hidden="true">
       <span className="skeleton skeleton--line" style={{ width: "12rem" }} />
     </div>
 
-    <div className="book-grid book-grid--compact">
-      {Array.from({ length: 7 }, (_, i) => (
-        <div key={i} className="stack">
-          <div className="skeleton skeleton--cover" />
-          <div className="skeleton skeleton--line" />
-          <div className="skeleton skeleton--line skeleton--line-short" />
-        </div>
-      ))}
-    </div>
+    <BookGridSkeleton count={7} variant="book-grid--compact" />
   </section>
 );
 

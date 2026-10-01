@@ -9,6 +9,8 @@ import CounterOfferDialog from "./ExchangeDetail/CounterOfferDialog";
 import Feedback from "./Feedback";
 import useFeedback from "./useFeedback";
 import UserLink from "./UserLink";
+import Appear from "./Appear";
+import { BookGridSkeleton } from "./Skeletons";
 
 export default function ExchangeDetail() {
   const { exchangeId } = useParams();
@@ -209,13 +211,20 @@ export default function ExchangeDetail() {
             <h1 className="page-title">Exchange</h1>
           </div>
         </div>
-        {loading ? (
-          <p className="empty" role="status">Loading…</p>
-        ) : (
+        {/* The same Appear, by its place in the page, as the one below, so the
+            trade it waited for comes in as loaded content does. */}
+        <Appear
+          ready={!loading}
+          placeholder={
+            <div className="section">
+              <BookGridSkeleton count={4} variant="book-grid--small" />
+            </div>
+          }
+        >
           <div className="section">
             <p className="notice notice--error" role="alert">{err || "Not found"}</p>
           </div>
-        )}
+        </Appear>
       </main>
     );
   }
@@ -254,6 +263,7 @@ export default function ExchangeDetail() {
         )}
       </div>
 
+      <Appear ready>
       <ExchangeProgress ex={ex} />
 
       <ExchangeBooks ex={ex} />
@@ -309,6 +319,8 @@ export default function ExchangeDetail() {
           onRate={onRate}
         />
       )}
+
+      </Appear>
 
       {showCounter && (
         <CounterOfferDialog

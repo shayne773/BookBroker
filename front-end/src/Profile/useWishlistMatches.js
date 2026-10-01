@@ -4,10 +4,13 @@ import { authFetch, isSessionExpiredError } from '../auth';
 // The caller's wishlisted books that other readers are offering now: one entry
 // per wishlist book, { wishlistBook, offers: [{ _id, title, cover, owner }] }.
 // `loaded` turns true once the answer (or a failure) is in.
+const NONE = [];
+
 const useWishlistMatches = () => {
-  const [matches, setMatches] = useState([]);
-  const [loaded, setLoaded] = useState(false);
+  const [answer, setMatches] = useState(null);
   const [error, setError] = useState(false);
+  const matches = answer ?? NONE;
+  const loaded = answer !== null || error;
 
   useEffect(() => {
     let alive = true;
@@ -26,9 +29,6 @@ const useWishlistMatches = () => {
 
         console.error('Failed to fetch wishlist matches:', err);
         if (alive) setError(true);
-      })
-      .finally(() => {
-        if (alive) setLoaded(true);
       });
 
     return () => {

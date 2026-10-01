@@ -1,8 +1,11 @@
 import { Link } from 'react-router-dom';
 import BookCover from './BookCover';
 import Feedback from './Feedback';
+import Appear from './Appear';
+import { BookGridSkeleton } from './Skeletons';
 
-// The first four books of a wishlist or an offerings shelf, with a link to the
+// The first four books of a wishlist or an offerings shelf (`books`, null until
+// they have loaded), with a link to the
 // whole shelf and, on your own profile, a way to add to it. `linkTo(book)` makes
 // each tile open that book; `metaOf(book)` replaces the author line and may
 // name a reader, so it is set outside the tile's link; `error` replaces the
@@ -39,9 +42,13 @@ const ShelfPreview = ({
 
     {feedback !== undefined && <Feedback feedback={feedback} className="mb-4" />}
 
+    <Appear
+      ready={Boolean(error) || books !== null}
+      placeholder={<BookGridSkeleton count={4} variant="book-grid--four" />}
+    >
     {error ? (
       <p className="notice notice--error" role="alert">{error}</p>
-    ) : books.length > 0 ? (
+    ) : books?.length > 0 ? (
       <ul className="book-grid book-grid--four">
         {books.slice(0, 4).map((book, i) => {
           const cover = (
@@ -67,6 +74,7 @@ const ShelfPreview = ({
     ) : (
       <p className="empty">{emptyLabel}</p>
     )}
+    </Appear>
   </section>
 );
 

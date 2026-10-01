@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState } from 'react';
 import { authFetch, isSessionExpiredError } from '../auth';
+import Appear from '../Appear';
+import { LinesSkeleton } from '../Skeletons';
 
 const ByCategory = () => {
-  const [genres, setGenres] = useState([]);
+  const [genres, setGenres] = useState(null);
 
   useEffect(() => {
     // Signed in, so the genres are those of the books within your distance.
@@ -35,8 +37,9 @@ const ByCategory = () => {
         </div>
       </div>
 
-      <ul className="category-list">
-        {genres.map((genre, index) => (
+      <Appear ready={genres !== null} placeholder={<LinesSkeleton count={6} />}>
+      <ul className="category-list stagger">
+        {(genres ?? []).map((genre, index) => (
           <li key={index}>
             <Link
               to={`/browse/by-category/${encodeURIComponent(genre.toLowerCase())}`}
@@ -50,6 +53,7 @@ const ByCategory = () => {
           </li>
         ))}
       </ul>
+      </Appear>
     </main>
   );
 };

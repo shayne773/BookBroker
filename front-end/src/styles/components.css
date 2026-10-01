@@ -25,19 +25,14 @@
 }
 
 /*
- * Every screen's root element. The entry animation plays on mount, which is
- * exactly once per route change, so route transitions get their fade without
- * any router plumbing.
+ * Every screen's root element. The frame (header, headings, layout) is there at
+ * once on a route change; what a screen loads arrives through Appear, below.
  */
 .page {
   width: 100%;
   max-width: var(--measure-page);
   margin: 0 auto;
   padding: var(--space-12) var(--gutter) var(--space-24);
-  /* backwards, not both: a transform left in effect after the entry would make
-     the page the containing block for its fixed children, pinning a dialog
-     overlay to the page instead of the window. */
-  animation: page-enter var(--duration-slow) var(--ease-out) backwards;
 }
 
 /* For long-form screens that want a single reading column. */
@@ -747,7 +742,8 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform var(--duration-slow) var(--ease-out);
+  transition: transform var(--duration-slow) var(--ease-out),
+    opacity var(--duration-slow) var(--ease-out);
 }
 
 /*
@@ -1088,7 +1084,8 @@ a.book-tile:focus-visible .book-tile__title {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform var(--duration-slow) var(--ease-out);
+  transition: transform var(--duration-slow) var(--ease-out),
+    opacity var(--duration-slow) var(--ease-out);
 }
 
 .photo-thumb:hover img,
@@ -1552,9 +1549,15 @@ a.book-tile:focus-visible .book-tile__title {
 }
 
 /*
- * Loading state: grey blocks in the shape of the content that is coming, with a
- * slow breath so the page reads as working rather than broken.
+ * Loading state (Skeletons.jsx): grey blocks in the shape of the content that is
+ * coming, so the page keeps its layout while it waits, with a slow breath so it
+ * reads as working rather than broken. They wait a moment before showing: an
+ * answer that is quick, as most are, never flashes one.
  */
+.placeholder {
+  animation: skeleton-in var(--duration-base) var(--ease-standard) var(--placeholder-delay) backwards;
+}
+
 .skeleton {
   background: var(--color-paper-sunken);
   animation: skeleton-pulse 1.6s var(--ease-standard) infinite;
@@ -1573,6 +1576,33 @@ a.book-tile:focus-visible .book-tile__title {
   width: 55%;
 }
 
+.skeleton--title {
+  width: 70%;
+  height: 2.5rem;
+}
+
+/* The rows of a book-list, a list or a map panel that is on its way. */
+.skeleton-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6) 0;
+  border-bottom: var(--border-hairline-subtle);
+}
+
+.skeleton-row--small {
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+}
+
+@keyframes skeleton-in {
+  from {
+    opacity: 0;
+  }
+}
+
 @keyframes skeleton-pulse {
   0%,
   100% {
@@ -1584,8 +1614,12 @@ a.book-tile:focus-visible .book-tile__title {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .placeholder,
   .skeleton {
     animation: none;
+  }
+
+  .skeleton {
     opacity: 0.8;
   }
 }
@@ -1637,29 +1671,120 @@ a.book-tile:focus-visible .book-tile__title {
 }
 
 /* ======================================================================
-   Scroll reveal (Home's IntersectionObserver)
+   Appear: how loaded content arrives (Appear.jsx)
    ====================================================================== */
 
-.reveal {
-  opacity: 0;
-  transform: translateY(12px);
-  transition: opacity var(--duration-slow) var(--ease-out),
-    transform var(--duration-slow) var(--ease-out);
-}
-
-.is-revealed {
-  opacity: 1;
-  transform: none;
-}
-
 /*
- * Without motion the reveal would leave content permanently invisible if the
- * observer never fired, so opt out of the hidden start entirely.
+ * The one way content a screen had to fetch comes in. Appear.jsx wraps it: the
+ * whole region fades in, and when the reader watched it load (`--enter`) the
+ * books in it also rise into place one after another. Content that was ready
+ * from the start, with nothing to wait for, gets only the short fade.
+ *
+ * Every .book-grid and .book-list staggers its children; `.stagger` opts another
+ * list in, and `.rise` a single block (the book page, Home's lead).
+ *
+ * Fill-mode is `backwards`, so nothing waits on the animation to be usable and
+ * no transform is left in effect: one would make the element the containing
+ * block for a `position: fixed` child, pinning a dialog overlay to it.
  */
+.appear {
+  animation: appear-fade var(--duration-base) var(--ease-standard) backwards;
+}
+
+.appear--enter :is(.book-grid, .book-list, .stagger) > *,
+.appear--enter .rise {
+  animation: appear-rise var(--duration-slow) var(--ease-out) backwards;
+  /* Past the twelfth item a list arrives together, so a long one never keeps
+     the reader waiting on its tail. */
+  animation-delay: calc(var(--stagger-step) * var(--appear-i, 12));
+}
+
+.rise {
+  --appear-i: 0;
+}
+
+:is(.book-grid, .book-list, .stagger) > :nth-child(1) {
+  --appear-i: 0;
+}
+
+:is(.book-grid, .book-list, .stagger) > :nth-child(2) {
+  --appear-i: 1;
+}
+
+:is(.book-grid, .book-list, .stagger) > :nth-child(3) {
+  --appear-i: 2;
+}
+
+:is(.book-grid, .book-list, .stagger) > :nth-child(4) {
+  --appear-i: 3;
+}
+
+:is(.book-grid, .book-list, .stagger) > :nth-child(5) {
+  --appear-i: 4;
+}
+
+:is(.book-grid, .book-list, .stagger) > :nth-child(6) {
+  --appear-i: 5;
+}
+
+:is(.book-grid, .book-list, .stagger) > :nth-child(7) {
+  --appear-i: 6;
+}
+
+:is(.book-grid, .book-list, .stagger) > :nth-child(8) {
+  --appear-i: 7;
+}
+
+:is(.book-grid, .book-list, .stagger) > :nth-child(9) {
+  --appear-i: 8;
+}
+
+:is(.book-grid, .book-list, .stagger) > :nth-child(10) {
+  --appear-i: 9;
+}
+
+:is(.book-grid, .book-list, .stagger) > :nth-child(11) {
+  --appear-i: 10;
+}
+
+:is(.book-grid, .book-list, .stagger) > :nth-child(12) {
+  --appear-i: 11;
+}
+
+@keyframes appear-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes appear-rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--rise-distance));
+  }
+}
+
+/* An image (FadeImg.jsx) stays clear until it has loaded, then fades in, so a
+   cover or a photo is never seen half drawn. */
+.fade-img {
+  opacity: 0;
+}
+
+/* :where, so an image with a transition of its own (a cover's hover) keeps it. */
+:where(.fade-img) {
+  transition: opacity var(--duration-slow) var(--ease-out);
+}
+
+.fade-img.is-loaded {
+  opacity: 1;
+}
+
+/* Without motion, content simply appears. */
 @media (prefers-reduced-motion: reduce) {
-  .reveal {
-    opacity: 1;
-    transform: none;
+  .appear,
+  .appear--enter :is(.book-grid, .book-list, .stagger) > *,
+  .appear--enter .rise {
+    animation: none;
   }
 }
 

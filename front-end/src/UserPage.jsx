@@ -18,8 +18,8 @@ const UserPage = () => {
   const isMe = id === localStorage.getItem('userId');
 
   const [user, setUser] = useReader(id);
-  const [wishlistBooks, setWishlistBooks] = useState([]);
-  const [offeredBooks, setOfferedBooks] = useState([]);
+  const [wishlistBooks, setWishlistBooks] = useState(null);
+  const [offeredBooks, setOfferedBooks] = useState(null);
 
   const [dialog, setDialog] = useState(null); // 'block' | 'report' | null
   const [busy, setBusy] = useState(false);

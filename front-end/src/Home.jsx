@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from './auth';
 import BookCover from './BookCover';
@@ -8,10 +8,12 @@ import useReaderArea from './useReaderArea';
 import Feedback, { DoneButton } from './Feedback';
 import useFeedback from './useFeedback';
 import useAccountPrompt from './useAccountPrompt';
+import Appear from './Appear';
+import { BookGridSkeleton, LeadSkeleton } from './Skeletons';
 
 const Home = () => {
-    const [books, setBooks] = useState([]);
-    const screenRefs = useRef([]);
+    // null until the feed has answered.
+    const [books, setBooks] = useState(null);
     // The books being added to the wishlist, and the one whose add failed, which
     // says so under its button.
     const [addingIds, setAddingIds] = useState(() => new Set());
@@ -28,7 +30,7 @@ const Home = () => {
         authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/feed`)
             .then(res => res.json())
             .then(data => {
-                setBooks(data);
+                setBooks(Array.isArray(data) ? data : []);
             })
             .catch(err => {
                 // RedirectOnSessionEnd is already redirecting to the login page.
@@ -53,25 +55,6 @@ const Home = () => {
 
     const onWishlist = (book) => Boolean(book?.isbn) && wishlistIsbns.has(book.isbn);
    
-
-    useEffect(() => {
-        // Intersection Observer for the scroll reveal
-        const callback = (entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('is-revealed');
-                }
-            });
-        };
-
-        const observer = new IntersectionObserver(callback, { threshold: 0.2 });
-
-        screenRefs.current.forEach(screen => {
-            if (screen) observer.observe(screen);
-        });
-
-        return () => observer.disconnect();
-    }, [books]);
 
     const handleAddBook = (book) => {
         setAddingIds(prev => new Set(prev).add(book._id));
@@ -124,7 +107,7 @@ const Home = () => {
     const bookFeedback = (book) => <Feedback feedback={failedId === book._id ? feedback : null} />;
 
     // The first book runs as the lead story; the rest sit on the grid below it.
-    const [lead, ...rest] = books;
+    const [lead, ...rest] = books ?? [];
 
     return (
     <main className="page">
@@ -144,12 +127,20 @@ const Home = () => {
 
         <LocationPrompt area={area} />
 
-        {books.length > 0 ? (
+        <Appear
+            ready={books !== null}
+            placeholder={
+                <>
+                    <LeadSkeleton />
+                    <div className="section">
+                        <BookGridSkeleton />
+                    </div>
+                </>
+            }
+        >
+        {lead ? (
             <>
-                <article
-                    className="lead reveal"
-                    ref={(el) => (screenRefs.current[0] = el)}
-                >
+                <article className="lead rise">
                     <Link to={`/books/${lead._id}`} className="lead__cover cover">
                         <BookCover src={lead.cover} />
                     </Link>
@@ -192,11 +183,7 @@ const Home = () => {
 
                         <div className="book-grid">
                             {rest.map((book, index) => (
-                                <article
-                                    key={book._id || index}
-                                    className="reveal"
-                                    ref={(el) => (screenRefs.current[index + 1] = el)}
-                                >
+                                <article key={book._id || index}>
                                     <Link to={`/books/${book._id}`} className="book-tile">
                                         <span className="cover">
                                             <BookCover src={book.cover} />
@@ -227,6 +214,7 @@ const Home = () => {
         ) : (
             <p className="no-books">No books found in this genre.</p>
         )}
+        </Appear>
     </main>
     );
 

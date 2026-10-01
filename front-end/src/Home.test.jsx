@@ -13,21 +13,6 @@ const respond = (status, body) => ({ ok: status < 400, status, json: async () =>
 let wishlist;
 let posts;
 
-beforeAll(() => {
-  // Home reveals its sections on scroll; jsdom has no IntersectionObserver.
-  vi.stubGlobal(
-    'IntersectionObserver',
-    class {
-      observe() {}
-      disconnect() {}
-    }
-  );
-});
-
-afterAll(() => {
-  vi.unstubAllGlobals();
-});
-
 beforeEach(() => {
   localStorage.setItem('token', 'token');
   wishlist = [];

@@ -11,7 +11,7 @@ import PhotoCount from './PhotoCount';
 const UserPageOffered = () => {
   const { id } = useParams(); // user id
   const [reader] = useReader(id);
-  const [offeredBooks, setOfferedBooks] = useState([]);
+  const [offeredBooks, setOfferedBooks] = useState(null);
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}/offered`)

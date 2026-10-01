@@ -2,11 +2,20 @@ import { Link } from 'react-router-dom';
 import BookCover from '../BookCover';
 import DistanceLabel from '../DistanceLabel';
 import PhotoCount from '../PhotoCount';
+import Appear from '../Appear';
+import { BookListSkeleton } from '../Skeletons';
 
 // The shared record list behind Newly Added, Most Wanted and a genre: one row
 // per book, hairline-separated, with the cover small and the title leading.
-const BookList = ({ books, emptyLabel }) => {
-  if (!books?.length) return <p className="no-books">{emptyLabel}</p>;
+// `books` is null until they have loaded.
+const BookList = ({ books, emptyLabel }) => (
+  <Appear ready={books !== null} placeholder={<BookListSkeleton />}>
+    {() => <Rows books={books} emptyLabel={emptyLabel} />}
+  </Appear>
+);
+
+const Rows = ({ books, emptyLabel }) => {
+  if (!books.length) return <p className="no-books">{emptyLabel}</p>;
 
   return (
     <div className="book-list">

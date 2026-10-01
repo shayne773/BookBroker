@@ -4,12 +4,12 @@ import BookList from './BookList';
 import { authFetch } from '../auth';
 
 const NewlyAdded = () => {
-    const [books, setBooks] = useState([]);
+    const [books, setBooks] = useState(null);
 
     useEffect(() => {
         authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/new`)
             .then(res => res.json())
-            .then(data => setBooks(data))
+            .then(data => setBooks(Array.isArray(data) ? data : []))
             .catch(err => {
                 console.error("Failed to fetch new books:", err);
                 setBooks([]);

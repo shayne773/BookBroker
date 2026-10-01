@@ -4,7 +4,7 @@ import { authFetch, isSessionExpiredError } from '../auth';
 import PhotoCount from '../PhotoCount';
 
 const MyTrades = () => {
-  const [offeringsBooks, setOfferingsBooks] = useState([]);
+  const [offeringsBooks, setOfferingsBooks] = useState(null);
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/offered`)
@@ -41,7 +41,7 @@ const MyTrades = () => {
       kicker="Your profile"
       title="Offerings"
       books={offeringsBooks}
-      emptyLabel="Loading Offerings..."
+      emptyLabel="You aren't offering any books yet."
       onRemove={handleDelete}
       // A book's page is where its owner adds and arranges photos of it.
       linkTo={(book) => `/books/${book._id}`}

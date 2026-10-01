@@ -5,6 +5,10 @@ import { statusClass, statusLabel } from "./exchangeStatus";
 import { authFetch, isSessionExpiredError } from "./auth";
 import { readerMeta } from "./rating";
 import UserLink from "./UserLink";
+import Appear from "./Appear";
+import { BookListSkeleton } from "./Skeletons";
+
+const NONE = [];
 
 function formatWhen(d) {
   if (!d) return "";
@@ -13,9 +17,10 @@ function formatWhen(d) {
 }
 
 export default function ExchangesList() {
-  const [items, setItems] = useState([]);
+  // null until the exchanges have loaded.
+  const [loaded, setItems] = useState(null);
+  const items = loaded ?? NONE;
   const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(true);
 
   const userId = localStorage.getItem("userId");
   const server = import.meta.env.VITE_SERVER_ADDRESS;
@@ -23,7 +28,6 @@ export default function ExchangesList() {
   useEffect(() => {
     let alive = true;
     async function run() {
-      setLoading(true);
       setErr("");
       try {
         const res = await authFetch(`${server}/exchanges`);
@@ -39,8 +43,6 @@ export default function ExchangesList() {
           setErr("Failed to load exchanges.");
           console.error(e);
         }
-      } finally {
-        if (alive) setLoading(false);
       }
     }
     run();
@@ -75,14 +77,14 @@ export default function ExchangesList() {
         </div>
       </div>
 
-      {loading && <p className="empty" role="status">Loading…</p>}
+      <Appear ready={loaded !== null} placeholder={<BookListSkeleton className="section" />}>
       {!!err && (
         <div className="section">
           <p className="notice notice--error" role="alert">{err}</p>
         </div>
       )}
 
-      {!loading && !items.length && !err && (
+      {!items.length && !err && (
         <div className="empty">
           <p>No exchanges yet.</p>
           <p>You’ll see them here after you propose a trade.</p>
@@ -95,7 +97,7 @@ export default function ExchangesList() {
             <h2 className="section-title">Active</h2>
             <span className="section-count">{active.length}</span>
           </div>
-          <ul className="list">
+          <ul className="list stagger">
             {active.map((ex) => (
               <li key={ex._id}>
                 <ExchangeRow ex={ex} other={otherUser(ex)} />
@@ -111,7 +113,7 @@ export default function ExchangesList() {
             <h2 className="section-title">Completed</h2>
             <span className="section-count">{completed.length}</span>
           </div>
-          <ul className="list">
+          <ul className="list stagger">
             {completed.map((ex) => (
               <li key={ex._id}>
                 <ExchangeRow ex={ex} other={otherUser(ex)} completed />
@@ -120,6 +122,7 @@ export default function ExchangesList() {
           </ul>
         </section>
       )}
+      </Appear>
     </main>
   );
 }

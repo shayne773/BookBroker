@@ -16,13 +16,15 @@ import useFeedback from './useFeedback';
 import UserLink from './UserLink';
 import { uploadPhotos } from './photos';
 
+const NOT_LOADED = {};
+
 const Profile = () => {
   const navigate = useNavigate();
   const userId = localStorage.getItem('userId');
 
-  const [user, setUser] = useState({});
-  const [wishlistBooks, setWishlistBooks] = useState([]);
-  const [offeredBooks, setOfferedBooks] = useState([]);
+  const [user, setUser] = useState(NOT_LOADED);
+  const [wishlistBooks, setWishlistBooks] = useState(null);
+  const [offeredBooks, setOfferedBooks] = useState(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAddOfferingsModal, setShowAddOfferingsModal] = useState(false);
@@ -68,6 +70,7 @@ const Profile = () => {
       .catch(err => {
         if (isSessionExpiredError(err)) return;
         console.log("Failed to fetch wishlist:", err);
+        setWishlistBooks(shown => shown ?? []);
       });
 
   const loadOffered = () =>
@@ -77,6 +80,7 @@ const Profile = () => {
       .catch(err => {
         if (isSessionExpiredError(err)) return;
         console.log("Failed to fetch offerings", err);
+        setOfferedBooks(shown => shown ?? []);
       });
 
   useEffect(() => {
@@ -227,28 +231,26 @@ const Profile = () => {
         </p>
       )}
 
-      {matchesLoaded && (
-        <ShelfPreview
-          title="Available from other readers"
-          books={matchedOffers}
-          emptyLabel="None of your wishlist is on offer right now."
-          error={matchesError && 'Your matches could not be loaded.'}
-          seeAllTo="/profile/matches"
-          linkTo={(offer) => `/books/${offer._id}`}
-          metaOf={(offer) => (
-            <>
-              from <UserLink user={offer.owner} />
-              {formatDistance(offer.distanceMiles) && ` · ${formatDistance(offer.distanceMiles)}`}
-            </>
-          )}
-        />
-      )}
+      <ShelfPreview
+        title="Available from other readers"
+        books={matchesLoaded ? matchedOffers : null}
+        emptyLabel="None of your wishlist is on offer right now."
+        error={matchesError && 'Your matches could not be loaded.'}
+        seeAllTo="/profile/matches"
+        linkTo={(offer) => `/books/${offer._id}`}
+        metaOf={(offer) => (
+          <>
+            from <UserLink user={offer.owner} />
+            {formatDistance(offer.distanceMiles) && ` · ${formatDistance(offer.distanceMiles)}`}
+          </>
+        )}
+      />
 
       <div className="split">
         <ShelfPreview
           title="Wishlist"
           books={wishlistBooks}
-          emptyLabel="Loading wishlist..."
+          emptyLabel="Your wishlist is empty."
           seeAllTo="/profile/my-books"
           onAdd={() => setShowAddModal(true)}
           feedback={wishlistFeedback.feedback}
@@ -257,7 +259,7 @@ const Profile = () => {
         <ShelfPreview
           title="Offerings"
           books={offeredBooks}
-          emptyLabel="Loading offerings..."
+          emptyLabel="You aren't offering any books yet."
           seeAllTo="/profile/my-trades"
           onAdd={() => setShowAddOfferingsModal(true)}
           feedback={offeringsFeedback.feedback}

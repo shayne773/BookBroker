@@ -4,12 +4,12 @@ import BookList from './BookList';
 import { authFetch } from '../auth';
 
 const MostWanted = () => {
-    const [books, setBooks] = useState([]);
+    const [books, setBooks] = useState(null);
 
     useEffect(() => {
         authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/popular`)
             .then(res => res.json())
-            .then(data => setBooks(data))
+            .then(data => setBooks(Array.isArray(data) ? data : []))
             .catch(err => {
                 console.error("Failed to fetch most wanted books:", err);
                 setBooks([]);

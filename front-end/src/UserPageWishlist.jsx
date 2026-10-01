@@ -9,7 +9,7 @@ import MessageAction from './UserPage/MessageAction';
 const UserPageWishlist = () => {
   const { id } = useParams(); // user id
   const [reader] = useReader(id);
-  const [wishlistBooks, setWishlistBooks] = useState([]);
+  const [wishlistBooks, setWishlistBooks] = useState(null);
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}/wishlist`)

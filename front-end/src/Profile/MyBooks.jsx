@@ -5,7 +5,7 @@ import { authFetch, isSessionExpiredError } from '../auth';
 import useWishlistMatches from './useWishlistMatches';
 
 const MyBooks = () => {
-  const [wishlistBooks, setWishlistBooks] = useState([]);
+  const [wishlistBooks, setWishlistBooks] = useState(null);
   const { matches } = useWishlistMatches();
 
   // How many other readers offer each wishlist book, by wishlist book id.
@@ -46,7 +46,7 @@ const MyBooks = () => {
       kicker="Your profile"
       title="Wishlist"
       books={wishlistBooks}
-      emptyLabel="Loading wishlist..."
+      emptyLabel="Your wishlist is empty."
       onRemove={handleDelete}
       renderExtra={(book) => {
         const count = offerCounts.get(book._id);

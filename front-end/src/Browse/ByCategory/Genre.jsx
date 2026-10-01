@@ -5,12 +5,12 @@ import { authFetch } from '../../auth';
 
 const Genre = () => {
   const { genre } = useParams();
-  const [books, setBooks] = useState([]);
+  const [books, setBooks] = useState(null);
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/genres/${encodeURIComponent(genre)}`)
       .then(res => res.json())
-      .then(data => setBooks(data))
+      .then(data => setBooks(Array.isArray(data) ? data : []))
       .catch(err => {
         console.error("Failed to fetch books:", err);
         setBooks([]);
