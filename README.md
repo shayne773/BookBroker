@@ -1,56 +1,170 @@
 # BookBroker
 
-BookBroker is a book-trading app: people list the books they own and the books they
-want, find each other, and arrange a swap. The aim is to foster community and
-encourage reading in an affordable, sustainable way.
+**Trade the books you've read for the ones you want, with readers near you.**
+
+BookBroker is a full-stack web app for swapping second-hand books in person. Readers
+list the books they own and the ones they are looking for, find matches within
+their chosen distance, agree a trade, and meet up to exchange.
+
+**Live site: [book-broker-gamma.vercel.app](https://book-broker-gamma.vercel.app)** -
+browsing needs no account.
+
+![Browse page: recommended books near the reader, each with its distance](docs/screenshots/browse.webp)
+
+## What it does
+
+- **Browse without an account.** Home, browse and search, book pages, readers'
+  public profiles and the map are open to visitors, who are asked to sign up only
+  when they try something that needs an account.
+- **Books near you.** Each reader sets a US ZIP code and a distance (5 to 100
+  miles). Lists show only the books within it, nearest first, each labelled with
+  how far away it is. ZIP codes and coordinates are never shown to other readers.
+- **Interactive map.** Books across the country grouped by town, with clustering,
+  keyword search and filters (genre, author, publication year, recently listed,
+  wishlist matches) kept in the page's address so a search can be shared.
+- **Shelf and wishlist.** Add books through a server-side Google Books search,
+  keep a wishlist, see which wishlist books are on offer nearby, and get
+  recommendations drawn from your wishlist and shelf.
+- **Photos of your copy.** Owners add up to four photos of a book. The browser
+  resizes and re-encodes each one (dropping its EXIF metadata) and uploads it
+  straight to Vercel Blob with a one-upload grant.
+- **Complete trade workflow.** Propose, counter, accept, decline or cancel a
+  trade; accepted trades lock their books; both sides confirm the hand-over, then
+  rate each other. Unanswered offers expire and half-confirmed trades complete on
+  a deadline.
+- **Messaging.** Conversations between readers, with unread counts and
+  near-live delivery by short polling.
+- **Accounts and safety.** Email confirmation, a password reset that signs the
+  account out everywhere, blocking and reporting, an admin page for reports and
+  suspensions, and permanent account deletion.
+- **Email notifications** for new messages, trades and newly offered wishlist
+  books, each category switchable off, with unsubscribe links that need no sign-in.
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Front end | React 19, Vite, React Router, Tailwind CSS on a token-based design system, MapLibre GL JS with supercluster |
+| Back end | Node.js, Express REST API, Mongoose |
+| Database | MongoDB (Atlas in production), with geospatial indexes and multi-document transactions |
+| Authentication | bcrypt password hashing, emailed confirmation and reset links (hashed, single-use, expiring), opaque server-side sessions that can be revoked, MongoDB-backed rate limiting |
+| Storage and services | Vercel Blob (book photos), Resend (email), Google Books and Open Library (catalogue data and covers), OpenFreeMap (map tiles) |
+| Deployment | Vercel: static site plus one serverless function on the same origin, and two daily cron jobs |
+| Quality | Vitest and Testing Library (front end), Mocha and Chai against an in-process MongoDB (back end), ESLint, GitHub Actions CI |
+
+## Architecture
 
 The app is two independent services that share nothing but an HTTP contract:
+`front-end/` is a React single-page app and `back-end/` is an Express API. Both
+deploy to one Vercel project at one address, the site as static files and the API
+as a single function under `/api`.
 
-- `front-end/` — a React single-page app built with [Vite](https://vite.dev/).
-- `back-end/` — an Express API on MongoDB (Mongoose).
+```mermaid
+flowchart LR
+  Browser["Browser<br/>React single-page app"]
 
-Both deploy to one [Vercel](https://vercel.com/) project at one address: the site
-as static files and the API as a Vercel Function under `/api` (see
-[Deployment](#deployment)).
+  subgraph Vercel
+    Static["Static site<br/>front-end/dist"]
+    Api["Serverless function<br/>Express API under /api"]
+    Cron["Daily cron jobs"]
+    Blob[("Vercel Blob<br/>book photos")]
+  end
 
-What it does today: sign up with a US ZIP code and email confirmation, sign in and
-password reset, browse and search the books within your chosen distance, nearest
-first, with recommendations drawn from your wishlist and shelf (see
-[Location](#location)), explore the books on a map of the country by place (see
-[Map](#map)), find books to add via a server-side Google Books proxy, keep
-a shelf of offered books and a wishlist, see which wishlist books other readers
-nearby are offering,
-propose and accept trades, message other users, rate a trading partner and see each
-reader's average rating, block or report another reader, and get email about new
-messages, trades and newly offered wishlist books (each category can be turned off),
-and delete your account (see [Your account](#your-account)).
-Visitors can browse without an account - home, browse and search, book pages, readers'
-public profiles and the map, with every book on the market and no distances - and are
-asked to sign up when they try anything that needs one.
-Admins read the reports on a private page and can suspend a reader's account.
+  Mongo[("MongoDB Atlas")]
+  Mail["Resend<br/>email"]
+  Books["Google Books<br/>Open Library"]
+  Tiles["OpenFreeMap<br/>map tiles"]
 
-[Contributing Guidelines](./CONTRIBUTING.md) · [Agent and architecture notes](./AGENTS.md)
+  Browser --> Static
+  Browser -- "REST /api" --> Api
+  Browser -- "direct photo upload" --> Blob
+  Browser --> Tiles
+  Cron --> Api
+  Api --> Mongo
+  Api --> Mail
+  Api --> Books
+  Api -- "upload grants, cleanup" --> Blob
+```
 
-## Team Members
+A few design decisions worth noting:
 
-BookBroker began as a final project for an Agile Software Development course at NYU,
-built by:
+- **Built for serverless.** An instance can be frozen between any two requests,
+  so the API keeps nothing it needs in memory: sessions and rate limits live in
+  MongoDB, and work that outlives a response (sending mail) is handed to Vercel's
+  `waitUntil`.
+- **Location privacy.** Distances are computed in the database with `$geoNear`.
+  Other readers see a town name and a rounded distance, never a ZIP code or
+  coordinates, and the map places books at their town's point, not their owner's.
+- **Photo bytes never touch the API.** It only issues one-upload grants and
+  checks the result; a daily job removes any blob no book shows.
+- **Revocable sign-ins.** A sign-in token is an opaque session stored as a hash,
+  not a JWT, so logging out or resetting a password ends it on the server.
+- **Trades stay consistent.** Accepting and completing a trade run in MongoDB
+  transactions with optimistic concurrency on the trade.
 
-- [Isaac](https://github.com/isaac1000000)
-- [Sewon](https://github.com/SewonKim0)
-- [Rainn](https://github.com/Rainn-J)
-- [Shayne](https://github.com/shayne773)
-- [Stephen](https://github.com/StephenS2021)
+More detail lives in the [reference](#reference) sections below and in
+[`AGENTS.md`](./AGENTS.md).
 
-## Prerequisites
+## Screenshots
 
-- Node.js 20 or newer, and npm.
-- A MongoDB database (Atlas or local) for running the API.
-- Optional but recommended: a Google Books API key, for book search and the seed.
+Taken from a local run with demo data.
 
-Neither package commits a lockfile, so installs are `npm install`.
+| | |
+| --- | --- |
+| ![Home page with the day's lead pick](docs/screenshots/home.webp)<br/>**Home** - today's picks within the reader's distance | ![Map of books grouped by town, with a place's books listed](docs/screenshots/map.webp)<br/>**Map** - books by town, with search and filters |
+| ![Book page with the owner's photos of their copy](docs/screenshots/book-page-photos.webp)<br/>**Book page** - the owner's photos of their copy | ![A pending trade offer with its status and books](docs/screenshots/trade-offer.webp)<br/>**Trade** - an offer moving from pending to completed |
+| ![A conversation between two readers](docs/screenshots/messages.webp)<br/>**Messages** - talk to a reader, then start a trade | ![A reader's profile with wishlist matches](docs/screenshots/profile.webp)<br/>**Profile** - rating, shelf and wishlist matches nearby |
 
-## Configuration
+## Run locally
+
+You need Node.js 20 or newer with npm, and a MongoDB database (Atlas or local).
+A Google Books API key is optional but recommended: book search and the demo-data
+seed need it. Neither package commits a lockfile, so installs are `npm install`.
+
+Back end:
+
+```
+cd back-end
+cp .env.example .env   # then set MONGODB_URI; see Configuration below
+npm install
+npm start              # or: npm run dev, with nodemon
+```
+
+Front end, in a second terminal:
+
+```
+cd front-end
+cp .env.example .env.local   # points the app at http://localhost:5000
+npm install
+npm run dev                  # npm run build / npm run preview for the production bundle
+```
+
+See [Configuration](#configuration) for every environment variable and
+[Demo data](#demo-data) to fill the database with sample readers and books.
+
+## Tests
+
+The checks every pull request must pass are pinned in `.no-mistakes.yaml` and run by
+the `CI` workflow. From the repository root:
+
+```
+npm --prefix front-end install && npm --prefix back-end install
+npm --prefix front-end run lint     # ESLint
+npm --prefix front-end run build    # Vite production build
+npm --prefix front-end test         # Vitest
+npm --prefix back-end test          # Mocha, against an in-process MongoDB
+```
+
+The back-end tests need no database of their own, and no test reaches the network.
+
+## Reference
+
+The rest of this README is the detailed guide to configuring, operating and
+deploying BookBroker. See also the [contributing guidelines](./CONTRIBUTING.md),
+the [architecture and convention notes](./AGENTS.md) and the
+[front-end README](./front-end/README.md).
+
+### Configuration
 
 Both services are configured through environment files, and neither file is
 committed.
@@ -102,25 +216,24 @@ the site's own origin (`front-end/.env.production`), which is where Vercel serve
 the API. Only `VITE_`-prefixed variables reach client code — never put a secret
 behind that prefix. See [`front-end/README.md`](./front-end/README.md).
 
-## Running it
+### Demo data
 
-Back end:
+The seed needs `MONGODB_URI` and `GOOGLE_BOOKS_API_KEY` in `back-end/.env`.
 
 ```
 cd back-end
-npm install
-npm start        # or: npm run dev, with nodemon
+npm run seed     # replaces the seed_user_* demo users and their 100 books
 ```
 
-Front end, in a second terminal:
+The ten demo readers live at real ZIP codes in four metro areas (New York, Chicago,
+Champaign-Urbana and the San Francisco Bay Area), so readers in the same area see
+each other's books with distances and readers elsewhere do not.
 
-```
-cd front-end
-npm install
-npm run dev      # npm run build / npm run preview for the production bundle
-```
+It fetches every book, cover included, before deleting the previous seed, so a
+Google failure leaves the existing data in place. Covers are stored as https; a book
+Google has no image for falls back to Open Library's cover where one exists.
 
-## Your account
+### Your account
 
 An account keeps the email it signed up with; it cannot be changed. To use another
 address, create a new account with it.
@@ -136,7 +249,7 @@ Either way the other reader gets an email about the trade. Completed trades, rat
 who see the reader as "Deleted reader". The address can then sign up again as a new
 account.
 
-## Location
+### Location
 
 Trades happen in person, so where a reader is decides what they see. Each reader
 sets a US ZIP code (at sign-up, or later on their profile) and a distance: 5, 10,
@@ -165,7 +278,7 @@ cd back-end
 npm run build:zip-codes
 ```
 
-## Map
+### Map
 
 The Map page (`/map`) shows the books on the market by place, anywhere in the
 country: it pans and zooms like any web map, nearby places merge into one marker
@@ -213,7 +326,7 @@ cd back-end
 npm run place-books
 ```
 
-## Book photos
+### Book photos
 
 An owner can add up to four photos of their copy of an offered book, when they offer
 it or later from the book's page, where they can also remove them and put them in
@@ -265,39 +378,7 @@ and everything else works as before. To turn them on:
    pull` it) into a local `.env`: local runs would then write to, and could delete
    from, the production store.
 
-## Demo data
-
-The seed needs `MONGODB_URI` and `GOOGLE_BOOKS_API_KEY` in `back-end/.env`.
-
-```
-cd back-end
-npm run seed     # replaces the seed_user_* demo users and their 100 books
-```
-
-The ten demo readers live at real ZIP codes in four metro areas (New York, Chicago,
-Champaign-Urbana and the San Francisco Bay Area), so readers in the same area see
-each other's books with distances and readers elsewhere do not.
-
-It fetches every book, cover included, before deleting the previous seed, so a
-Google failure leaves the existing data in place. Covers are stored as https; a book
-Google has no image for falls back to Open Library's cover where one exists.
-
-## Tests
-
-The checks every pull request must pass are pinned in `.no-mistakes.yaml` and run by
-the `CI` workflow. From the repository root:
-
-```
-npm --prefix front-end install && npm --prefix back-end install
-npm --prefix front-end run lint     # ESLint
-npm --prefix front-end run build    # Vite production build
-npm --prefix front-end test         # Vitest
-npm --prefix back-end test          # Mocha, against an in-process MongoDB
-```
-
-The back-end tests need no database of their own, and no test reaches the network.
-
-## Deployment
+### Deployment
 
 The front end and the API deploy together to one Vercel project, so the site and
 the API share one address. `vercel.json` at the repository root describes the whole
@@ -314,7 +395,7 @@ build:
 
 `back-end/server.js` is still the entry for running the API locally.
 
-### One-time setup
+#### One-time setup
 
 1. In the Vercel dashboard choose **Add New… → Project** and import this GitHub
    repository (grant the Vercel GitHub app access to it if asked).
@@ -363,7 +444,7 @@ with `MONGODB_URI` pointing at it (see [Demo data](#demo-data)).
 After the first deployment of the map, run `npm run place-books` the same way (see
 [Map](#map)).
 
-### Things to know
+#### Things to know
 
 - **Email.** Resend's default sender, `onboarding@resend.dev`, delivers only to the
   Resend account owner's own address. Mail to real users needs a domain verified in
@@ -383,3 +464,18 @@ After the first deployment of the map, run `npm run place-books` the same way (s
   MongoDB, the Google Books cache is only a saving, and work that finishes after the
   response (sending mail) goes through `runInBackground` in `back-end/lib/background.js`,
   which keeps the invocation alive until it settles.
+
+## Team
+
+BookBroker began as a final project for an Agile Software Development course at NYU,
+built by:
+
+- [Isaac](https://github.com/isaac1000000)
+- [Sewon](https://github.com/SewonKim0)
+- [Rainn](https://github.com/Rainn-J)
+- [Shayne](https://github.com/shayne773)
+- [Stephen](https://github.com/StephenS2021)
+
+## License
+
+[GNU General Public License v3.0](./LICENSE.md).
