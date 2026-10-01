@@ -1,9 +1,10 @@
 // An owner's photos of their offered book (back-end/lib/photos.js has the flow).
 // A photo is shrunk and re-encoded here, in the browser, then uploaded straight
-// to Vercel Blob with a client token the API issues for that one upload; the
-// API only ever sees its URL and size. Re-encoding through a canvas also drops
+// to Vercel Blob with a grant the API issues for that one upload (a presigned
+// upload, or a client token when the API holds a read-write token); the API
+// only ever sees its URL and size. Re-encoding through a canvas also drops
 // the file's EXIF metadata, which can hold where the photo was taken.
-import { authFetch, isSessionExpiredError } from './auth';
+import { authFetch, authHeaders, isSessionExpiredError } from './auth';
 
 export const MAX_PHOTOS = 4;
 export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -98,8 +99,11 @@ const sendJson = (url, method, body) =>
   authFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 // The Vercel Blob upload, loaded only when a photo is uploaded; replaced in tests.
+// `put` uploads with a client token. `uploadPresigned` takes no presigned
+// upload: it asks `handleUploadUrl` for one itself, sending `clientPayload`.
 export const blobUpload = {
   put: async (...args) => (await import('@vercel/blob/client')).put(...args),
+  uploadPresigned: async (...args) => (await import('@vercel/blob/client')).uploadPresigned(...args),
 };
 
 // The SDK retries a request that fails as a network error ten times, backing
@@ -118,10 +122,10 @@ export const MIN_UPLOAD_STALL_MS = 60 * 1000;
 const uploadStallMs = (bytes) =>
   Math.max(MIN_UPLOAD_STALL_MS, Math.ceil((bytes / SLOWEST_UPLOAD_BYTES_PER_S) * 1000));
 
-// `blobUpload.put` of `blob` to `pathname`, rejected as soon as the SDK retries
-// it or once it has gone uploadStallMs(blob.size) without getting further, and
-// then aborted, so the SDK stops.
-function putOnce(pathname, blob, options, onProgress) {
+// `put` (one of blobUpload's) of `blob` to `pathname`, rejected as soon as the
+// SDK retries it or once it has gone uploadStallMs(blob.size) without getting
+// further, and then aborted, so the SDK stops.
+function putOnce(put, pathname, blob, options, onProgress) {
   const controller = new AbortController();
   const stallMs = uploadStallMs(blob.size);
   let furthest = -1;
@@ -136,18 +140,16 @@ function putOnce(pathname, blob, options, onProgress) {
       timer = setTimeout(() => giveUp(`made no progress for ${stallMs / 1000} s`), stallMs);
     };
     watch();
-    blobUpload
-      .put(pathname, blob, {
-        ...options,
-        abortSignal: controller.signal,
-        onUploadProgress: ({ percentage }) => {
-          if (percentage <= furthest) return giveUp('failed, and the SDK is retrying it');
-          furthest = percentage;
-          watch();
-          onProgress(percentage);
-        },
-      })
-      .then(resolve, reject);
+    put(pathname, blob, {
+      ...options,
+      abortSignal: controller.signal,
+      onUploadProgress: ({ percentage }) => {
+        if (percentage <= furthest) return giveUp('failed, and the SDK is retrying it');
+        furthest = percentage;
+        watch();
+        onProgress(percentage);
+      },
+    }).then(resolve, reject);
   }).finally(() => clearTimeout(timer));
 }
 
@@ -158,7 +160,7 @@ function putOnce(pathname, blob, options, onProgress) {
 export async function uploadPhoto(bookId, file, { onProgress } = {}) {
   const { blob, width, height } = await preparePhoto(file);
 
-  const { token, pathname } = await answer(
+  const { token, presigned, pathname } = await answer(
     await sendJson(`${photosUrl(bookId)}/upload-token`, 'POST', { contentType: 'image/jpeg', size: blob.size }),
     'This photo could not be uploaded.'
   );
@@ -169,7 +171,20 @@ export async function uploadPhoto(bookId, file, { onProgress } = {}) {
   let uploading = true;
   let uploaded;
   try {
-    uploaded = await putOnce(pathname, blob, { access: 'public', token, contentType: 'image/jpeg' }, (percentage) => {
+    // `blobUpload` is read at the call, so a test's replacement is the one called.
+    // The SDK fetches a presigned upload itself, so the API hands back the one
+    // it has just issued.
+    const [put, grant] = presigned
+      ? [
+          (...args) => blobUpload.uploadPresigned(...args),
+          {
+            handleUploadUrl: `${photosUrl(bookId)}/presigned-upload`,
+            clientPayload: JSON.stringify(presigned),
+            headers: authHeaders(),
+          },
+        ]
+      : [(...args) => blobUpload.put(...args), { token }];
+    uploaded = await putOnce(put, pathname, blob, { access: 'public', contentType: 'image/jpeg', ...grant }, (percentage) => {
       if (uploading) onProgress?.(Math.round(percentage));
     });
   } catch (err) {

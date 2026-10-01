@@ -8,7 +8,8 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - Every authenticated request goes through `authFetch` in `front-end/src/auth.js`, which
   attaches the bearer token and turns a 401 into one shared "session expired" policy.
-  Do not hand-roll `Authorization` headers or read `localStorage.token` in a page.
+  Do not hand-roll `Authorization` headers or read `localStorage.token` in a page; a request a
+  library makes itself (the Blob SDK's) takes `authHeaders()` from the same file.
 - Pages that need a signed-in user live under the `RequireAuth` layout route in
   `front-end/src/AppContent.jsx`; `front-end/src/RequireAuth.jsx` redirects to `/login` and
   passes the intended destination in the navigation state, which `Login.jsx` reads.
@@ -96,8 +97,12 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - An owner's photos of an offered book (`OfferedBook.photos`, at most 4) go from the browser
   straight to Vercel Blob: `front-end/src/photos.js` resizes and re-encodes (dropping EXIF), and
-  `back-end/routes/photos.js` only issues one-upload client tokens and checks the uploaded URL
-  (`lib/photos.js`). Without `BLOB_READ_WRITE_TOKEN` photos are off and the UI hidden.
+  `back-end/routes/photos.js` only issues one-upload grants and checks the uploaded URL
+  (`lib/photos.js`). Without Blob credentials photos are off and the UI hidden.
+- The store's credentials are `BLOB_STORE_ID` (a store connected on Vercel: the SDK uses the
+  deployment's OIDC token, never pass one) or `BLOB_READ_WRITE_TOKEN` (elsewhere). Client tokens
+  need the read-write token, so a connected store grants a presigned upload instead, which only
+  the SDK's `uploadPresigned` in the browser can use (its plain `put` drops the payload).
 - Blob paths are `<namespace>/books/<id>/...` (`photoPrefix` in `lib/photos.js`), the namespace a
   stable hash of the MongoDB cluster host(s) and database name (not the environment: Preview and
   production share it). Every prefix delete and sweep stays inside it, so databases sharing a
@@ -112,7 +117,8 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `front-end/src/photos.js` gives up at the first retry (progress starts over) or after a stall
   scaled to the photo's size, never a fixed short one: Chrome reports progress as it reads ahead.
 - Lists send `photoCount`, never the URLs (`presentStages` in `lib/nearby.js`). Tests never reach
-  Blob: `test/setup.js` refuses `blobStore`, and `mockBlobStore` in `test/helpers.js` fakes it.
+  Blob: `test/setup.js` refuses `blobStore`, and `mockBlobStore` in `test/helpers.js` fakes it;
+  `test/photoCredentials.test.js` runs the real SDK against a local stand-in for the Blob API.
 
 ## Account emails
 

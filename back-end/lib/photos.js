@@ -1,12 +1,15 @@
 // Photos of an offered book, taken by its owner (`OfferedBook.photos`).
 //
 // The bytes never pass through the API. The browser resizes and re-encodes a
-// photo, asks routes/photos.js for a client token that lets it write one blob,
-// at one pathname under the book, of an allowed type and size; it uploads
-// straight to Vercel Blob with it, then hands the URL back, which is checked
-// against the store (`head`) before it is kept. Only URLs and sizes are stored.
+// photo, asks routes/photos.js for a grant that lets it write one blob, at one
+// pathname under the book, of an allowed type and size; it uploads straight to
+// Vercel Blob with it, then hands the URL back, which is checked against the
+// store (`head`) before it is kept. Only URLs and sizes are stored.
 //
-// Without BLOB_READ_WRITE_TOKEN photos are off: nothing can be uploaded and the
+// The store's credentials come in two forms. On Vercel a connected store sets
+// BLOB_STORE_ID, and the SDK authenticates with the deployment's short-lived
+// OIDC token; elsewhere (local development) BLOB_READ_WRITE_TOKEN is the store's
+// static token. Without either photos are off: nothing can be uploaded and the
 // front end hides the controls. Photos stored meanwhile still show.
 //
 // Every blob lives under its database's namespace (photoNamespace), so
@@ -18,8 +21,8 @@
 // their book (deleteUnattachedBlobs).
 import { createHash, randomBytes } from "node:crypto";
 import mongoose from "mongoose";
-import { del, head, list, BlobError, BlobNotFoundError } from "@vercel/blob";
-import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
+import { del, head, issueSignedToken, list, BlobError, BlobNotFoundError } from "@vercel/blob";
+import { generateClientTokenFromReadWriteToken, handleUploadPresigned } from "@vercel/blob/client";
 import { MAX_PHOTOS, OfferedBook } from "../Data.js";
 import { runInBackground } from "./background.js";
 
@@ -36,20 +39,55 @@ const UPLOAD_TOKEN_LIFETIME_MS = 10 * 60 * 1000;
 
 export const PHOTOS_UNAVAILABLE = "PHOTOS_UNAVAILABLE";
 
-export const photosEnabled = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+// A store connected to the Vercel project (OIDC), as opposed to a static token.
+const storeConnected = () => Boolean(process.env.BLOB_STORE_ID);
+
+export const photosEnabled = () => storeConnected() || Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 
 // A failure of the store itself (unreachable, token or store invalid), as
 // opposed to a refusal of the request.
 export const isBlobStoreError = (err) => err instanceof BlobError;
 
-// The Vercel Blob SDK, which reads BLOB_READ_WRITE_TOKEN itself. Behind one
-// object so tests can replace it; no test reaches the store.
-export const blobStore = {
+// handleUploadPresigned wants the key that verifies upload-completed callbacks
+// even to presign. No upload here asks for a callback (the browser hands the URL
+// back and checkUpload looks it up), so the key is never used.
+const NO_CALLBACKS = "no-upload-callbacks";
+
+// A presigned upload of one blob, which the browser's `uploadPresigned` uploads
+// with in place of a token. A client token can only be signed with the
+// read-write token; this is signed by the store, for whichever credentials the
+// SDK has.
+async function presignedUpload({ pathname, allowedContentTypes, maximumSizeInBytes, validUntil, ...urlOptions }) {
+  const { presignedUrlPayload } = await handleUploadPresigned({
+    body: { type: "blob.generate-presigned-url", payload: { pathname, clientPayload: null, multipart: false } },
+    request: { headers: {} },
+    webhookPublicKey: process.env.BLOB_WEBHOOK_PUBLIC_KEY || NO_CALLBACKS,
+    getSignedToken: async () => ({
+      token: await issueSignedToken({
+        pathname,
+        operations: ["put"],
+        allowedContentTypes,
+        maximumSizeInBytes,
+        validUntil,
+      }),
+      urlOptions,
+    }),
+  });
+  return presignedUrlPayload;
+}
+
+// The Vercel Blob SDK, which finds its credentials itself: the deployment's
+// OIDC token with BLOB_STORE_ID, else BLOB_READ_WRITE_TOKEN.
+export const vercelBlob = {
   clientToken: (options) => generateClientTokenFromReadWriteToken(options),
+  presignedUpload,
   head: (url) => head(url),
   del: (urls) => del(urls),
   list: (options) => list(options),
 };
+
+// The store every call goes through, so tests can replace it; no test reaches Vercel Blob.
+export const blobStore = { ...vercelBlob };
 
 /**
  * The database `connection` is to, as a short stable hash of its cluster's
@@ -70,20 +108,23 @@ const booksPrefix = () => `${photoNamespace()}/books/`;
 export const photoPrefix = (bookId) => `${booksPrefix()}${bookId}/`;
 
 /**
- * A client token for one photo of `bookId` of `contentType`: `{ token, pathname }`.
- * Vercel Blob itself refuses any other pathname, type or a larger file with it.
+ * A grant for one photo of `bookId` of `contentType`: `{ pathname }` with
+ * `presigned` (a presigned upload) for a connected store, or `token` (a client
+ * token) for a read-write token alone. Vercel Blob itself refuses any other
+ * pathname, type or a larger file with either.
  */
 export async function uploadToken(bookId, contentType) {
   const pathname = `${photoPrefix(bookId)}${randomBytes(16).toString("hex")}.${PHOTO_TYPES[contentType]}`;
-  const token = await blobStore.clientToken({
+  const limits = {
     pathname,
     allowedContentTypes: [contentType],
     maximumSizeInBytes: MAX_PHOTO_BYTES,
     validUntil: Date.now() + UPLOAD_TOKEN_LIFETIME_MS,
     addRandomSuffix: false,
     allowOverwrite: false,
-  });
-  return { token, pathname };
+  };
+  if (storeConnected()) return { presigned: await blobStore.presignedUpload(limits), pathname };
+  return { token: await blobStore.clientToken(limits), pathname };
 }
 
 /**

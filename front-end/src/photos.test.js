@@ -181,6 +181,42 @@ describe('uploadPhoto', () => {
     });
   });
 
+  test('uploads with a presigned upload, and no token, when the API issues one', async () => {
+    const presigned = { delegationToken: 'delegation', signature: 'signature', params: {} };
+    api({
+      'POST /user/offered/b1/photos/upload-token': respond(200, { presigned, pathname: 'books/b1/a.jpg' }),
+      'POST /user/offered/b1/photos': respond(201, { photos: [] }),
+    });
+    const put = vi.spyOn(blobUpload, 'put');
+    const uploadPresigned = vi.spyOn(blobUpload, 'uploadPresigned').mockImplementation(async (pathname, blob, options) => {
+      options.onUploadProgress({ loaded: 1, total: 2, percentage: 50 });
+      return { url: `https://blob.example/${pathname}` };
+    });
+    const progress = [];
+
+    await uploadPhoto('b1', cameraFile(), { onProgress: (p) => progress.push(p) });
+
+    expect(put).not.toHaveBeenCalled();
+    const [pathname, blob, options] = uploadPresigned.mock.calls[0];
+    expect(pathname).toBe('books/b1/a.jpg');
+    expect(blob.size).toBe(400_000);
+    // The SDK asks the API for the presigned upload itself, as the signed-in reader.
+    expect(options).toMatchObject({
+      access: 'public',
+      contentType: 'image/jpeg',
+      handleUploadUrl: expect.stringMatching(/\/user\/offered\/b1\/photos\/presigned-upload$/),
+      clientPayload: JSON.stringify(presigned),
+      headers: { Authorization: 'Bearer token' },
+    });
+    expect(options).not.toHaveProperty('token');
+    expect(options.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(progress).toEqual([50]);
+    expect(requests[1]).toEqual({
+      key: 'POST /user/offered/b1/photos',
+      body: { url: 'https://blob.example/books/b1/a.jpg', width: 1600, height: 1067 },
+    });
+  });
+
   test('drops a progress report that arrives after the upload has finished', async () => {
     api({
       'POST /user/offered/b1/photos/upload-token': respond(200, { token: 't', pathname: 'books/b1/a.jpg' }),
