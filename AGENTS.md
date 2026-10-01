@@ -52,7 +52,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   block for its `position: fixed` children (dialog overlays).
 - A page's fetched state is `useRemembered(key)` (`src/remember.js`), `null` until loaded,
   so a revisit shows it at once and still refetches; `auth.js` forgets it all when the
-  session changes. Images are `FadeImg` (`BookCover` uses it), never a bare `<img>`.
+  session changes. A fetched image is a `FadeImg` (`BookCover` uses it), not a bare `<img>`.
 - No pop-ups: no `alert()`/`confirm()`/`prompt()` (`src/setupTests.js` makes them throw in every test) and no toasts.
   An action's outcome is a `<Feedback>` line (`src/Feedback.jsx`, state from
   `useFeedback`) beside the control, or a `DoneButton` that turns into its checked state
