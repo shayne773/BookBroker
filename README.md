@@ -247,7 +247,10 @@ Without `BLOB_READ_WRITE_TOKEN`, nothing offers photos and everything else works
 before. To turn them on:
 
 1. In the Vercel project, open **Storage → Create Database → Blob**, name the store
-   and give it **public** access (the photos are shown by their URLs).
+   and give it **public** access (the photos are shown by their URLs). A private
+   store refuses every upload (Blob answers 400 "Cannot use public access on a
+   private store"), and owners see "This photo could not be uploaded"; if the store
+   was created private, create a public one and connect it in its place.
 2. Connect it to the project for the environments that should have photos
    (Production, and Preview if you like). Vercel then adds `BLOB_READ_WRITE_TOKEN`
    to those environments itself; redeploy for it to take effect.

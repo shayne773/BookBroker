@@ -102,6 +102,55 @@ export const blobUpload = {
   put: async (...args) => (await import('@vercel/blob/client')).put(...args),
 };
 
+// The SDK retries a request that fails as a network error ten times, backing
+// off from 1 s to 512 s (about 17 minutes in all), and a refusal from Blob
+// can reach the browser as one. Each attempt reports its progress from the
+// start again, so a report that gets no further than an earlier one means the
+// photo is being sent again, and the upload is given up then. One that goes
+// quiet (a photo small enough to go in one piece reports none) is given up
+// after as long as the photo would take at this speed, and never sooner than
+// a minute: Chrome reads most of a photo ahead of sending it, so a real upload
+// can go quiet until it is done.
+const SLOWEST_UPLOAD_BYTES_PER_S = 4 * 1024;
+export const MIN_UPLOAD_STALL_MS = 60 * 1000;
+
+// How long an upload of `bytes` may go without getting further.
+const uploadStallMs = (bytes) =>
+  Math.max(MIN_UPLOAD_STALL_MS, Math.ceil((bytes / SLOWEST_UPLOAD_BYTES_PER_S) * 1000));
+
+// `blobUpload.put` of `blob` to `pathname`, rejected as soon as the SDK retries
+// it or once it has gone uploadStallMs(blob.size) without getting further, and
+// then aborted, so the SDK stops.
+function putOnce(pathname, blob, options, onProgress) {
+  const controller = new AbortController();
+  const stallMs = uploadStallMs(blob.size);
+  let furthest = -1;
+  let timer;
+  return new Promise((resolve, reject) => {
+    const giveUp = (reason) => {
+      controller.abort();
+      reject(new Error(`Blob upload ${reason}`));
+    };
+    const watch = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => giveUp(`made no progress for ${stallMs / 1000} s`), stallMs);
+    };
+    watch();
+    blobUpload
+      .put(pathname, blob, {
+        ...options,
+        abortSignal: controller.signal,
+        onUploadProgress: ({ percentage }) => {
+          if (percentage <= furthest) return giveUp('failed, and the SDK is retrying it');
+          furthest = percentage;
+          watch();
+          onProgress(percentage);
+        },
+      })
+      .then(resolve, reject);
+  }).finally(() => clearTimeout(timer));
+}
+
 /**
  * Prepares `file` and adds it to book `bookId` as its last photo. Calls
  * `onProgress(percent)` as the upload goes. Resolves to the book's photos.
@@ -120,13 +169,8 @@ export async function uploadPhoto(bookId, file, { onProgress } = {}) {
   let uploading = true;
   let uploaded;
   try {
-    uploaded = await blobUpload.put(pathname, blob, {
-      access: 'public',
-      token,
-      contentType: 'image/jpeg',
-      onUploadProgress: ({ percentage }) => {
-        if (uploading) onProgress?.(Math.round(percentage));
-      },
+    uploaded = await putOnce(pathname, blob, { access: 'public', token, contentType: 'image/jpeg' }, (percentage) => {
+      if (uploading) onProgress?.(Math.round(percentage));
     });
   } catch (err) {
     console.error('Photo upload failed:', err);

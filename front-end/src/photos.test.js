@@ -8,6 +8,7 @@ import {
   photoCountLabel,
   preparePhoto,
   TARGET_BYTES,
+  MIN_UPLOAD_STALL_MS,
   uploadOutcome,
   uploadPhoto,
 } from './photos';
@@ -215,6 +216,123 @@ describe('uploadPhoto', () => {
 
     await expect(uploadPhoto('b1', cameraFile())).rejects.toThrow(/could not be uploaded/);
     expect(requests.map((r) => r.key)).toEqual(['POST /user/offered/b1/photos/upload-token']);
+  });
+
+  describe('when the upload stops getting further', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      api({
+        'POST /user/offered/b1/photos/upload-token': respond(200, { token: 't', pathname: 'books/b1/a.jpg' }),
+        'POST /user/offered/b1/photos': respond(201, { photos: [] }),
+      });
+    });
+
+    afterEach(() => vi.useRealTimers());
+
+    // The SDK's put() when Blob refuses a photo of `chunks` 64 KB pieces (for
+    // one, a public upload to a private store): the refusal has no CORS header,
+    // so the browser reports a network error, and the SDK retries ten times
+    // with backoff, streaming the pieces again each time. It never reports
+    // 100% for an attempt, so a 3-piece photo sat at 66% for about 17 minutes.
+    function refusedBehindCors(chunks) {
+      const seen = { signal: null, attempts: 0 };
+      vi.spyOn(blobUpload, 'put').mockImplementation(async (pathname, blob, options) => {
+        seen.signal = options.abortSignal;
+        options.onUploadProgress({ loaded: 0, total: chunks, percentage: 0 });
+        for (let attempt = 0; attempt <= 10; attempt++) {
+          if (seen.signal?.aborted) throw new Error('The request was aborted.');
+          seen.attempts++;
+          for (let loaded = 1; loaded < chunks; loaded++) {
+            options.onUploadProgress({ loaded, total: chunks, percentage: (loaded / chunks) * 100 });
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
+        }
+        throw new TypeError('Failed to fetch');
+      });
+      return seen;
+    }
+
+    // `promise`'s outcome so far, without waiting for it.
+    const outcomeOf = (promise) => {
+      const outcome = { settled: false };
+      promise.then(
+        (value) => Object.assign(outcome, { settled: true, value }),
+        (error) => Object.assign(outcome, { settled: true, error })
+      );
+      return outcome;
+    };
+
+    const UPLOAD_FAILED = new PhotoError('This photo could not be uploaded. Check your connection and try again.');
+
+    test('gives up with an error for the owner as soon as the SDK retries, instead of sitting at 66%', async () => {
+      const seen = refusedBehindCors(3);
+      const progress = [];
+
+      const upload = outcomeOf(uploadPhoto('b1', cameraFile(), { onProgress: (p) => progress.push(p) }));
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(upload).toEqual({ settled: true, error: UPLOAD_FAILED });
+      expect(seen.attempts).toBe(2);
+      expect(progress).toEqual([0, 33, 67]);
+      expect(seen.signal.aborted).toBe(true);
+      expect(requests.map((r) => r.key)).toEqual(['POST /user/offered/b1/photos/upload-token']);
+    });
+
+    test('gives up on a photo too small to report progress once it has gone quiet for a minute', async () => {
+      fakeCodec({ width: 3000, height: 2000, sizes: [60_000] });
+      const seen = refusedBehindCors(1);
+
+      const upload = outcomeOf(uploadPhoto('b1', cameraFile()));
+      await vi.advanceTimersByTimeAsync(MIN_UPLOAD_STALL_MS - 1);
+      expect(upload.settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(upload).toEqual({ settled: true, error: UPLOAD_FAILED });
+      expect(seen.signal.aborted).toBe(true);
+    });
+
+    // Chrome reads a photo ahead of sending it, so the SDK reports its last
+    // piece long before the photo has gone, and then nothing until Blob answers.
+    test('lets a full-size photo finish on a 10 KB/s connection that goes quiet after reading ahead', async () => {
+      fakeCodec({ width: 3000, height: 2000, sizes: [TARGET_BYTES] });
+      const chunks = Math.ceil(TARGET_BYTES / (64 * 1024));
+      const sendMs = (TARGET_BYTES / (10 * 1024)) * 1000;
+      vi.spyOn(blobUpload, 'put').mockImplementation(async (pathname, blob, options) => {
+        options.onUploadProgress({ loaded: 0, total: chunks, percentage: 0 });
+        for (let loaded = 1; loaded < chunks; loaded++) {
+          options.onUploadProgress({ loaded, total: chunks, percentage: (loaded / chunks) * 100 });
+        }
+        await new Promise((resolve, reject) => {
+          const sent = setTimeout(resolve, sendMs);
+          options.abortSignal.addEventListener('abort', () => {
+            clearTimeout(sent);
+            reject(new Error('The request was aborted.'));
+          });
+        });
+        return { url: `https://blob.example/${pathname}` };
+      });
+
+      const upload = outcomeOf(uploadPhoto('b1', cameraFile()));
+      await vi.advanceTimersByTimeAsync(sendMs);
+
+      expect(upload).toEqual({ settled: true, value: [] });
+    });
+
+    test('lets a slow upload finish while it keeps getting further', async () => {
+      vi.spyOn(blobUpload, 'put').mockImplementation(async (pathname, blob, options) => {
+        for (let percentage = 0; percentage < 100; percentage += 10) {
+          options.onUploadProgress({ loaded: percentage, total: 100, percentage });
+          await new Promise((resolve) => setTimeout(resolve, MIN_UPLOAD_STALL_MS - 1));
+        }
+        return { url: `https://blob.example/${pathname}` };
+      });
+
+      const upload = outcomeOf(uploadPhoto('b1', cameraFile()));
+      await vi.advanceTimersByTimeAsync(10 * MIN_UPLOAD_STALL_MS);
+
+      expect(upload).toEqual({ settled: true, value: [] });
+    });
   });
 });
 

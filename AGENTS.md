@@ -107,6 +107,10 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   after commit), and drop a photo only through `discardPhotos`. Both delete best effort in the
   background; the daily `/cron/photo-cleanup` deletes every blob over a day old that no book shows.
   A `locked` book's photos cannot change.
+- In the browser a Blob refusal (for one, a public upload to a private store) can arrive as a
+  network error, which the SDK retries for about 17 minutes. `putOnce` in
+  `front-end/src/photos.js` gives up at the first retry (progress starts over) or after a stall
+  scaled to the photo's size, never a fixed short one: Chrome reports progress as it reads ahead.
 - Lists send `photoCount`, never the URLs (`presentStages` in `lib/nearby.js`). Tests never reach
   Blob: `test/setup.js` refuses `blobStore`, and `mockBlobStore` in `test/helpers.js` fakes it.
 
