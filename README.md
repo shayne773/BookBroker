@@ -75,7 +75,7 @@ its default and when it is required. The variables it reads, by name:
 | `FRONTEND_BASE_URL` | Base URL emailed links point at; required in production. |
 | `TRUST_PROXY` | Number of proxies in front of the API; optional on Vercel, where it defaults to `1`. |
 | `ADMIN_EMAILS` | Comma-separated emails of the admin accounts; unset means no admins. |
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob store for book photos; unset means no photos. See [Book photos](#book-photos). |
+| `BLOB_STORE_ID` / `BLOB_READ_WRITE_TOKEN` | Vercel Blob store for book photos: the id of a store connected on Vercel, or a store's read-write token elsewhere; neither means no photos. See [Book photos](#book-photos). |
 
 There is no login-signing secret: a sign-in token is an opaque server-side session,
 not a JWT.
@@ -226,8 +226,9 @@ The photos live in a [Vercel Blob](https://vercel.com/docs/vercel-blob) store, a
 their bytes never pass through the API. The browser shrinks each photo to at most
 1600 px on its long edge and re-encodes it as a JPEG well under 2 MB, which also
 drops its EXIF metadata (such as where it was taken); it then asks the API for a
-client token that allows exactly one upload, of that type and size, to a path under
-that book, and sends the photo straight to Blob. The API checks the upload against
+grant that allows exactly one upload, of that type and size, to a path under
+that book (a presigned upload, or a client token when the API has only a
+read-write token), and sends the photo straight to Blob. The API checks the upload against
 the store before it keeps its URL. The store holds only JPEG, PNG and WebP images
 of at most 2 MB, and only the book's owner can add or remove its photos.
 
@@ -241,10 +242,13 @@ and the database name (`<namespace>/books/<id>/...`), so every deployment on one
 database, Preview and production alike, shares it, and deletions and the daily
 job only ever touch their own. Moving the database to a new cluster host starts a
 new namespace and leaves the old blobs behind. An owner gets at most 12 upload
-tokens an hour, and while an accepted trade holds a book its photos cannot change.
+grants an hour, and while an accepted trade holds a book its photos cannot change.
 
-Without `BLOB_READ_WRITE_TOKEN`, nothing offers photos and everything else works as
-before. To turn them on:
+The API reaches the store with either of two credentials. On Vercel, a connected
+store sets `BLOB_STORE_ID` and the Blob SDK authenticates with the deployment's
+short-lived OIDC token, so no secret is stored. Anywhere else (local development)
+it uses the store's `BLOB_READ_WRITE_TOKEN`. Without either, nothing offers photos
+and everything else works as before. To turn them on:
 
 1. In the Vercel project, open **Storage → Create Database → Blob**, name the store
    and give it **public** access (the photos are shown by their URLs). A private
@@ -252,10 +256,12 @@ before. To turn them on:
    private store"), and owners see "This photo could not be uploaded"; if the store
    was created private, create a public one and connect it in its place.
 2. Connect it to the project for the environments that should have photos
-   (Production, and Preview if you like). Vercel then adds `BLOB_READ_WRITE_TOKEN`
-   to those environments itself; redeploy for it to take effect.
+   (Production, and Preview if you like), keeping the default `BLOB` prefix. Vercel
+   then adds `BLOB_STORE_ID` (and `BLOB_WEBHOOK_PUBLIC_KEY`, which BookBroker does
+   not use) to those environments itself; redeploy for it to take effect. The
+   store's read-write token is not needed on Vercel and can be revoked.
 3. To have photos locally, create a **separate** Blob store for development and put
-   its token in `back-end/.env`. Never copy the production token (nor `vercel env
+   its read-write token in `back-end/.env`. Never copy the production token (nor `vercel env
    pull` it) into a local `.env`: local runs would then write to, and could delete
    from, the production store.
 
@@ -337,7 +343,7 @@ build:
    | `ADMIN_EMAILS` | Comma-separated confirmed emails of the admin accounts; unset means no admins. A change takes effect on the next deployment (redeploy), not a restart. |
    | `NODE_ENV` | `production`. The API then refuses to start without `FRONTEND_BASE_URL` rather than emailing links to `localhost`. |
    | `CRON_SECRET` | A random string of at least 16 characters (e.g. `openssl rand -hex 32`). Vercel sends it with the daily cron jobs in `vercel.json`, which expire unanswered trade offers, complete trades one side has confirmed and delete photo blobs no book shows; without it the jobs are refused. |
-   | `BLOB_READ_WRITE_TOKEN` | Added by Vercel when a Blob store is connected to the project; see [Book photos](#book-photos). Without it there are no photos. |
+   | `BLOB_STORE_ID` | Added by Vercel when a Blob store is connected to the project; see [Book photos](#book-photos). Without it (or a `BLOB_READ_WRITE_TOKEN`) there are no photos. |
 
    Do not set `VITE_SERVER_ADDRESS` or `CORS_ALLOWED_ORIGINS` on Vercel: the site
    calls `/api` on its own origin, which needs neither.

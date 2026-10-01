@@ -36,7 +36,7 @@ const refuseNetwork = async (url) => {
 };
 http.get = refuseNetwork;
 
-// No test may reach Vercel Blob: photos are off (no BLOB_READ_WRITE_TOKEN)
+// No test may reach Vercel Blob: photos are off (no Blob credentials)
 // and every store call fails, unless a test installs mockBlobStore (helpers.js).
 const refuseBlobStore = () => {
   for (const call of Object.keys(blobStore)) {
@@ -63,6 +63,7 @@ export const mochaHooks = {
   beforeEach() {
     delete process.env.GOOGLE_BOOKS_API_KEY;
     delete process.env.BLOB_READ_WRITE_TOKEN;
+    delete process.env.BLOB_STORE_ID;
   },
 
   async afterEach() {

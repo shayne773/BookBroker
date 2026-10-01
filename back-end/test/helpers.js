@@ -190,11 +190,14 @@ export function googleVolume(id, { isbn, title = `Book ${id}`, thumbnail = `http
 // Turns photos on against a fake Vercel Blob store for one test (test/setup.js
 // turns them off again). `upload(bookId)` puts a blob in it the way the browser
 // would (under `prefix`, by default the book's in this namespace) and returns its URL; `blobs` maps URL to { pathname, contentType, size, uploadedAt };
-// `tokens` has the options of each client token issued, `deleted` every URL
-// deleted. Set `failDeletes` to make deletion fail.
-export function mockBlobStore() {
-  process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_teststore_secret";
-  const store = { blobs: new Map(), tokens: [], deleted: [], failDeletes: false };
+// `tokens` has the options of each client token issued, `presigned` those of
+// each presigned upload, `deleted` every URL deleted. Set `failDeletes` to make
+// deletion fail. The store is one a read-write token reaches, or with
+// `connected` one connected to the Vercel project (BLOB_STORE_ID, OIDC).
+export function mockBlobStore({ connected = false } = {}) {
+  if (connected) process.env.BLOB_STORE_ID = "store_teststore";
+  else process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_teststore_secret";
+  const store = { blobs: new Map(), tokens: [], presigned: [], deleted: [], failDeletes: false };
 
   store.upload = (
     bookId,
@@ -209,6 +212,10 @@ export function mockBlobStore() {
   blobStore.clientToken = async (options) => {
     store.tokens.push(options);
     return `vercel_blob_client_teststore_${store.tokens.length}`;
+  };
+  blobStore.presignedUpload = async (options) => {
+    store.presigned.push(options);
+    return { delegationToken: `delegation-${store.presigned.length}`, signature: "signature", params: {} };
   };
   blobStore.head = async (url) => {
     const blob = store.blobs.get(url);

@@ -77,6 +77,28 @@ describe("book photos", () => {
       expect(options.validUntil).to.be.above(Date.now());
     });
 
+    it("gives the owner a presigned upload under the same limits when the store is connected through OIDC", async () => {
+      delete process.env.BLOB_READ_WRITE_TOKEN;
+      store = mockBlobStore({ connected: true });
+
+      const res = await tokenFor(owner, { contentType: "image/webp", size: 500_000 });
+
+      expect(res).to.have.status(200);
+      expect(res.body).to.not.have.property("token");
+      expect(res.body.presigned).to.deep.equal({ delegationToken: "delegation-1", signature: "signature", params: {} });
+      expect(res.body.pathname).to.match(new RegExp(`^${photoPrefix(book.id)}[0-9a-f]{32}\\.webp$`));
+      expect(store.tokens).to.be.empty;
+      const [options] = store.presigned;
+      expect(options).to.include({
+        pathname: res.body.pathname,
+        maximumSizeInBytes: MAX_PHOTO_BYTES,
+        addRandomSuffix: false,
+        allowOverwrite: false,
+      });
+      expect(options.allowedContentTypes).to.deep.equal(["image/webp"]);
+      expect(options.validUntil).to.be.above(Date.now());
+    });
+
     it("answers not found for another reader's book, a missing book or a malformed id", async () => {
       expect(await tokenFor(other)).to.have.status(404);
       expect(await tokenFor(owner, undefined, "0123456789abcdef01234567")).to.have.status(404);
@@ -114,6 +136,31 @@ describe("book photos", () => {
 
     it("needs a signed-in reader", async () => {
       expect(await api().post(`${photosPath()}/upload-token`).send({})).to.have.status(401);
+    });
+  });
+
+  describe("POST /user/offered/:id/photos/presigned-upload", () => {
+    const presigned = { delegationToken: "delegation", signature: "signature", params: { "vercel-blob-allow-overwrite": "false" } };
+    const ask = (reader, clientPayload) =>
+      api(reader?.token)
+        .post(`${photosPath()}/presigned-upload`)
+        .send({ type: "blob.generate-presigned-url", payload: { pathname: "a.jpg", clientPayload, multipart: false } });
+
+    it("hands the Blob SDK back the presigned upload it was sent", async () => {
+      const res = await ask(owner, JSON.stringify(presigned));
+      expect(res).to.have.status(200);
+      expect(res.body).to.deep.equal({ presignedUrlPayload: presigned });
+    });
+
+    it("refuses anything that is not a presigned upload", async () => {
+      for (const clientPayload of [undefined, null, "nope", "{}", JSON.stringify({ ...presigned, params: { a: 1 } })]) {
+        expect(await ask(owner, clientPayload), String(clientPayload)).to.have.status(400);
+      }
+      expect(await api(owner.token).post(`${photosPath()}/presigned-upload`).send()).to.have.status(400);
+    });
+
+    it("needs a signed-in reader", async () => {
+      expect(await ask(null, JSON.stringify(presigned))).to.have.status(401);
     });
   });
 

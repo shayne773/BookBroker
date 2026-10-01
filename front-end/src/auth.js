@@ -79,6 +79,13 @@ export const expireSession = () => {
   window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
 };
 
+// The bearer token as headers, for a request a library makes itself (the Blob
+// SDK's). Everything else goes through authFetch.
+export const authHeaders = () => {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 // fetch() with the bearer token attached and one shared 401 policy.
 export const authFetch = async (url, options = {}) => {
   const token = getToken();

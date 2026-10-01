@@ -70,7 +70,8 @@ function storeFailure(err, res, next) {
 const isDimension = (value) => Number.isInteger(value) && value > 0 && value <= MAX_DIMENSION;
 
 // body: { contentType, size } of the photo about to be uploaded.
-// Answers { token, pathname }: upload the photo to exactly that pathname with it.
+// Answers { pathname } with `token` or `presigned` (lib/photos.js uploadToken):
+// upload the photo to exactly that pathname with it.
 router.post("/upload-token", requirePhotoStore, async (req, res, next) => {
   const { contentType, size } = req.body ?? {};
 
@@ -95,6 +96,29 @@ router.post("/upload-token", requirePhotoStore, async (req, res, next) => {
   } catch (err) {
     storeFailure(err, res, next);
   }
+});
+
+const isPresignedUpload = (value) =>
+  typeof value?.delegationToken === "string" &&
+  typeof value.signature === "string" &&
+  value.params !== null &&
+  typeof value.params === "object" &&
+  Object.values(value.params).every((param) => typeof param === "string");
+
+// The Blob SDK's `uploadPresigned` in the browser takes no presigned upload: it
+// asks a route for one, as { type, payload: { pathname, clientPayload } }, and
+// reads { presignedUrlPayload } from the answer. The owner sends the one
+// /upload-token issued as `clientPayload`, and this hands it back; nothing is
+// issued or checked here, so the answer grants nothing the caller did not hold.
+router.post("/presigned-upload", (req, res) => {
+  let presigned;
+  try {
+    presigned = JSON.parse(req.body?.payload?.clientPayload);
+  } catch {
+    presigned = null;
+  }
+  if (!isPresignedUpload(presigned)) return res.status(400).json({ message: "That is not a presigned upload." });
+  res.json({ presignedUrlPayload: presigned });
 });
 
 // body: { url, width, height } of a photo uploaded with a token from above.
