@@ -4,7 +4,6 @@ import { authFetch, isSessionExpiredError } from "./auth";
 import usePolling from "./usePolling";
 import { readerMeta } from "./rating";
 import UserLink from "./UserLink";
-import useRemembered from "./remember";
 import Appear from "./Appear";
 import { LinesSkeleton } from "./Skeletons";
 
@@ -23,7 +22,7 @@ async function fetchConversations() {
 
 const Messages = () => {
   // null until the conversations have loaded.
-  const [loaded, setConvos] = useRemembered("/messages");
+  const [loaded, setConvos] = useState(null);
   const convos = loaded ?? NONE;
   const loading = loaded === null;
   const [q, setQ] = useState("");
@@ -44,11 +43,11 @@ const Messages = () => {
     };
 
     run();
-  }, [setConvos]);
+  }, []);
 
   // New messages and unread markers arrive while the list is open. A failed
   // refresh keeps the list on screen and tries again on the next tick.
-  const refresh = useCallback(async () => setConvos(await fetchConversations()), [setConvos]);
+  const refresh = useCallback(async () => setConvos(await fetchConversations()), []);
   usePolling(refresh, { interval: LIST_INTERVAL, enabled: !loading && !error });
 
   const filtered = useMemo(() => {

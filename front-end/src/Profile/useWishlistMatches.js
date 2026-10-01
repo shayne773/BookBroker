@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import useRemembered from '../remember';
 import { authFetch, isSessionExpiredError } from '../auth';
 
 // The caller's wishlisted books that other readers are offering now: one entry
@@ -8,7 +7,7 @@ import { authFetch, isSessionExpiredError } from '../auth';
 const NONE = [];
 
 const useWishlistMatches = () => {
-  const [answer, setMatches] = useRemembered('/user/wishlist/matches');
+  const [answer, setMatches] = useState(null);
   const [error, setError] = useState(false);
   const matches = answer ?? NONE;
   const loaded = answer !== null || error;
@@ -35,7 +34,7 @@ const useWishlistMatches = () => {
     return () => {
       alive = false;
     };
-  }, [setMatches]);
+  }, []);
 
   return { matches, loaded, error };
 };

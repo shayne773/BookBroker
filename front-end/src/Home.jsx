@@ -8,15 +8,12 @@ import useReaderArea from './useReaderArea';
 import Feedback, { DoneButton } from './Feedback';
 import useFeedback from './useFeedback';
 import useAccountPrompt from './useAccountPrompt';
-import useRemembered from './remember';
 import Appear from './Appear';
 import { BookGridSkeleton, LeadSkeleton } from './Skeletons';
 
-const NO_ISBNS = new Set();
-
 const Home = () => {
     // null until the feed has answered.
-    const [books, setBooks] = useRemembered('/feed');
+    const [books, setBooks] = useState(null);
     // The books being added to the wishlist, and the one whose add failed, which
     // says so under its button.
     const [addingIds, setAddingIds] = useState(() => new Set());
@@ -24,7 +21,7 @@ const Home = () => {
     const { feedback, fail, clear } = useFeedback();
     // ISBNs on the reader's wishlist, so a book they already want is flagged
     // rather than offered to them again.
-    const [wishlistIsbns, setWishlistIsbns] = useRemembered('home:wishlist-isbns', NO_ISBNS);
+    const [wishlistIsbns, setWishlistIsbns] = useState(() => new Set());
     const area = useReaderArea();
     const { signedIn, gate } = useAccountPrompt();
 
@@ -54,7 +51,7 @@ const Home = () => {
                 if (isSessionExpiredError(err)) return;
                 console.error("Failed to fetch wishlist:", err);
             });
-    }, [signedIn, setBooks, setWishlistIsbns]);
+    }, [signedIn]);
 
     const onWishlist = (book) => Boolean(book?.isbn) && wishlistIsbns.has(book.isbn);
    

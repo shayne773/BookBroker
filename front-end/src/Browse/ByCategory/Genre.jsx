@@ -1,12 +1,11 @@
 import { useParams, Link } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import BookList from '../BookList';
-import useRemembered from '../../remember';
 import { authFetch } from '../../auth';
 
 const Genre = () => {
   const { genre } = useParams();
-  const [books, setBooks] = useRemembered(`/genres/${genre}`);
+  const [books, setBooks] = useState(null);
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/genres/${encodeURIComponent(genre)}`)
@@ -16,7 +15,7 @@ const Genre = () => {
         console.error("Failed to fetch books:", err);
         setBooks([]);
       });
-  }, [genre, setBooks]);
+  }, [genre]);
 
   return (
     <main className="page page--reading">

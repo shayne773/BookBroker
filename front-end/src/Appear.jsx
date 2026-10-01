@@ -6,7 +6,7 @@ const SETTLE_MS = 1000;
 // The one way fetched content comes onto a screen. Until `ready` it shows
 // `placeholder`, which holds the content's space; then the content fades in.
 // When the reader watched it load, the books in it also rise in one after
-// another; content that was ready from the start (remember.js) only fades.
+// another; content that was ready from the start only fades.
 // Once settled, anything added later (a next page, a new book) just appears,
 // until the content is waited for again (a new search).
 const Appear = ({ ready, placeholder = null, className, children }) => {

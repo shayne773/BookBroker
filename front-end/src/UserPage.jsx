@@ -11,7 +11,6 @@ import BlockDialog from './UserPage/BlockDialog';
 import MessageAction from './UserPage/MessageAction';
 import ReportDialog from './UserPage/ReportDialog';
 import useAccountPrompt from './useAccountPrompt';
-import useRemembered from './remember';
 
 const UserPage = () => {
   const { id } = useParams();
@@ -19,8 +18,8 @@ const UserPage = () => {
   const isMe = id === localStorage.getItem('userId');
 
   const [user, setUser] = useReader(id);
-  const [wishlistBooks, setWishlistBooks] = useRemembered(`/users/${id}/wishlist`);
-  const [offeredBooks, setOfferedBooks] = useRemembered(`/users/${id}/offered`);
+  const [wishlistBooks, setWishlistBooks] = useState(null);
+  const [offeredBooks, setOfferedBooks] = useState(null);
 
   const [dialog, setDialog] = useState(null); // 'block' | 'report' | null
   const [busy, setBusy] = useState(false);
@@ -38,7 +37,7 @@ const UserPage = () => {
         if (isSessionExpiredError(err)) return;
         setOfferedBooks([]);
       });
-  }, [id, setOfferedBooks]);
+  }, [id]);
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}/wishlist`)
@@ -50,7 +49,7 @@ const UserPage = () => {
       });
 
     loadOffered();
-  }, [id, loadOffered, setWishlistBooks]);
+  }, [id, loadOffered]);
 
   const closeDialog = () => {
     setDialog(null);

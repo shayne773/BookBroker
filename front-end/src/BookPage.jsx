@@ -10,7 +10,6 @@ import PhotoGallery from './PhotoGallery';
 import PhotoManager from './PhotoManager';
 import ReportDialog from './UserPage/ReportDialog';
 import useAccountPrompt from './useAccountPrompt';
-import useRemembered from './remember';
 import Appear from './Appear';
 import { BookPageSkeleton } from './Skeletons';
 
@@ -18,7 +17,7 @@ const NOT_LOADED = {};
 
 const BookPage = () => {
   const { id } = useParams();
-  const [book, setBook] = useRemembered(`/books/${id}`, NOT_LOADED);
+  const [book, setBook] = useState(NOT_LOADED);
   const [notFound, setNotFound] = useState(false);
 
   const [isInWishlist, setIsInWishlist] = useState(false);
@@ -81,7 +80,7 @@ const BookPage = () => {
         console.error('Failed to fetch book:', err);
         setBook({});
       });
-  }, [id, setBook]);
+  }, [id]);
 
   async function openConversationWithOwner() {
     clear();

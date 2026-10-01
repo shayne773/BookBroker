@@ -1,16 +1,15 @@
 import ShelfPage from './ShelfPage';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from './auth';
 import useReader from './useReader';
-import useRemembered from './remember';
 import UserLink from './UserLink';
 import MessageAction from './UserPage/MessageAction';
 
 const UserPageWishlist = () => {
   const { id } = useParams(); // user id
   const [reader] = useReader(id);
-  const [wishlistBooks, setWishlistBooks] = useRemembered(`/users/${id}/wishlist`);
+  const [wishlistBooks, setWishlistBooks] = useState(null);
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/users/${id}/wishlist`)
@@ -23,7 +22,7 @@ const UserPageWishlist = () => {
         console.error('Failed to fetch user wishlist:', err);
         setWishlistBooks([]);
       });
-  }, [id, setWishlistBooks]);
+  }, [id]);
 
   return (
     <ShelfPage

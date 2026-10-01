@@ -4,8 +4,6 @@ import { MemoryRouter } from 'react-router-dom';
 import Appear from './Appear';
 import BookCover from './BookCover';
 import Home from './Home';
-import useRemembered, { forgetAll } from './remember';
-import { saveSession } from './auth';
 
 const List = () => (
   <ul className="book-list">
@@ -87,51 +85,6 @@ describe('a cover', () => {
   });
 });
 
-describe('useRemembered', () => {
-  const Shelf = ({ id }) => {
-    const [books, setBooks] = useRemembered(`/shelf/${id}`);
-    return (
-      <>
-        <p>{books === null ? 'not loaded' : books.join(', ')}</p>
-        <button type="button" onClick={() => setBooks(['Dune'])}>load</button>
-        <button type="button" onClick={() => setBooks((shown) => [...shown, 'Emma'])}>add</button>
-      </>
-    );
-  };
-
-  it('starts a remounted page from what it loaded last time', () => {
-    const first = render(<Shelf id="a" />);
-    expect(screen.getByText('not loaded')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('load'));
-    fireEvent.click(screen.getByText('add'));
-    first.unmount();
-
-    render(<Shelf id="a" />);
-    expect(screen.getByText('Dune, Emma')).toBeInTheDocument();
-  });
-
-  it('keeps each key apart when the key changes under a mounted page', () => {
-    const { rerender } = render(<Shelf id="a" />);
-    fireEvent.click(screen.getByText('load'));
-
-    rerender(<Shelf id="b" />);
-    expect(screen.getByText('not loaded')).toBeInTheDocument();
-
-    rerender(<Shelf id="a" />);
-    expect(screen.getByText('Dune')).toBeInTheDocument();
-  });
-
-  it('forgets everything when the session changes', () => {
-    const first = render(<Shelf id="a" />);
-    fireEvent.click(screen.getByText('load'));
-    first.unmount();
-
-    saveSession({ token: 't', userId: 'u', username: 'ann' });
-    render(<Shelf id="a" />);
-    expect(screen.getByText('not loaded')).toBeInTheDocument();
-  });
-});
-
 describe('a page that loads books', () => {
   const books = [
     { _id: 'a', title: 'Dune' },
@@ -140,7 +93,6 @@ describe('a page that loads books', () => {
   let answer;
 
   beforeEach(() => {
-    forgetAll();
     global.fetch = vi.fn(
       () => new Promise((resolve) => {
         answer = () => resolve({ ok: true, status: 200, json: async () => books });
@@ -166,15 +118,19 @@ describe('a page that loads books', () => {
     expect(document.querySelector('.appear')).toHaveClass('appear--enter');
   });
 
-  it('shows the books at once, with no placeholder or entry, on coming back', async () => {
+  it('loads afresh on coming back, behind the placeholder again', async () => {
     const first = renderHome();
     await act(async () => answer());
     await screen.findByText('Dune');
     first.unmount();
 
     renderHome();
-    expect(screen.getByText('Dune')).toBeInTheDocument();
-    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
-    expect(document.querySelector('.appear')).not.toHaveClass('appear--enter');
+    expect(screen.getAllByRole('status')[0]).toHaveTextContent('Loading…');
+    expect(screen.queryByText('Dune')).not.toBeInTheDocument();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    await act(async () => answer());
+    expect(await screen.findByText('Dune')).toBeInTheDocument();
+    expect(document.querySelector('.appear')).toHaveClass('appear--enter');
   });
 });

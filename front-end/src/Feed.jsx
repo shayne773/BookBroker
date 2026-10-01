@@ -1,15 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { authFetch, isSessionExpiredError } from './auth';
 import BookCover from './BookCover';
 import DistanceLabel from './DistanceLabel';
 import LocationPrompt from './LocationPrompt';
 import useReaderArea from './useReaderArea';
-import useRemembered from './remember';
 import Appear from './Appear';
 import { BookGridSkeleton } from './Skeletons';
 
 const Feed = () => {
-  const [booksData, setBooksData] = useRemembered('/recommendations');
+  const [booksData, setBooksData] = useState(null);
   const area = useReaderArea();
 
   useEffect(() => {
@@ -26,7 +25,7 @@ const Feed = () => {
         console.error('Failed to fetch recommended books:', err);
         setBooksData([]);
     })
-  }, [setBooksData]);
+  }, []);
 
   return (
     <main className="page">

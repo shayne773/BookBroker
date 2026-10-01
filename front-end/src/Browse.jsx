@@ -4,7 +4,6 @@ import { authFetch, isSessionExpiredError, useSignedIn } from "./auth";
 import BookCover from "./BookCover";
 import DistanceLabel from "./DistanceLabel";
 import LocationPrompt from "./LocationPrompt";
-import useRemembered from "./remember";
 import Appear from "./Appear";
 import { BookGridSkeleton } from "./Skeletons";
 
@@ -13,13 +12,13 @@ const Browse = () => {
   // The rows with no search on, and the latest search's answer. Each new
   // answer replaces the last in place, so typing never swaps the rows for
   // placeholders.
-  const [rows, setRows] = useRemembered("/browse");
+  const [rows, setRows] = useState(null);
   const [found, setFound] = useState(null);
   const searching = query.trim().length > 0;
   const showSearch = searching && found !== null;
   const data = showSearch ? found : rows;
   // Fetched once, apart from the search-driven payload.
-  const [recommended, setRecommended] = useRemembered("/recommendations");
+  const [recommended, setRecommended] = useState(null);
 
   const server = import.meta.env.VITE_SERVER_ADDRESS;
   // Recommendations come from a reader's own wishlist and shelf, so a visitor
@@ -35,7 +34,7 @@ const Browse = () => {
         if (isSessionExpiredError(err)) return;
         setRecommended([]);
       });
-  }, [server, signedIn, setRecommended]);
+  }, [server, signedIn]);
 
   useEffect(() => {
     let live = true;
@@ -57,7 +56,7 @@ const Browse = () => {
       live = false;
       clearTimeout(t);
     };
-  }, [query, searching, server, setRows]);
+  }, [query, searching, server]);
 
   return (
     <main className="page">

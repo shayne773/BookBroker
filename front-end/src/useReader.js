@@ -1,6 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { authFetch, isSessionExpiredError } from './auth';
-import useRemembered from './remember';
 
 const NOT_LOADED = {};
 
@@ -8,7 +7,7 @@ const NOT_LOADED = {};
 // it can't, and `{ deleted: true }` for a reader who is gone (404), i.e. who
 // deleted their account. The setter lets a page record a change it made, e.g. a block.
 export default function useReader(id) {
-  const [reader, setReader] = useRemembered(`/users/${id}`, NOT_LOADED);
+  const [reader, setReader] = useState(NOT_LOADED);
 
   useEffect(() => {
     let alive = true;
@@ -23,7 +22,7 @@ export default function useReader(id) {
     return () => {
       alive = false;
     };
-  }, [id, setReader]);
+  }, [id]);
 
   return [reader, setReader];
 }

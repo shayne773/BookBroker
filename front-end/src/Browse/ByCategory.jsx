@@ -1,12 +1,11 @@
 import { Link } from "react-router-dom";
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { authFetch, isSessionExpiredError } from '../auth';
-import useRemembered from '../remember';
 import Appear from '../Appear';
 import { LinesSkeleton } from '../Skeletons';
 
 const ByCategory = () => {
-  const [genres, setGenres] = useRemembered('/genres');
+  const [genres, setGenres] = useState(null);
 
   useEffect(() => {
     // Signed in, so the genres are those of the books within your distance.
@@ -20,7 +19,7 @@ const ByCategory = () => {
         console.error('Failed to fetch genres:', error);
         setGenres([]);
       });
-  }, [setGenres]);
+  }, []);
 
   return (
     <main className="page page--reading">

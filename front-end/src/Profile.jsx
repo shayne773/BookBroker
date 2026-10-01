@@ -15,7 +15,6 @@ import { formatDistance } from './distance';
 import useFeedback from './useFeedback';
 import UserLink from './UserLink';
 import { uploadPhotos } from './photos';
-import useRemembered from './remember';
 
 const NOT_LOADED = {};
 
@@ -23,9 +22,9 @@ const Profile = () => {
   const navigate = useNavigate();
   const userId = localStorage.getItem('userId');
 
-  const [user, setUser] = useRemembered('/user', NOT_LOADED);
-  const [wishlistBooks, setWishlistBooks] = useRemembered('/user/wishlist');
-  const [offeredBooks, setOfferedBooks] = useRemembered('/user/offered');
+  const [user, setUser] = useState(NOT_LOADED);
+  const [wishlistBooks, setWishlistBooks] = useState(null);
+  const [offeredBooks, setOfferedBooks] = useState(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAddOfferingsModal, setShowAddOfferingsModal] = useState(false);
@@ -87,7 +86,6 @@ const Profile = () => {
   useEffect(() => {
     loadWishlist();
     loadOffered();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Adds the book chosen in a dialog to a shelf, then shows it there.

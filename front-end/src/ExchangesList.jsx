@@ -5,7 +5,6 @@ import { statusClass, statusLabel } from "./exchangeStatus";
 import { authFetch, isSessionExpiredError } from "./auth";
 import { readerMeta } from "./rating";
 import UserLink from "./UserLink";
-import useRemembered from "./remember";
 import Appear from "./Appear";
 import { BookListSkeleton } from "./Skeletons";
 
@@ -19,7 +18,7 @@ function formatWhen(d) {
 
 export default function ExchangesList() {
   // null until the exchanges have loaded.
-  const [loaded, setItems] = useRemembered("/exchanges");
+  const [loaded, setItems] = useState(null);
   const items = loaded ?? NONE;
   const [err, setErr] = useState("");
 
@@ -48,7 +47,7 @@ export default function ExchangesList() {
     }
     run();
     return () => (alive = false);
-  }, [server, setItems]);
+  }, [server]);
 
   const { active, completed } = useMemo(() => {
     const activeStatuses = new Set(["PENDING", "COUNTERED", "ACCEPTED", "DRAFT"]);

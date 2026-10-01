@@ -1,12 +1,11 @@
 import ShelfPage from '../ShelfPage';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { authFetch, isSessionExpiredError } from '../auth';
 import useWishlistMatches from './useWishlistMatches';
-import useRemembered from '../remember';
 
 const MyBooks = () => {
-  const [wishlistBooks, setWishlistBooks] = useRemembered('/user/wishlist');
+  const [wishlistBooks, setWishlistBooks] = useState(null);
   const { matches } = useWishlistMatches();
 
   // How many other readers offer each wishlist book, by wishlist book id.
@@ -26,7 +25,7 @@ const MyBooks = () => {
         console.log("Failed to fetch wishlist:", err);
         setWishlistBooks([]);
       });
-  }, [setWishlistBooks]);
+  }, []);
 
   const handleDelete = (bookId) => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/wishlist/${bookId}`, {

@@ -5,7 +5,6 @@ import BookCover from '../BookCover';
 import DistanceLabel from '../DistanceLabel';
 import PhotoCount from '../PhotoCount';
 import { booksCount } from '../bookMap';
-import useRemembered from '../remember';
 import Appear from '../Appear';
 import { BookListSkeleton } from '../Skeletons';
 
@@ -28,7 +27,7 @@ const NO_BOOKS = [];
 
 const AreaPanel = ({ place, count, searchKey = '', onClose }) => {
   // The pages shown so far, null until the first is in.
-  const [shelf, setShelf] = useRemembered(areaUrl(place, 0, searchKey));
+  const [shelf, setShelf] = useState(null);
   const books = shelf?.books ?? NO_BOOKS;
   const nextOffset = shelf?.nextOffset ?? null;
   const [loading, setLoading] = useState(true);
@@ -41,19 +40,8 @@ const AreaPanel = ({ place, count, searchKey = '', onClose }) => {
       setShelf((shown) => ({
         books: [...(shown?.books ?? []), ...page.books],
         nextOffset: page.nextOffset,
-        pages: (shown?.pages ?? 0) + 1,
       })),
-    [setShelf]
-  );
-
-  // The first page, fresh. A reader who had already paged further keeps what
-  // they had rather than losing their place.
-  const firstPage = useCallback(
-    (page) =>
-      setShelf((shown) =>
-        shown?.pages > 1 ? shown : { books: page.books, nextOffset: page.nextOffset, pages: 1 }
-      ),
-    [setShelf]
+    []
   );
 
   const failed = useCallback(
@@ -68,13 +56,13 @@ const AreaPanel = ({ place, count, searchKey = '', onClose }) => {
   useEffect(() => {
     let live = true;
     fetchPage(place, 0, searchKey)
-      .then((page) => live && firstPage(page))
+      .then((page) => live && addPage(page))
       .catch((err) => live && failed(err))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
     };
-  }, [place, searchKey, firstPage, failed]);
+  }, [place, searchKey, addPage, failed]);
 
   const showMore = () => {
     setMore(true);

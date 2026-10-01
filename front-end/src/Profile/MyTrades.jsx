@@ -1,11 +1,10 @@
 import ShelfPage from '../ShelfPage';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { authFetch, isSessionExpiredError } from '../auth';
 import PhotoCount from '../PhotoCount';
-import useRemembered from '../remember';
 
 const MyTrades = () => {
-  const [offeringsBooks, setOfferingsBooks] = useRemembered('/user/offered');
+  const [offeringsBooks, setOfferingsBooks] = useState(null);
 
   useEffect(() => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/offered`)
@@ -18,7 +17,7 @@ const MyTrades = () => {
         console.log("Failed to fetch offerings:", err);
         setOfferingsBooks([]);
       });
-  }, [setOfferingsBooks]);
+  }, []);
 
   const handleDelete = (bookId) => {
     authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/user/offered/${bookId}`, {

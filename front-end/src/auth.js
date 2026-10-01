@@ -2,7 +2,6 @@
 // Shared session helpers so every page treats a missing or expired token the same way.
 // Route protection lives in RequireAuth.jsx, whose layout routes listen for SESSION_EXPIRED_EVENT.
 import { useEffect, useState } from 'react';
-import { forgetAll } from './remember';
 
 const TOKEN_KEY = 'token';
 const USER_ID_KEY = 'userId';
@@ -15,15 +14,12 @@ export const getToken = () => localStorage.getItem(TOKEN_KEY);
 // The token names a session the server tracks; it stays valid while it is used
 // at least once every 30 days, and the server ends it on logout or password reset.
 export const saveSession = ({ token, userId, username }) => {
-  // What the pages remembered was loaded for whoever was browsing before.
-  forgetAll();
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_ID_KEY, userId);
   localStorage.setItem(USERNAME_KEY, username);
 };
 
 export const clearSession = () => {
-  forgetAll();
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_ID_KEY);
   localStorage.removeItem(USERNAME_KEY);

@@ -1,11 +1,10 @@
 import { Link } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import BookList from './BookList';
-import useRemembered from '../remember';
 import { authFetch } from '../auth';
 
 const MostWanted = () => {
-    const [books, setBooks] = useRemembered('/popular');
+    const [books, setBooks] = useState(null);
 
     useEffect(() => {
         authFetch(`${import.meta.env.VITE_SERVER_ADDRESS}/popular`)
@@ -15,7 +14,7 @@ const MostWanted = () => {
                 console.error("Failed to fetch most wanted books:", err);
                 setBooks([]);
             });
-    }, [setBooks]);
+    }, []);
 
     return (
         <main className="page page--reading">

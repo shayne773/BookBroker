@@ -9,7 +9,6 @@ import CounterOfferDialog from "./ExchangeDetail/CounterOfferDialog";
 import Feedback from "./Feedback";
 import useFeedback from "./useFeedback";
 import UserLink from "./UserLink";
-import useRemembered from "./remember";
 import Appear from "./Appear";
 import { BookGridSkeleton } from "./Skeletons";
 
@@ -19,9 +18,9 @@ export default function ExchangeDetail() {
   const userId = localStorage.getItem("userId");
   const server = import.meta.env.VITE_SERVER_ADDRESS;
 
-  const [ex, setEx] = useRemembered(`/exchanges/${exchangeId}`);
+  const [ex, setEx] = useState(null);
   const [err, setErr] = useState("");
-  const loading = !ex && !err;
+  const [loading, setLoading] = useState(true);
 
   // counter modal state
   const [showCounter, setShowCounter] = useState(false);
@@ -51,6 +50,7 @@ export default function ExchangeDetail() {
   useEffect(() => {
     let alive = true;
     async function run() {
+      setLoading(true);
       setErr("");
       try {
         const res = await authFetch(`${server}/exchanges/${exchangeId}`);
@@ -62,13 +62,14 @@ export default function ExchangeDetail() {
         if (isSessionExpiredError(e)) return;
 
         console.error(e);
-        // A trade already on screen stays there.
         if (alive) setErr("Failed to load exchange.");
+      } finally {
+        if (alive) setLoading(false);
       }
     }
     run();
     return () => (alive = false);
-  }, [server, exchangeId, setEx]);
+  }, [server, exchangeId]);
 
   async function post(path, body) {
     const res = await authFetch(`${server}${path}`, {
@@ -201,7 +202,7 @@ export default function ExchangeDetail() {
     }
   }
 
-  if (!ex) {
+  if (loading || err || !ex) {
     return (
       <main className="page page--reading">
         <BackLink />

@@ -50,9 +50,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   another list in, `.rise` a single block). The page frame itself never animates. Fill-mode
   is `backwards`, not `both`: a transform left in effect makes the element the containing
   block for its `position: fixed` children (dialog overlays).
-- A page's fetched state is `useRemembered(key)` (`src/remember.js`), `null` until loaded,
-  so a revisit shows it at once and still refetches; `auth.js` forgets it all when the
-  session changes. A fetched image is a `FadeImg` (`BookCover` uses it), not a bare `<img>`.
+- A page's fetched state is plain `useState(null)`, `null` until loaded: nothing is cached
+  between visits, so a revisit refetches behind the placeholder. A fetched image is a
+  `FadeImg` (`BookCover` uses it), not a bare `<img>`.
 - No pop-ups: no `alert()`/`confirm()`/`prompt()` (`src/setupTests.js` makes them throw in every test) and no toasts.
   An action's outcome is a `<Feedback>` line (`src/Feedback.jsx`, state from
   `useFeedback`) beside the control, or a `DoneButton` that turns into its checked state
